@@ -19,25 +19,21 @@ export default function Login() {
     rememberMe: false,
   });
 
-  const handleSubmit = async (e: React.FormEvent, role?: "student" | "instructor") => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
-      // Use demo credentials based on role
-      const email = role === "student" 
-        ? "sarah.chen@university.edu" 
-        : "dr.smith@university.edu";
-      
-      await login(email, "password");
-      
+      // 🔹 Use real input data (no role)
+      await login(formData.email, formData.password);
+
       toast({
         title: "Login successful",
-        description: `Welcome back! Redirecting to ${role} dashboard...`,
+        description: "Welcome back! Redirecting to your dashboard...",
       });
-      
-      // Add a small delay to ensure auth state is updated before navigation
+
+      // 🔹 Redirect to a general dashboard or homepage
       setTimeout(() => {
-        setLocation(role === "student" ? "/student" : "/instructor");
+        setLocation("/dashboard");
       }, 100);
     } catch (error) {
       toast({
@@ -61,7 +57,7 @@ export default function Login() {
             <p className="text-muted-foreground mt-2">Collaborative Learning Environment</p>
           </div>
           
-          <form className="space-y-6">
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <Label htmlFor="email" className="text-sm font-medium text-card-foreground">
                 Email
@@ -74,6 +70,7 @@ export default function Login() {
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                 className="mt-2"
                 data-testid="input-email"
+                required
               />
             </div>
             
@@ -89,6 +86,7 @@ export default function Login() {
                 onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                 className="mt-2"
                 data-testid="input-password"
+                required
               />
             </div>
             
@@ -113,22 +111,12 @@ export default function Login() {
             
             <div className="space-y-3">
               <Button
-                type="button"
-                onClick={(e) => handleSubmit(e, "student")}
+                type="submit"
                 disabled={isLoading}
                 className="w-full bg-primary text-primary-foreground hover:opacity-90"
-                data-testid="button-student-login"
+                data-testid="button-login"
               >
-                {isLoading ? "Signing in..." : "Sign in as Student"}
-              </Button>
-              <Button
-                type="button"
-                onClick={(e) => handleSubmit(e, "instructor")}
-                disabled={isLoading}
-                className="w-full bg-accent text-accent-foreground hover:opacity-90"
-                data-testid="button-instructor-login"
-              >
-                {isLoading ? "Signing in..." : "Sign in as Instructor"}
+                {isLoading ? "Signing in..." : "Sign in"}
               </Button>
             </div>
             
