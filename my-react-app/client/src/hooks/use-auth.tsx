@@ -1,9 +1,17 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { User } from "@shared/schema";
 import { AuthService } from "@/lib/auth";
 
+interface AuthUser {
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  role?: "student" | "instructor";
+  createdAt?: Date;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (userData: {
@@ -19,12 +27,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const currentUser = AuthService.getCurrentUser();
-    setUser(currentUser);
+    if (currentUser) setUser(currentUser);
     setIsLoading(false);
   }, []);
 
