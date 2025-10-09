@@ -7,10 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { UserRound } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth"; 
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { login } = useAuth(); 
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -23,36 +25,18 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // Send credentials to backend
-      const response = await fetch("http://127.0.0.1:8000/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          email: formData.email,
-          password: formData.password,
-        }),
-      });
+      await login(formData.email, formData.password);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Login failed");
-      }
-
-      // Store token in localStorage / sessionStorage
       if (formData.rememberMe) {
-        localStorage.setItem("session_token", data.token);
+        localStorage.setItem("remember_me", "true");
       } else {
-        sessionStorage.setItem("session_token", data.token);
+        localStorage.removeItem("remember_me");
       }
 
       toast({
         title: "Login successful",
         description: "Welcome back! Redirecting to your dashboard...",
       });
-
-      // Redirect to dashboard
-      setTimeout(() => setLocation("/dashboard"), 800);
     } catch (error) {
       toast({
         title: "Login failed",

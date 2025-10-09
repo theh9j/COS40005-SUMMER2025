@@ -16,14 +16,18 @@ type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "pro
 
 export default function StudentDashboard() {
   const [, setLocation] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const [activeView, setActiveView] = useState<StudentView>("overview");
   const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
-    if (!user || user.role !== "student") setLocation("/login");
-  }, [user, setLocation]);
+    console.log("Current user in dashboard:", user);
+    if (!isLoading && (!user || user.role !== "student")) {
+      setLocation("/login");
+    }
+  }, [user, isLoading, setLocation]);
 
+  if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
 
   const navItems = [
@@ -54,11 +58,11 @@ export default function StudentDashboard() {
       ["Case Completion Rate (%)", "92"],
       ["Collaboration Score (%)", "78"]
     ];
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const today = new Date().toISOString().slice(0,10);
+    const today = new Date().toISOString().slice(0, 10);
     a.href = url;
     a.download = `progress_${user.lastName}_${today}.csv`;
     a.click();

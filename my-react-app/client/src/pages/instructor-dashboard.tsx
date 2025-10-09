@@ -14,14 +14,18 @@ type InstructorView = "overview" | "students" | "grading" | "analytics" | "cases
 
 export default function InstructorDashboard() {
   const [, setLocation] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const [activeView, setActiveView] = useState<InstructorView>("overview");
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
-    if (!user || user.role !== "instructor") setLocation("/login");
-  }, [user, setLocation]);
+    console.log("Current user in dashboard:", user);
+    if (!isLoading && (!user || user.role !== "instructor")) {
+      setLocation("/login");
+    }
+  }, [user, isLoading, setLocation]);
 
+  if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
 
   const navItems = [
@@ -40,17 +44,17 @@ export default function InstructorDashboard() {
 
   const exportClassAnalyticsCSV = () => {
     const classRows = [
-      ["Student","Cases Completed","Avg Score (%)","Accuracy (%)","Time Spent (min)"],
-      ["Sarah Chen","12","91","95","540"],
-      ["Mike Johnson","9","83","88","420"],
-      ["Aisha Rahman","15","92","93","600"],
-      ["David Tran","11","85","86","505"]
+      ["Student", "Cases Completed", "Avg Score (%)", "Accuracy (%)", "Time Spent (min)"],
+      ["Sarah Chen", "12", "91", "95", "540"],
+      ["Mike Johnson", "9", "83", "88", "420"],
+      ["Aisha Rahman", "15", "92", "93", "600"],
+      ["David Tran", "11", "85", "86", "505"]
     ];
-    const csv = classRows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const csv = classRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const today = new Date().toISOString().slice(0,10);
+    const today = new Date().toISOString().slice(0, 10);
     a.href = url;
     a.download = `class_analytics_${today}.csv`;
     a.click();
