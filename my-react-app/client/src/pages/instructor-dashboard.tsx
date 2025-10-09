@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/use-auth";
+import { mockAtRiskStudents } from "@/lib/mock-data";
 import {
   Presentation, Gauge, GraduationCap, ClipboardCheck, ChartBar,
-  FolderOpen, Settings, LogOut, Clock, ChartLine, Check, Edit
+  FolderOpen, Settings, LogOut, Clock, ChartLine, Check, Edit, AlertTriangle, TrendingDown, Mail
 } from "lucide-react";
 
 type InstructorView = "overview" | "students" | "grading" | "analytics" | "cases" | "settings";
@@ -127,6 +128,54 @@ export default function InstructorDashboard() {
                 <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Cases Assigned</p><p className="text-2xl font-bold text-green-500" data-testid="stat-cases-assigned">15</p></div><FolderOpen className="h-8 w-8 text-green-500" /></div></CardContent></Card>
                 <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Avg. Score</p><p className="text-2xl font-bold text-accent" data-testid="stat-avg-score">87%</p></div><ChartLine className="h-8 w-8 text-accent" /></div></CardContent></Card>
               </div>
+
+              <Card className="mb-8">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold flex items-center">
+                      <AlertTriangle className="h-5 w-5 mr-2 text-red-500" />
+                      At-Risk Student Alerts
+                    </h3>
+                    <span className="text-sm text-muted-foreground">{mockAtRiskStudents.length} students need attention</span>
+                  </div>
+                  <div className="space-y-4">
+                    {mockAtRiskStudents.map((student) => (
+                      <div key={student.id} className="p-4 border border-red-200 bg-red-50 rounded-lg">
+                        <div className="flex items-start space-x-4">
+                          <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full" />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="font-medium">{student.name}</p>
+                              <div className="flex items-center space-x-2">
+                                {student.trend === 'declining' && (
+                                  <span className="flex items-center text-xs text-red-600">
+                                    <TrendingDown className="h-3 w-3 mr-1" />
+                                    Declining
+                                  </span>
+                                )}
+                                <span className="text-sm font-semibold text-red-600">Score: {student.score}%</span>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-2">{student.issue}</p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Last active: {student.lastActive}</span>
+                              <div className="flex space-x-2">
+                                <Button size="sm" variant="outline" className="h-7 text-xs">
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Contact
+                                </Button>
+                                <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700">
+                                  View Details
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
 

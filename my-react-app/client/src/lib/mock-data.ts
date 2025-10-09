@@ -137,3 +137,70 @@ export const mockActivityFeed = [
     color: "yellow",
   },
 ];
+
+export const mockPerformanceData = [
+  { week: "Week 1", score: 72 },
+  { week: "Week 2", score: 78 },
+  { week: "Week 3", score: 75 },
+  { week: "Week 4", score: 82 },
+  { week: "Week 5", score: 85 },
+  { week: "Week 6", score: 88 },
+  { week: "Week 7", score: 91 },
+];
+
+export const mockUpcomingAssignments = [
+  {
+    id: "assign-1",
+    title: "Chest X-Ray Analysis",
+    dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    priority: "high",
+    category: "Pulmonology",
+    status: "pending",
+  },
+  {
+    id: "assign-2",
+    title: "Abdominal CT Review",
+    dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    priority: "medium",
+    category: "Radiology",
+    status: "pending",
+  },
+  {
+    id: "assign-3",
+    title: "MRI Brain Tumor Case",
+    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    priority: "medium",
+    category: "Neurology",
+    status: "pending",
+  },
+];
+
+export const mockAtRiskStudents = [
+  {
+    id: "risk-1",
+    name: "David Tran",
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40",
+    issue: "Low completion rate (45%)",
+    score: 68,
+    trend: "declining",
+    lastActive: "3 days ago",
+  },
+  {
+    id: "risk-2",
+    name: "Emma Wilson",
+    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40",
+    issue: "Missed last 3 assignments",
+    score: 72,
+    trend: "stable",
+    lastActive: "5 days ago",
+  },
+  {
+    id: "risk-3",
+    name: "James Lee",
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40",
+    issue: "Accuracy below 70%",
+    score: 65,
+    trend: "declining",
+    lastActive: "1 day ago",
+  },
+];
