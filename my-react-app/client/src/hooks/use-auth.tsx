@@ -1,15 +1,15 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useLocation } from "wouter";
-import { AuthService } from "@/lib/auth";
+import { AuthService, User } from "@/lib/auth";
+import { jwtDecode } from "jwt-decode";
 
 interface AuthUser {
-  id?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
   role?: "student" | "instructor";
   token?: string;
-  createdAt?: Date;
+  password?: string;
 }
 
 interface AuthContextType {
@@ -33,18 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [, setLocation] = useLocation();
 
+  // Decode token from localStorage on load
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
+    const token = localStorage.getItem("session_token");
+    if (token) {
       try {
-        setUser(JSON.parse(storedUser));
+        const decoded: AuthUser = jwtDecode(token);
+        decoded.token = token;
+        setUser(decoded);
       } catch {
-        localStorage.removeItem("user");
+        localStorage.removeItem("session_token");
       }
-    } else {
-      const token = localStorage.getItem("session_token");
-      const role = localStorage.getItem("user_role") as "student" | "instructor" | null;
-      if (token && role) setUser({ token, role });
     }
     setIsLoading(false);
   }, []);
@@ -52,31 +51,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<AuthUser> => {
     setIsLoading(true);
     try {
-      const loggedInUser = await AuthService.login(email, password);
+      const { token } = await AuthService.login(email, password);
+      if (!token) throw new Error("Login failed — missing token");
 
-      if (!loggedInUser?.token) {
-        console.error("Login failed — missing token");
-        setUser(null);
-        throw new Error("Login failed — missing token");
-      }
+      const decoded: AuthUser = jwtDecode(token);
+      decoded.token = token;
 
-      // Save to storage
-      localStorage.setItem("session_token", loggedInUser.token);
-      if (loggedInUser.role) localStorage.setItem("user_role", loggedInUser.role);
-      localStorage.setItem("user", JSON.stringify(loggedInUser));
+      localStorage.setItem("session_token", token);
+      setUser(decoded);
 
-      // Update context state
-      setUser(loggedInUser);
-      console.log("Logged in user:", loggedInUser);
+      // Redirect based on role
+      if (decoded.role === "student") setLocation("/student");
+      else if (decoded.role === "instructor") setLocation("/instructor");
 
-      // Navigate after successful login
-      if (loggedInUser.role === "student") {
-        setLocation("/student");
-      } else if (loggedInUser.role === "instructor") {
-        setLocation("/instructor");
-      }
-
-      return loggedInUser;
+      return decoded;
     } catch (error) {
       console.error("Login error:", error);
       setUser(null);
@@ -85,8 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
-
 
   const signup = async (userData: {
     email: string;
@@ -97,19 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }) => {
     setIsLoading(true);
     try {
-      const newUser = await AuthService.signup(userData);
-      localStorage.setItem("session_token", newUser.token || "");
-      if (newUser.role) localStorage.setItem("user_role", newUser.role);
-      localStorage.setItem("user", JSON.stringify(newUser));
-      setUser(newUser);
+      const { token } = await AuthService.signup(userData);
+      if (!token) throw new Error("Signup failed — missing token");
 
-      // Auto-redirect after signup
-      if (newUser.role === "student") {
-        setLocation("/student");
-      } else if (newUser.role === "instructor") {
-        setLocation("/instructor");
-      }
+      const decoded: AuthUser = jwtDecode(token);
+      decoded.token = token;
 
+      localStorage.setItem("session_token", token);
+      setUser(decoded);
+
+      if (decoded.role === "student") setLocation("/student");
+      else if (decoded.role === "instructor") setLocation("/instructor");
     } finally {
       setIsLoading(false);
     }

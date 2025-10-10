@@ -120,7 +120,6 @@ export default function Signup() {
         description: "Welcome to the medical imaging platform!",
       });
 
-      // useAuth.signup already redirects by role; this is a safety nudge
       setTimeout(() => {
         setLocation(formData.role === "student" ? "/student" : "/instructor");
       }, 100);
