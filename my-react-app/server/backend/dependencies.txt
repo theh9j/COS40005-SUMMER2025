@@ -4,3 +4,5 @@ motor
 passlib[bcrypt]
 python-jose[cryptography]
 python-decouple
+
+npm install jwt-decode (for frontend)

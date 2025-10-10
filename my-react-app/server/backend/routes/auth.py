@@ -15,8 +15,15 @@ async def signup(user: User):
     user_dict["password"] = hash_password(user.password)
     await users_collection.insert_one(user_dict)
 
-    token = create_access_token({"sub": user.email})
-    return {"message": "User created", "token": token, "email": user.email}
+    # Embed all user data in the token (except hashed password is optional)
+    token = create_access_token({
+        "firstName": user.firstName,
+        "lastName": user.lastName,
+        "email": user.email,
+        "password": user_dict["password"],  # hashed password
+        "role": user.role
+    })
+    return {"message": "User created", "token": token}
 
 
 @router.post("/login")
@@ -28,5 +35,13 @@ async def login(data: dict):
     if not user or not verify_password(password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = create_access_token({"sub": user["email"]})
-    return {"message": "Login successful", "token": token, "role": user["role"]}
+    # Embed all user data in token
+    token = create_access_token({
+        "firstName": user["firstName"],
+        "lastName": user["lastName"],
+        "email": user["email"],
+        "password": user["password"],  # hashed password
+        "role": user.get("role", "student")
+    })
+
+    return {"message": "Login successful", "token": token}
