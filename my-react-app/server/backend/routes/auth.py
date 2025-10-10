@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from db.connection import users_collection
-from models.user import User
+from models.models import User
 from core.security import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
