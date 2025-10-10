@@ -1,4 +1,3 @@
-// src/lib/auth.ts
 export interface User {
   email: string;
   firstName?: string;

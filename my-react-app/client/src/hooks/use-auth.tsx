@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     console.log("Logging out...");
     AuthService.logout();
-    localStorage.clear();
+    localStorage.removeItem("session_token");
     setTimeout(() => {
       setUser(null);
       setLocation("/login");
