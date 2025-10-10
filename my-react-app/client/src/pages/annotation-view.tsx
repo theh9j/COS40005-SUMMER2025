@@ -9,6 +9,7 @@ import AnnotationCanvas from "@/components/annotation-canvas";
 import ChatPanel from "@/components/chat-panel";
 import FeedbackPanel from "@/components/feedback-panel";
 import { ArrowLeft, Save } from "lucide-react";
+import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 export default function AnnotationView() {
   const [, setLocation] = useLocation();
@@ -81,6 +82,7 @@ export default function AnnotationView() {
 
           {/* Right Sidebar */}
           <aside className="w-80 bg-card border-l border-border flex flex-col">
+            <DiscussionThread imageId={caseId} />
             <ChatPanel />
             <FeedbackPanel />
           </aside>
