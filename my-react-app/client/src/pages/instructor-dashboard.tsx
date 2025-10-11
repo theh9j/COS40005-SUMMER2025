@@ -8,8 +8,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { mockAtRiskStudents } from "@/lib/mock-data";
 import {
   Presentation, Gauge, GraduationCap, ClipboardCheck, ChartBar,
-  FolderOpen, Settings, LogOut, Clock, ChartLine, Check, Edit,
-  AlertTriangle, TrendingDown, Mail, UserCheck, Activity
+  FolderOpen, Settings, LogOut, Clock, ChartLine, Check, Edit, 
+  AlertTriangle, TrendingDown, Mail
 } from "lucide-react";
 
 type InstructorView = "overview" | "students" | "grading" | "analytics" | "cases" | "settings";
@@ -50,7 +50,7 @@ export default function InstructorDashboard() {
       ["Sarah Chen", "12", "91", "95", "540"],
       ["Mike Johnson", "9", "83", "88", "420"],
       ["Aisha Rahman", "15", "92", "93", "600"],
-      ["David Tran", "11", "85", "86", "505"],
+      ["David Tran", "11", "85", "86", "505"]
     ];
     const csv = classRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -63,22 +63,8 @@ export default function InstructorDashboard() {
     URL.revokeObjectURL(url);
   };
 
-  // Mock data for grading queue and recent activity
-  const gradingQueue = [
-    { name: "David Tran", case: "Chest X-Ray Analysis", status: "Pending Review" },
-    { name: "Aisha Rahman", case: "MRI Tumor Segmentation", status: "Awaiting Feedback" },
-    { name: "Mike Johnson", case: "CT Scan Analysis", status: "In Review" },
-  ];
-
-  const recentActivity = [
-    { name: "Sarah Chen", action: "Submitted Case #5: Brain MRI", time: "10m ago" },
-    { name: "David Tran", action: "Graded Case #3: Lung CT", time: "30m ago" },
-    { name: "Aisha Rahman", action: "Improved score in Case #4", time: "1h ago" },
-  ];
-
   return (
     <div className="min-h-screen bg-background" data-testid="instructor-dashboard">
-      {/* Header */}
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -107,9 +93,7 @@ export default function InstructorDashboard() {
         </div>
       </header>
 
-      {/* Layout */}
       <div className="flex h-screen">
-        {/* Sidebar Navigation */}
         <aside className="w-64 bg-card border-r border-border">
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
@@ -131,78 +115,99 @@ export default function InstructorDashboard() {
           </nav>
         </aside>
 
-        {/* Main Content */}
         <main className="flex-1 overflow-auto">
-          {/* 🟩 Overview */}
           {activeView === "overview" && (
-            <div className="p-6 space-y-8" data-testid="view-overview">
-              {/* Welcome Header */}
-              <div>
+            <div className="p-6" data-testid="view-overview">
+              <div className="mb-6">
                 <h2 className="text-2xl font-bold mb-2">Welcome, Dr. {user.lastName}!</h2>
-                <p className="text-muted-foreground">
-                  Monitor student progress, identify at-risk students, and review performance trends.
-                </p>
+                <p className="text-muted-foreground">Monitor student progress and provide feedback</p>
               </div>
 
-              {/* Quick Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Active Students</p><p className="text-2xl font-bold text-primary" data-testid="stat-active-students">24</p></div><GraduationCap className="h-8 w-8 text-primary" /></div></CardContent></Card>
+                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Pending Reviews</p><p className="text-2xl font-bold text-orange-500" data-testid="stat-pending-reviews">8</p></div><Clock className="h-8 w-8 text-orange-500" /></div></CardContent></Card>
+                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Cases Assigned</p><p className="text-2xl font-bold text-green-500" data-testid="stat-cases-assigned">15</p></div><FolderOpen className="h-8 w-8 text-green-500" /></div></CardContent></Card>
+                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Avg. Score</p><p className="text-2xl font-bold text-accent" data-testid="stat-avg-score">87%</p></div><ChartLine className="h-8 w-8 text-accent" /></div></CardContent></Card>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 <Card>
                   <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Active Students</p>
-                        <p className="text-2xl font-bold text-primary">24</p>
+                    <h3 className="text-lg font-semibold mb-4">Recent Student Activity</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-4 p-3 rounded-lg hover:bg-secondary">
+                        <img 
+                          src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" 
+                          alt="Sarah Chen" 
+                          className="w-10 h-10 rounded-full"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">Sarah Chen</p>
+                          <p className="text-sm text-muted-foreground">Completed Brain MRI annotation</p>
+                        </div>
+                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">95%</span>
                       </div>
-                      <GraduationCap className="h-8 w-8 text-primary" />
+                      <div className="flex items-center space-x-4 p-3 rounded-lg hover:bg-secondary">
+                        <img 
+                          src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" 
+                          alt="Mike Johnson" 
+                          className="w-10 h-10 rounded-full"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">Mike Johnson</p>
+                          <p className="text-sm text-muted-foreground">Submitted Chest X-ray case</p>
+                        </div>
+                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Pending</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
+
                 <Card>
                   <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Pending Reviews</p>
-                        <p className="text-2xl font-bold text-orange-500">8</p>
+                    <h3 className="text-lg font-semibold mb-4">Grading Queue</h3>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium">Cardiac CT - CAD Case</p>
+                          <span className="text-xs text-muted-foreground">2 hours ago</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">3 students submitted</p>
+                        <Button 
+                          size="sm"
+                          onClick={() => setActiveView("grading")}
+                          data-testid="button-review-cardiac"
+                        >
+                          Review
+                        </Button>
                       </div>
-                      <Clock className="h-8 w-8 text-orange-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Cases Assigned</p>
-                        <p className="text-2xl font-bold text-green-500">15</p>
+                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium">Brain MRI - Stroke</p>
+                          <span className="text-xs text-muted-foreground">5 hours ago</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">5 students submitted</p>
+                        <Button 
+                          size="sm"
+                          onClick={() => setActiveView("grading")}
+                          data-testid="button-review-brain"
+                        >
+                          Review
+                        </Button>
                       </div>
-                      <FolderOpen className="h-8 w-8 text-green-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Avg. Score</p>
-                        <p className="text-2xl font-bold text-accent">87%</p>
-                      </div>
-                      <ChartLine className="h-8 w-8 text-accent" />
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* 🟥 At-Risk Student Alerts */}
-              <Card>
+              <Card className="mb-8">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold flex items-center">
                       <AlertTriangle className="h-5 w-5 mr-2 text-red-500" />
                       At-Risk Student Alerts
                     </h3>
-                    <span className="text-sm text-muted-foreground">
-                      {mockAtRiskStudents.length} students need attention
-                    </span>
+                    <span className="text-sm text-muted-foreground">{mockAtRiskStudents.length} students need attention</span>
                   </div>
                   <div className="space-y-4">
                     {mockAtRiskStudents.map((student) => (
@@ -213,22 +218,18 @@ export default function InstructorDashboard() {
                             <div className="flex items-center justify-between mb-2">
                               <p className="font-medium">{student.name}</p>
                               <div className="flex items-center space-x-2">
-                                {student.trend === "declining" && (
+                                {student.trend === 'declining' && (
                                   <span className="flex items-center text-xs text-red-600">
                                     <TrendingDown className="h-3 w-3 mr-1" />
                                     Declining
                                   </span>
                                 )}
-                                <span className="text-sm font-semibold text-red-600">
-                                  Score: {student.score}%
-                                </span>
+                                <span className="text-sm font-semibold text-red-600">Score: {student.score}%</span>
                               </div>
                             </div>
                             <p className="text-sm text-muted-foreground mb-2">{student.issue}</p>
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-muted-foreground">
-                                Last active: {student.lastActive}
-                              </span>
+                              <span className="text-xs text-muted-foreground">Last active: {student.lastActive}</span>
                               <div className="flex space-x-2">
                                 <Button size="sm" variant="outline" className="h-7 text-xs">
                                   <Mail className="h-3 w-3 mr-1" />
@@ -246,113 +247,25 @@ export default function InstructorDashboard() {
                   </div>
                 </CardContent>
               </Card>
-
-              {/* 🟦 Recent Student Activity */}
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold flex items-center mb-4">
-                    <Activity className="h-5 w-5 mr-2 text-blue-600" />
-                    Recent Student Activity
-                  </h3>
-                  <div className="space-y-3">
-                    {recentActivity.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between border-b pb-2">
-                        <div>
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-sm text-muted-foreground">{item.action}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground">{item.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 🟨 Grading Queue */}
-              <Card className="border border-border shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <ClipboardCheck className="h-5 w-5 mr-2 text-primary" />
-                      Grading Queue
-                    </h3>
-                    <span className="text-sm text-muted-foreground">
-                      {gradingQueue.length} submissions pending
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-2 px-4 font-medium">Student</th>
-                          <th className="text-left py-2 px-4 font-medium">Case</th>
-                          <th className="text-left py-2 px-4 font-medium">Status</th>
-                          <th className="text-right py-2 px-4 font-medium">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {gradingQueue.map((item, i) => (
-                          <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
-                            <td className="py-2 px-4 font-medium">{item.name}</td>
-                            <td className="py-2 px-4">{item.case}</td>
-                            <td className="py-2 px-4">
-                              <span
-                                className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                  item.status === "Pending Review"
-                                    ? "bg-orange-100 text-orange-700"
-                                    : item.status === "Awaiting Feedback"
-                                    ? "bg-yellow-100 text-yellow-700"
-                                    : "bg-blue-100 text-blue-700"
-                                }`}
-                              >
-                                {item.status}
-                              </span>
-                            </td>
-                            <td className="py-2 px-4 text-right">
-                              <Button size="sm" variant="outline" className="text-xs">
-                                Review
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           )}
 
-
-          {/* 🟨 Grading */}
           {activeView === "grading" && (
-            <div className="p-6 space-y-8" data-testid="view-grading">
-              <div className="flex items-center justify-between">
+            <div className="p-6" data-testid="view-grading">
+              <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Student Work Review</h2>
+                <div className="flex space-x-2">
+                  <Button className="bg-green-500 text-white hover:bg-green-600" data-testid="button-approve">
+                    <Check className="h-4 w-4 mr-2" />
+                    Approve
+                  </Button>
+                  <Button className="bg-yellow-500 text-white hover:bg-yellow-600" data-testid="button-request-changes">
+                    <Edit className="h-4 w-4 mr-2" />
+                    Request Changes
+                  </Button>
+                </div>
               </div>
 
-              {/* Grading Queue */}
-              <Card>
-                <CardContent className="p-6">
-                  <h4 className="text-lg font-semibold mb-4 flex items-center">
-                    <UserCheck className="h-5 w-5 mr-2 text-primary" />
-                    Grading Queue
-                  </h4>
-                  <div className="space-y-2">
-                    {gradingQueue.map((s, i) => (
-                      <div key={i} className="flex items-center justify-between border-b last:border-0 py-2">
-                        <div>
-                          <p className="font-medium">{s.name}</p>
-                          <p className="text-sm text-muted-foreground">{s.case}</p>
-                        </div>
-                        <span className="text-xs text-orange-600">{s.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Review Card */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
                   <Card>
@@ -371,9 +284,9 @@ export default function InstructorDashboard() {
                         <div className="absolute top-1/2 right-1/4 w-12 h-8 border-2 border-blue-500 bg-blue-500 bg-opacity-20"></div>
                       </div>
                       <div className="grid grid-cols-3 gap-4">
-                        <div className="text-center"><p className="text-sm text-muted-foreground">Accuracy</p><p className="text-lg font-bold text-green-600">95%</p></div>
-                        <div className="text-center"><p className="text-sm text-muted-foreground">Completeness</p><p className="text-lg font-bold text-blue-600">88%</p></div>
-                        <div className="text-center"><p className="text-sm text-muted-foreground">Time Taken</p><p className="text-lg font-bold text-orange-600">45 min</p></div>
+                        <div className="text-center"><p className="text-sm text-muted-foreground">Accuracy</p><p className="text-lg font-bold text-green-600" data-testid="accuracy-score">95%</p></div>
+                        <div className="text-center"><p className="text-sm text-muted-foreground">Completeness</p><p className="text-lg font-bold text-blue-600" data-testid="completeness-score">88%</p></div>
+                        <div className="text-center"><p className="text-sm text-muted-foreground">Time Taken</p><p className="text-lg font-bold text-orange-600" data-testid="time-taken">45 min</p></div>
                       </div>
                     </CardContent>
                   </Card>
@@ -388,8 +301,9 @@ export default function InstructorDashboard() {
                         value={feedback}
                         onChange={(e) => setFeedback(e.target.value)}
                         className="h-32 resize-none"
+                        data-testid="textarea-feedback"
                       />
-                      <Button className="mt-3 w-full">Save Feedback</Button>
+                      <Button className="mt-3 w-full" data-testid="button-save-feedback">Save Feedback</Button>
                     </CardContent>
                   </Card>
 
@@ -408,9 +322,9 @@ export default function InstructorDashboard() {
                     <CardContent className="p-4">
                       <h4 className="font-semibold mb-3">Student Progress</h4>
                       <div className="space-y-2">
-                        <div className="flex justify-between text-sm"><span>Cases Completed</span><span>12/15</span></div>
-                        <div className="flex justify-between text-sm"><span>Average Score</span><span>87%</span></div>
-                        <div className="flex justify-between text-sm"><span className="text-green-600">+5%</span><span>Improvement</span></div>
+                        <div className="flex justify-between text-sm"><span>Cases Completed</span><span data-testid="student-cases-completed">12/15</span></div>
+                        <div className="flex justify-between text-sm"><span>Average Score</span><span data-testid="student-avg-score">87%</span></div>
+                        <div className="flex justify-between text-sm"><span>Improvement</span><span className="text-green-600" data-testid="student-improvement">+5%</span></div>
                       </div>
                     </CardContent>
                   </Card>
@@ -419,30 +333,30 @@ export default function InstructorDashboard() {
             </div>
           )}
 
-          {/* 🟦 Analytics */}
           {activeView === "analytics" && (
             <div className="p-6 space-y-6" data-testid="view-analytics">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold">Class Analytics</h2>
                 <Button onClick={exportClassAnalyticsCSV}>Export CSV</Button>
               </div>
+
               <Card>
                 <CardContent className="p-6">
                   <div className="grid grid-cols-5 text-sm font-medium border-b pb-2">
-                    <div>Student</div><div className="text-center">Cases</div><div className="text-center">Avg. Score</div><div className="text-center">Accuracy</div><div className="text-right">Time Spent</div>
+                    <div>Student</div><div className="text-center">Cases</div><div className="text-center">Avg Score</div><div className="text-center">Accuracy</div><div className="text-center">Time</div>
                   </div>
                   {[
-                    { name: "Sarah Chen", cases: 12, score: 91, acc: 95, time: 540 },
-                    { name: "Mike Johnson", cases: 9, score: 83, acc: 88, time: 420 },
-                    { name: "Aisha Rahman", cases: 15, score: 92, acc: 93, time: 600 },
-                    { name: "David Tran", cases: 11, score: 85, acc: 86, time: 505 },
-                  ].map((s, i) => (
-                    <div key={i} className="grid grid-cols-5 text-sm py-2 border-b">
+                    { name: "Sarah Chen", cases: 12, score: "91%", acc: "95%", time: "540m" },
+                    { name: "Mike Johnson", cases: 9, score: "83%", acc: "88%", time: "420m" },
+                    { name: "Aisha Rahman", cases: 15, score: "92%", acc: "93%", time: "600m" },
+                    { name: "David Tran", cases: 11, score: "85%", acc: "86%", time: "505m" },
+                  ].map((s) => (
+                    <div key={s.name} className="grid grid-cols-5 text-sm py-2 border-b last:border-b-0">
                       <div>{s.name}</div>
                       <div className="text-center">{s.cases}</div>
-                      <div className="text-center text-blue-600">{s.score}%</div>
-                      <div className="text-center text-green-600">{s.acc}%</div>
-                      <div className="text-right text-muted-foreground">{s.time} min</div>
+                      <div className="text-center">{s.score}</div>
+                      <div className="text-center">{s.acc}</div>
+                      <div className="text-center">{s.time}</div>
                     </div>
                   ))}
                 </CardContent>
