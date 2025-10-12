@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,18 @@ export default function Login() {
     password: "",
     rememberMe: false,
   });
+  
+  // Add useEffect to load the remembered email on component mount
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem("rememberedEmail");
+    if (rememberedEmail) {
+      setFormData((prev) => ({
+        ...prev,
+        email: rememberedEmail,
+        rememberMe: true,
+      }));
+    }
+  }, []); // Empty dependency array ensures this runs only once
 
   const validate = () => {
     const next: FieldErrors = {};
@@ -68,17 +80,18 @@ export default function Login() {
     try {
       await login(formData.email.trim(), formData.password);
 
+      // Update logic to save or clear the email address
       if (formData.rememberMe) {
-        localStorage.setItem("remember_me", "true");
+        localStorage.setItem("rememberedEmail", formData.email.trim());
       } else {
-        localStorage.removeItem("remember_me");
+        localStorage.removeItem("rememberedEmail");
       }
 
       toast({
         title: "Login successful",
         description: "Welcome back! Redirecting to your dashboard...",
       });
-      // Navigation is handled inside useAuth.login based on role.
+      // Navigation is handled inside use-auth login based on role.
     } catch (error) {
       const message = normalizeError(error);
       setErrors({ form: message });
