@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// src/pages/student-dashboard.tsx
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,18 +15,87 @@ import {
 
 type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "progress" | "settings";
 
+type StudentStats = {
+  casesCompleted: number;
+  activeAnnotations: number;
+  feedbackReceived: number;
+  studyStreakDays: number;
+  annotationAccuracyPct: number;
+  completionRatePct: number;
+  collaborationScorePct: number;
+};
+
+const VALID_TABS: StudentView[] = ["overview", "cases", "annotations", "collaboration", "progress", "settings"];
+const VIEW_STORAGE_KEY = "student.activeView";
+
 export default function StudentDashboard() {
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
-  const [activeView, setActiveView] = useState<StudentView>("overview");
+
+  // Persist the active sub-view so reloads restore it
+  const [activeView, setActiveView] = useState<StudentView>(() => {
+    const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as StudentView;
+    return VALID_TABS.includes(saved) ? saved : "overview";
+  });
+  useEffect(() => {
+    localStorage.setItem(VIEW_STORAGE_KEY, activeView);
+  }, [activeView]);
+
   const [showUploadModal, setShowUploadModal] = useState(false);
 
+  // One source of truth for stats (cards + CSV both consume this)
+  const [stats, setStats] = useState<StudentStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
   useEffect(() => {
-    console.log("Current user in dashboard:", user);
     if (!isLoading && (!user || user.role !== "student")) {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
+
+  // Fetch from your API (fallback to mock if API missing/failed)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setStatsError(null);
+        // Adjust the endpoint to your backend. Expect a shape compatible with StudentStats.
+        const res = await fetch("/api/student/overview", { credentials: "include" });
+        if (!res.ok) throw new Error(`Failed to load: ${res.status}`);
+        const data = await res.json();
+
+        // Defensive mapping to our local type (rename keys if your API differs)
+        const next: StudentStats = {
+          casesCompleted: Number(data?.casesCompleted ?? 0),
+          activeAnnotations: Number(data?.activeAnnotations ?? 0),
+          feedbackReceived: Number(data?.feedbackReceived ?? 0),
+          studyStreakDays: Number(data?.studyStreakDays ?? 0),
+          annotationAccuracyPct: Number(data?.annotationAccuracyPct ?? 0),
+          completionRatePct: Number(data?.completionRatePct ?? 0),
+          collaborationScorePct: Number(data?.collaborationScorePct ?? 0),
+        };
+        if (!cancelled) setStats(next);
+      } catch (e) {
+        // Fallback mock so the UI still works on dev
+        if (!cancelled) {
+          setStats({
+            casesCompleted: 12,
+            activeAnnotations: 8,
+            feedbackReceived: 5,
+            studyStreakDays: 21,
+            annotationAccuracyPct: 85,
+            completionRatePct: 92,
+            collaborationScorePct: 78,
+          });
+          setStatsError("Using mock data (backend unavailable).");
+        }
+      }
+    }
+    load();
+
+    return () => { cancelled = true; };
+  }, []);
 
   if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
@@ -37,7 +107,7 @@ export default function StudentDashboard() {
     { id: "collaboration", label: "Collaboration", icon: Users },
     { id: "progress", label: "Progress", icon: ChartLine },
     { id: "settings", label: "Settings", icon: Settings },
-  ];
+  ] as const;
 
   const handleLogout = () => {
     logout();
@@ -45,18 +115,19 @@ export default function StudentDashboard() {
   };
 
   const exportStudentProgressCSV = () => {
+    if (!stats) return;
     const rows = [
       ["Student", `${user.firstName} ${user.lastName}`],
       ["Email", user.email],
       [],
       ["Metric", "Value"],
-      ["Cases Completed", "12"],
-      ["Active Annotations", "8"],
-      ["Feedback Received", "5"],
-      ["Study Streak (days)", "11111"],
-      ["Annotation Accuracy (%)", "85"],
-      ["Case Completion Rate (%)", "92"],
-      ["Collaboration Score (%)", "78"]
+      ["Cases Completed", String(stats.casesCompleted)],
+      ["Active Annotations", String(stats.activeAnnotations)],
+      ["Feedback Received", String(stats.feedbackReceived)],
+      ["Study Streak (days)", String(stats.studyStreakDays)],
+      ["Annotation Accuracy (%)", String(stats.annotationAccuracyPct)],
+      ["Case Completion Rate (%)", String(stats.completionRatePct)],
+      ["Collaboration Score (%)", String(stats.collaborationScorePct)],
     ];
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -69,10 +140,35 @@ export default function StudentDashboard() {
     URL.revokeObjectURL(url);
   };
 
+  const StatCard = ({
+    label,
+    value,
+    icon: Icon,
+    valueClass = "",
+    testId,
+  }: {
+    label: string; value: string | number; icon: any; valueClass?: string; testId: string;
+  }) => (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className={`text-2xl font-bold ${valueClass}`} data-testid={testId}>
+              {value}
+            </p>
+          </div>
+          <Icon className={`h-8 w-8 ${valueClass || "text-primary"}`} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen bg-background" data-testid="student-dashboard">
-      <header className="bg-card border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
+      {/* Sticky Header */}
+      <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center space-x-4">
             <UserRound className="h-8 w-8 text-primary" />
             <h1 className="text-xl font-semibold">Medical Imaging Platform</h1>
@@ -99,8 +195,9 @@ export default function StudentDashboard() {
         </div>
       </header>
 
-      <div className="flex h-screen">
-        <aside className="w-64 bg-card border-r border-border">
+      <div className="flex">
+        {/* Sticky Sidebar */}
+        <aside className="w-64 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-auto">
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -110,7 +207,7 @@ export default function StudentDashboard() {
                   key={item.id}
                   variant={isActive ? "default" : "ghost"}
                   className={`w-full justify-start ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-secondary text-foreground"}`}
-                  onClick={() => setActiveView(item.id as StudentView)}
+                  onClick={() => setActiveView(item.id)}
                   data-testid={`nav-${item.id}`}
                 >
                   <Icon className="h-4 w-4 mr-3" />
@@ -121,8 +218,15 @@ export default function StudentDashboard() {
           </nav>
         </aside>
 
+        {/* Main */}
         <main className="flex-1 overflow-auto">
-          {activeView === "overview" && (
+          {statsError && (
+            <div className="mx-6 mt-4 p-3 text-sm rounded bg-yellow-50 border border-yellow-200 text-yellow-800">
+              {statsError}
+            </div>
+          )}
+
+          {activeView === "overview" && stats && (
             <div className="p-6" data-testid="view-overview">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold mb-2">Welcome back, {user.firstName}!</h2>
@@ -130,10 +234,10 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Cases Completed</p><p className="text-2xl font-bold text-primary" data-testid="stat-cases-completed">12</p></div><CheckCircle className="h-8 w-8 text-green-500" /></div></CardContent></Card>
-                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Active Annotations</p><p className="text-2xl font-bold text-accent" data-testid="stat-active-annotations">8</p></div><Edit className="h-8 w-8 text-accent" /></div></CardContent></Card>
-                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Feedback Received</p><p className="text-2xl font-bold text-yellow-500" data-testid="stat-feedback-received">5</p></div><MessageCircle className="h-8 w-8 text-yellow-500" /></div></CardContent></Card>
-                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Study Streak</p><p className="text-2xl font-bold text-orange-500" data-testid="stat-study-streak">11111 days</p></div><Flame className="h-8 w-8 text-orange-500" /></div></CardContent></Card>
+                <StatCard label="Cases Completed" value={stats.casesCompleted} icon={CheckCircle} valueClass="text-primary" testId="stat-cases-completed" />
+                <StatCard label="Active Annotations" value={stats.activeAnnotations} icon={Edit} valueClass="text-accent" testId="stat-active-annotations" />
+                <StatCard label="Feedback Received" value={stats.feedbackReceived} icon={MessageCircle} valueClass="text-yellow-500" testId="stat-feedback-received" />
+                <StatCard label="Study Streak (days)" value={stats.studyStreakDays} icon={Flame} valueClass="text-orange-500" testId="stat-study-streak" />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -200,7 +304,7 @@ export default function StudentDashboard() {
             </div>
           )}
 
-          {activeView === "progress" && (
+          {activeView === "progress" && stats && (
             <div className="p-6" data-testid="view-progress">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Learning Progress</h2>
@@ -212,9 +316,9 @@ export default function StudentDashboard() {
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold mb-4">Overall Performance</h3>
                     <div className="space-y-4">
-                      <div><div className="flex justify-between text-sm mb-1"><span>Annotation Accuracy</span><span data-testid="accuracy-percentage">85%</span></div><Progress value={85} className="h-2" /></div>
-                      <div><div className="flex justify-between text-sm mb-1"><span>Case Completion Rate</span><span data-testid="completion-percentage">92%</span></div><Progress value={92} className="h-2" /></div>
-                      <div><div className="flex justify-between text-sm mb-1"><span>Collaboration Score</span><span data-testid="collaboration-percentage">78%</span></div><Progress value={78} className="h-2" /></div>
+                      <div><div className="flex justify-between text-sm mb-1"><span>Annotation Accuracy</span><span data-testid="accuracy-percentage">{stats.annotationAccuracyPct}%</span></div><Progress value={stats.annotationAccuracyPct} className="h-2" /></div>
+                      <div><div className="flex justify-between text-sm mb-1"><span>Case Completion Rate</span><span data-testid="completion-percentage">{stats.completionRatePct}%</span></div><Progress value={stats.completionRatePct} className="h-2" /></div>
+                      <div><div className="flex justify-between text-sm mb-1"><span>Collaboration Score</span><span data-testid="collaboration-percentage">{stats.collaborationScorePct}%</span></div><Progress value={stats.collaborationScorePct} className="h-2" /></div>
                     </div>
                   </CardContent>
                 </Card>
@@ -223,9 +327,9 @@ export default function StudentDashboard() {
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold mb-4">Recent Achievements</h3>
                     <div className="space-y-3 text-sm text-muted-foreground">
-                      <div>Case Master — Completed 10 cases this week</div>
-                      <div>Perfect Annotation — 100% accuracy on stroke case</div>
-                      <div>Team Player — Helped 5 peers this month</div>
+                      <div>Case Master — Completed {Math.max(1, Math.round(stats.casesCompleted / 2))} cases this week</div>
+                      <div>Perfect Annotation — {stats.annotationAccuracyPct}% accuracy on stroke case</div>
+                      <div>Team Player — Collaboration score {stats.collaborationScorePct}%</div>
                     </div>
                   </CardContent>
                 </Card>

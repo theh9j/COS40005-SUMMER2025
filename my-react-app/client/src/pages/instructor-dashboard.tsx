@@ -12,18 +12,27 @@ import {
 
 type InstructorView = "overview" | "students" | "grading" | "analytics" | "cases" | "settings";
 
+const VIEW_STORAGE_KEY = "instructor.activeView";
+const VALID_TABS: InstructorView[] = ["overview", "students", "grading", "analytics", "cases", "settings"];
+
 export default function InstructorDashboard() {
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
-  const [activeView, setActiveView] = useState<InstructorView>("overview");
+  const [activeView, setActiveView] = useState<InstructorView>(() => {
+    const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
+    return VALID_TABS.includes(saved) ? saved : "overview";
+  });
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
-    console.log("Current user in dashboard:", user);
     if (!isLoading && (!user || user.role !== "instructor")) {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
+
+  useEffect(() => {
+    localStorage.setItem(VIEW_STORAGE_KEY, activeView);
+  }, [activeView]);
 
   if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
@@ -63,8 +72,9 @@ export default function InstructorDashboard() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="instructor-dashboard">
-      <header className="bg-card border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
+      {/* Sticky Header */}
+      <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center space-x-4">
             <Presentation className="h-8 w-8 text-primary" />
             <h1 className="text-xl font-semibold">Instructor Dashboard</h1>
@@ -91,12 +101,13 @@ export default function InstructorDashboard() {
         </div>
       </header>
 
-      <div className="flex h-screen">
-        <aside className="w-64 bg-card border-r border-border">
+      <div className="flex">
+        {/* Sticky Sidebar */}
+        <aside className="w-64 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-auto">
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeView === item.id;
+              const Icon = item.icon as any;
+              const isActive = activeView === (item.id as InstructorView);
               return (
                 <Button
                   key={item.id}
@@ -112,7 +123,6 @@ export default function InstructorDashboard() {
             })}
           </nav>
         </aside>
-
         <main className="flex-1 overflow-auto">
           {activeView === "overview" && (
             <div className="p-6" data-testid="view-overview">
