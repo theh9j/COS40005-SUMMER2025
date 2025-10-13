@@ -53,7 +53,7 @@ export default function StudentDashboard() {
       ["Cases Completed", "12"],
       ["Active Annotations", "8"],
       ["Feedback Received", "5"],
-      ["Study Streak (days)", "2382938923"],
+      ["Study Streak (days)", "11111"],
       ["Annotation Accuracy (%)", "85"],
       ["Case Completion Rate (%)", "92"],
       ["Collaboration Score (%)", "78"]
@@ -133,7 +133,7 @@ export default function StudentDashboard() {
                 <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Cases Completed</p><p className="text-2xl font-bold text-primary" data-testid="stat-cases-completed">12</p></div><CheckCircle className="h-8 w-8 text-green-500" /></div></CardContent></Card>
                 <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Active Annotations</p><p className="text-2xl font-bold text-accent" data-testid="stat-active-annotations">8</p></div><Edit className="h-8 w-8 text-accent" /></div></CardContent></Card>
                 <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Feedback Received</p><p className="text-2xl font-bold text-yellow-500" data-testid="stat-feedback-received">5</p></div><MessageCircle className="h-8 w-8 text-yellow-500" /></div></CardContent></Card>
-                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Study Streak</p><p className="text-2xl font-bold text-orange-500" data-testid="stat-study-streak">23972387237 days</p></div><Flame className="h-8 w-8 text-orange-500" /></div></CardContent></Card>
+                <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Study Streak</p><p className="text-2xl font-bold text-orange-500" data-testid="stat-study-streak">11111 days</p></div><Flame className="h-8 w-8 text-orange-500" /></div></CardContent></Card>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
