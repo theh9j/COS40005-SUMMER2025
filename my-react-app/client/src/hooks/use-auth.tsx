@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useLocation } from "wouter";
-import { AuthService, User } from "@/lib/auth";
+import { AuthService } from "@/lib/auth";
 import { jwtDecode } from "jwt-decode";
 
 interface AuthUser {
@@ -100,7 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    console.log("Logging out...");
     AuthService.logout();
     localStorage.removeItem("session_token");
     setTimeout(() => {
