@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from db.connection import users_collection
-from models.models import User
+from db.connection import users_collection, approvals_collection
+from models.models import User, Approval
+from datetime import datetime
 from core.security import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -13,8 +14,13 @@ async def signup(user: User):
 
     user_dict = user.model_dump()
     user_dict["password"] = hash_password(user.password)
+    user_dict["created_at"] = datetime.now()
     result = await users_collection.insert_one(user_dict)
     new_user = await users_collection.find_one({"_id": result.inserted_id})
+
+    if new_user["role"] == "instructor":
+        approval = Approval(id=str(new_user["_id"]))
+        await approvals_collection.insert_one(approval.model_dump())
 
     token = create_access_token({
         "user_id": str(new_user["_id"]),
