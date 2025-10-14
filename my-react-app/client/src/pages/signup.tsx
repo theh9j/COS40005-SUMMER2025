@@ -116,9 +116,9 @@ export default function Signup() {
       });
 
       toast({
-        title: "Account created",
-        description: "Welcome to the medical imaging platform!",
-      });
+        title: `Welcome, ${formData.firstName || "there"}! 🎉`,
+        description: "Your account is ready. We’re setting up your dashboard…",
+      })
 
       setTimeout(() => {
         setLocation(formData.role === "student" ? "/student" : "/instructor");

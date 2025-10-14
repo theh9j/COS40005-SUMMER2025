@@ -9,10 +9,9 @@ import { useToast } from "@/hooks/use-toast";
 import { UserRound } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
-type FieldErrors = Partial<Record<"email" | "password" | "form", string>>;
+type FieldErrors = Partial<Record<"email" | "password", string>>;
 
-const emailRegex =
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -26,8 +25,7 @@ export default function Login() {
     password: "",
     rememberMe: false,
   });
-  
-  // Add useEffect to load the remembered email on component mount
+
   useEffect(() => {
     const rememberedEmail = localStorage.getItem("rememberedEmail");
     if (rememberedEmail) {
@@ -37,50 +35,42 @@ export default function Login() {
         rememberMe: true,
       }));
     }
-  }, []); // Empty dependency array ensures this runs only once
+  }, []);
 
   const validate = () => {
     const next: FieldErrors = {};
     if (!formData.email.trim()) next.email = "Email is required.";
     else if (!emailRegex.test(formData.email.trim()))
       next.email = "Enter a valid email address.";
-
     if (!formData.password) next.password = "Password is required.";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
   const normalizeError = (err: unknown): string => {
-    // If the backend returns structured errors, map them here.
-    // Otherwise fall back to generic buckets.
     const fallback = "Unable to sign in. Please try again.";
     if (!navigator.onLine) return "You appear to be offline. Check your connection.";
     if (err instanceof Error) {
       const msg = err.message.toLowerCase();
       if (msg.includes("401") || msg.includes("invalid") || msg.includes("credentials"))
         return "Email or password is incorrect.";
-      if (msg.includes("429"))
-        return "Too many attempts. Please wait a moment and try again.";
-      if (msg.includes("network"))
-        return "Network error. Please try again.";
-      if (msg.includes("token"))
-        return "Login failed because the session token was not issued.";
+      if (msg.includes("429")) return "Too many attempts. Please wait and try again.";
+      if (msg.includes("network")) return "Network error. Please try again.";
+      if (msg.includes("token")) return "Login failed because the session token was not issued.";
       return err.message || fallback;
     }
     return fallback;
-    };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
     setIsSubmitting(true);
-    setErrors((prev) => ({ ...prev, form: undefined }));
 
     try {
       await login(formData.email.trim(), formData.password);
 
-      // Update logic to save or clear the email address
       if (formData.rememberMe) {
         localStorage.setItem("rememberedEmail", formData.email.trim());
       } else {
@@ -91,10 +81,10 @@ export default function Login() {
         title: "Login successful",
         description: "Welcome back! Redirecting to your dashboard...",
       });
-      // Navigation is handled inside use-auth login based on role.
+      // Navigation is handled inside use-auth.
     } catch (error) {
       const message = normalizeError(error);
-      setErrors({ form: message });
+      // No inline top error — toast only
       toast({
         title: "Login failed",
         description: message,
@@ -120,10 +110,6 @@ export default function Login() {
           </div>
 
           <form className="space-y-6" onSubmit={handleSubmit} noValidate>
-            {errors.form && (
-              <p className="text-sm text-red-600 -mt-2">{errors.form}</p>
-            )}
-
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
