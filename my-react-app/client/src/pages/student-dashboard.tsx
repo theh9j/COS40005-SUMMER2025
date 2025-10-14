@@ -1,6 +1,7 @@
 // src/pages/student-dashboard.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import ProfileMenu from "@/components/profile-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -42,6 +43,21 @@ export default function StudentDashboard() {
   }, [activeView]);
 
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Close profile menu on outside click or Escape
+  useEffect(() => {
+    const handleClick = () => setShowProfileMenu(false);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowProfileMenu(false);
+    };
+    document.addEventListener("click", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, []);
 
   // One source of truth for stats (cards + CSV both consume this)
   const [stats, setStats] = useState<StudentStats | null>(null);
@@ -178,16 +194,35 @@ export default function StudentDashboard() {
               <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
               <span className="text-sm text-muted-foreground">3 users online</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <img
-                src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
-                alt="Student Avatar"
-                className="w-8 h-8 rounded-full"
-              />
+
+            {/* Avatar + Name + ProfileMenu */}
+            <div className="flex items-center space-x-2 relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowProfileMenu((v) => !v);
+                }}
+                className="focus:outline-none"
+                aria-haspopup="menu"
+                aria-expanded={showProfileMenu}
+              >
+                <img
+                  src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
+                  alt="Student Avatar"
+                  className="w-8 h-8 rounded-full border-2 border-primary"
+                />
+              </button>
               <span className="text-sm font-medium" data-testid="text-username">
                 {user.firstName} {user.lastName}
               </span>
+
+              {showProfileMenu && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ProfileMenu />
+                </div>
+              )}
             </div>
+
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
               <LogOut className="h-4 w-4" />
             </Button>

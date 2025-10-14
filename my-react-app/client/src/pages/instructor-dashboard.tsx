@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import ProfileMenu from "@/components/profile-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,11 +19,13 @@ const VALID_TABS: InstructorView[] = ["overview", "students", "grading", "analyt
 export default function InstructorDashboard() {
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
+
   const [activeView, setActiveView] = useState<InstructorView>(() => {
     const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
     return VALID_TABS.includes(saved) ? saved : "overview";
   });
   const [feedback, setFeedback] = useState("");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== "instructor")) {
@@ -33,6 +36,20 @@ export default function InstructorDashboard() {
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
+
+  // Close profile menu on outside click or Escape
+  useEffect(() => {
+    const handleClick = () => setShowProfileMenu(false);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowProfileMenu(false);
+    };
+    document.addEventListener("click", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, []);
 
   if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
@@ -79,21 +96,42 @@ export default function InstructorDashboard() {
             <Presentation className="h-8 w-8 text-primary" />
             <h1 className="text-xl font-semibold">Instructor Dashboard</h1>
           </div>
+
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
               <span className="text-sm text-muted-foreground">15 students online</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <img
-                src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
-                alt="Instructor Avatar"
-                className="w-8 h-8 rounded-full"
-              />
+
+            {/* Avatar + Name + ProfileMenu */}
+            <div className="flex items-center space-x-2 relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowProfileMenu((v) => !v);
+                }}
+                className="focus:outline-none"
+                aria-haspopup="menu"
+                aria-expanded={showProfileMenu}
+              >
+                <img
+                  src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
+                  alt="Instructor Avatar"
+                  className="w-8 h-8 rounded-full border-2 border-primary"
+                />
+              </button>
               <span className="text-sm font-medium" data-testid="text-username">
                 Dr. {user.lastName}
               </span>
+
+              {/* Stop propagation so clicks inside menu don't close it immediately */}
+              {showProfileMenu && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ProfileMenu />
+                </div>
+              )}
             </div>
+
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
               <LogOut className="h-4 w-4" />
             </Button>
@@ -123,6 +161,7 @@ export default function InstructorDashboard() {
             })}
           </nav>
         </aside>
+
         <main className="flex-1 overflow-auto">
           {activeView === "overview" && (
             <div className="p-6" data-testid="view-overview">
