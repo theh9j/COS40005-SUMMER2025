@@ -10,11 +10,13 @@ import StudentDashboard from "@/pages/student-dashboard";
 import InstructorDashboard from "@/pages/instructor-dashboard";
 import AnnotationView from "@/pages/annotation-view";
 import { AuthProvider } from "@/hooks/use-auth";
+import Home from "@/pages/home";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Login} />
+      <Route path="/" component={Home} />
+      <Route path="/home" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/student" component={StudentDashboard} />
