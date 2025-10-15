@@ -92,10 +92,14 @@ export default function InstructorDashboard() {
       {/* Sticky Header */}
       <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setLocation("/home")}
+            className="flex items-center space-x-4 focus:outline-none hover:opacity-80 transition"
+          >
             <Presentation className="h-8 w-8 text-primary" />
             <h1 className="text-xl font-semibold">Instructor Dashboard</h1>
-          </div>
+          </button>
+
 
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
