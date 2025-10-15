@@ -64,6 +64,7 @@ export default function StudentDashboard() {
   const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log("Current user in dashboard:", user);
     if (!isLoading && (!user || user.role !== "student")) {
       setLocation("/login");
     }
@@ -182,19 +183,13 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="student-dashboard">
+      {/* Sticky Header */}
       <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
         <div className="flex items-center justify-between w-full">
-          {/* ✅ Logo clickable to Home */}
-          <button
-            onClick={() => setLocation("/home")}
-            className="flex items-center space-x-4 focus:outline-none hover:opacity-80 transition"
-          >
+          <div className="flex items-center space-x-4">
             <UserRound className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold text-left">
-              Medical Imaging Platform
-            </h1>
-          </button>
-
+            <h1 className="text-xl font-semibold">Medical Imaging Platform</h1>
+          </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>

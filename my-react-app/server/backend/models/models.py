@@ -12,4 +12,4 @@ class User(BaseModel):
 
 class Approval(BaseModel):
     id: str
-    status: str = "Pending"
+    status: str = "pending"

@@ -28,6 +28,7 @@ export default function InstructorDashboard() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   useEffect(() => {
+    console.log("Current user in dashboard:", user);
     if (!isLoading && (!user || user.role !== "instructor")) {
       setLocation("/login");
     }
@@ -37,7 +38,6 @@ export default function InstructorDashboard() {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
 
-  // Close profile menu on outside click or Escape
   useEffect(() => {
     const handleClick = () => setShowProfileMenu(false);
     const handleKey = (e: KeyboardEvent) => {

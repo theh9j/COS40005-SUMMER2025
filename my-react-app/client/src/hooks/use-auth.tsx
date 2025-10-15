@@ -10,6 +10,7 @@ interface AuthUser {
   role?: "student" | "instructor";
   token?: string;
   password?: string;
+  approval_status?: string;
 }
 
 interface AuthContextType {
@@ -61,8 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(decoded);
 
       // Redirect based on role
-      if (decoded.role === "student") setLocation("/student");
-      else if (decoded.role === "instructor") setLocation("/instructor");
+      if (decoded.role === "student") {
+        setLocation("/student");
+      } else if (decoded.role === "instructor") {
+        if (decoded.approval_status === "approved") {
+          setLocation("/instructor");
+        } else {
+          setLocation("/home");
+        }
+      }
 
       return decoded;
     } catch (error) {
@@ -92,8 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("session_token", token);
       setUser(decoded);
 
-      if (decoded.role === "student") setLocation("/student");
-      else if (decoded.role === "instructor") setLocation("/instructor");
+      if (decoded.role === "student") {
+        setLocation("/student");
+      } else if (decoded.role === "instructor") {
+        // Redirect to home page for instructors to await approval
+        setLocation("/home");
+      }
     } finally {
       setIsLoading(false);
     }

@@ -10,6 +10,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
+    console.log("Current user in dashboard:", user);
   }, []);
 
   const goDashboard = () => {
