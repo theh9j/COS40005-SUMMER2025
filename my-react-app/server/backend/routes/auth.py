@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from db.connection import users_collection, approvals_collection
 from models.models import User, Approval
 from datetime import datetime
+from pathlib import Path
 from core.security import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -19,6 +20,9 @@ async def signup(user: User):
     result = await users_collection.insert_one(user_dict)
     new_user_id = result.inserted_id
     new_user = await users_collection.find_one({"_id": new_user_id})
+
+    user_storage = Path("uploads/" + str(new_user_id))
+    user_storage.mkdir(parents=True, exist_ok=True)
 
     token_data = {
         "user_id": str(new_user_id),
