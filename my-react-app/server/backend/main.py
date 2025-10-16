@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from db.connection import db, users_collection
+from db.connection import db, users_collection, approvals_collection
 import random
 from pathlib import Path
 from core.security import hash_password
@@ -24,7 +24,6 @@ async def startup_event():
     uploads_root = Path("uploads")
     uploads_root.mkdir(parents=True, exist_ok=True)
 
-    # --- ADMIN ACCOUNT ---
     admin_email = "nothingnoteworthy@gmail.com"
     existing_admin = await users_collection.find_one({"email": admin_email})
 
@@ -39,7 +38,6 @@ async def startup_event():
         result = await users_collection.insert_one(admin_user)
         admin_id = result.inserted_id
 
-        # ✅ create folder for admin
         user_storage = uploads_root / str(admin_id)
         user_storage.mkdir(parents=True, exist_ok=True)
 
@@ -47,7 +45,6 @@ async def startup_event():
     else:
         print(f"ℹ️ Admin account already exists: {admin_email}")
 
-    # --- RANDOM STUDENTS (3 total) ---
     student_count = await users_collection.count_documents({"role": "student"})
     student_needed = 3 - student_count
     if student_needed > 0:
@@ -65,22 +62,19 @@ async def startup_event():
             result = await users_collection.insert_one(student)
             new_user_id = result.inserted_id
 
-            # ✅ create folder for each student
             user_storage = uploads_root / str(new_user_id)
             user_storage.mkdir(parents=True, exist_ok=True)
 
         print(f"✅ Added {student_needed} random student accounts")
 
-    # --- RANDOM INSTRUCTORS (6 total) ---
     instructor_count = await users_collection.count_documents({"role": "instructor"})
     instructor_needed = 6 - instructor_count
     if instructor_needed > 0:
-        approvals_collection = db["approvals"]
 
         for i in range(instructor_needed):
             first = f"Instructor{i+1}"
             last = random.choice(["Smith", "Johnson", "Brown", "Miller", "Taylor"])
-            email = f"{first.lower()}@university.edu"
+            email = f"{first.lower()}@swin.edu"
             status = "verified" if i % 2 == 0 else "pending"
 
             instructor = {
@@ -94,14 +88,12 @@ async def startup_event():
             result = await users_collection.insert_one(instructor)
             new_user_id = result.inserted_id
 
-            # ✅ create folder for each instructor
             user_storage = uploads_root / str(new_user_id)
             user_storage.mkdir(parents=True, exist_ok=True)
 
-            # Add approval record
-            existing_approval = await db["approvals"].find_one({"id": str(new_user_id)})
+            existing_approval = await approvals_collection.find_one({"id": str(new_user_id)})
             if not existing_approval:
-                await db["approvals"].insert_one({"id": str(new_user_id), "status": status})
+                await approvals_collection.insert_one({"id": str(new_user_id), "status": status})
 
         print(f"✅ Added {instructor_needed} instructor accounts (pending & verified)")
 

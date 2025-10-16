@@ -1,10 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from bson import ObjectId
-from db.connection import users_collection, db
+from db.connection import users_collection, approvals_collection
+from models.models import User, Approval
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
-
-approvals_collection = db["approvals"]
 
 async def get_instructor_status(user):
     if user.get("role") != "instructor":
@@ -40,15 +39,30 @@ async def update_role(user_id: str, data: dict):
     if new_role not in ["student", "instructor", "admin"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
-    result = await users_collection.update_one(
+    user = await users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    prev_role = user.get("role")
+
+    # update role in users collection
+    await users_collection.update_one(
         {"_id": ObjectId(user_id)},
         {"$set": {"role": new_role}}
     )
 
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
+    # handle instructor approval logic
+    if new_role == "instructor":
+        existing_approval = await approvals_collection.find_one({"id": user_id})
+        if not existing_approval:
+            approval = Approval(id=user_id)
+            await approvals_collection.insert_one(approval.model_dump())
+            print(f"✅ Created approval record for instructor {user_id}")
+    elif prev_role == "instructor" and new_role != "instructor":
+        await approvals_collection.delete_one({"id": user_id})
+        print(f"🗑️ Removed approval record for demoted user {user_id}")
 
-    return {"message": "Role updated", "role": new_role}
+    return {"message": f"Role updated to {new_role}", "role": new_role}
 
 
 @router.post("/users/{user_id}/verify-instructor")
