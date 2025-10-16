@@ -57,10 +57,8 @@ async def update_role(user_id: str, data: dict):
         if not existing_approval:
             approval = Approval(id=user_id)
             await approvals_collection.insert_one(approval.model_dump())
-            print(f"✅ Created approval record for instructor {user_id}")
     elif prev_role == "instructor" and new_role != "instructor":
         await approvals_collection.delete_one({"id": user_id})
-        print(f"🗑️ Removed approval record for demoted user {user_id}")
 
     return {"message": f"Role updated to {new_role}", "role": new_role}
 
