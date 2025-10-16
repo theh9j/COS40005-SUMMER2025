@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db.connection import db, users_collection
+import random
+from pathlib import Path
 from core.security import hash_password
-from routes import auth
+from routes import auth, admin
 
 app = FastAPI()
 
@@ -15,16 +17,18 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 
 @app.on_event("startup")
 async def startup_event():
+    uploads_root = Path("uploads")
+    uploads_root.mkdir(parents=True, exist_ok=True)
 
-    # Check if admin exists
+    # --- ADMIN ACCOUNT ---
     admin_email = "nothingnoteworthy@gmail.com"
     existing_admin = await users_collection.find_one({"email": admin_email})
 
     if not existing_admin:
-
         admin_user = {
             "firstName": "Admin",
             "lastName": "Sir",
@@ -32,8 +36,76 @@ async def startup_event():
             "password": hash_password("processor123"),
             "role": "admin",
         }
+        result = await users_collection.insert_one(admin_user)
+        admin_id = result.inserted_id
 
-        await users_collection.insert_one(admin_user)
+        # ✅ create folder for admin
+        user_storage = uploads_root / str(admin_id)
+        user_storage.mkdir(parents=True, exist_ok=True)
+
+        print(f"✅ Admin account created: {admin_email}")
+    else:
+        print(f"ℹ️ Admin account already exists: {admin_email}")
+
+    # --- RANDOM STUDENTS (3 total) ---
+    student_count = await users_collection.count_documents({"role": "student"})
+    student_needed = 3 - student_count
+    if student_needed > 0:
+        for i in range(student_needed):
+            first = f"Student{i+1}"
+            last = random.choice(["Nguyen", "Tran", "Pham", "Le", "Do"])
+            email = f"{first.lower()}@university.edu"
+            student = {
+                "firstName": first,
+                "lastName": last,
+                "email": email,
+                "password": hash_password("student123"),
+                "role": "student",
+            }
+            result = await users_collection.insert_one(student)
+            new_user_id = result.inserted_id
+
+            # ✅ create folder for each student
+            user_storage = uploads_root / str(new_user_id)
+            user_storage.mkdir(parents=True, exist_ok=True)
+
+        print(f"✅ Added {student_needed} random student accounts")
+
+    # --- RANDOM INSTRUCTORS (6 total) ---
+    instructor_count = await users_collection.count_documents({"role": "instructor"})
+    instructor_needed = 6 - instructor_count
+    if instructor_needed > 0:
+        approvals_collection = db["approvals"]
+
+        for i in range(instructor_needed):
+            first = f"Instructor{i+1}"
+            last = random.choice(["Smith", "Johnson", "Brown", "Miller", "Taylor"])
+            email = f"{first.lower()}@university.edu"
+            status = "verified" if i % 2 == 0 else "pending"
+
+            instructor = {
+                "firstName": first,
+                "lastName": last,
+                "email": email,
+                "password": hash_password("teach123"),
+                "role": "instructor",
+            }
+
+            result = await users_collection.insert_one(instructor)
+            new_user_id = result.inserted_id
+
+            # ✅ create folder for each instructor
+            user_storage = uploads_root / str(new_user_id)
+            user_storage.mkdir(parents=True, exist_ok=True)
+
+            # Add approval record
+            existing_approval = await db["approvals"].find_one({"id": str(new_user_id)})
+            if not existing_approval:
+                await db["approvals"].insert_one({"id": str(new_user_id), "status": status})
+
+        print(f"✅ Added {instructor_needed} instructor accounts (pending & verified)")
+
+    print("✅ Database seeding complete.")
 
 @app.get("/")
 def home():

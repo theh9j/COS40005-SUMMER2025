@@ -9,6 +9,7 @@ class User(BaseModel):
     created_at: datetime = "if this is missing, it's probably bugged. Uh oh."
     dob: str = "None"
     role: str
+    suspension: bool = "0"
 
 class Approval(BaseModel):
     id: str
