@@ -7,9 +7,10 @@ interface AuthUser {
   firstName?: string;
   lastName?: string;
   email?: string;
-  role?: "student" | "instructor";
+  role?: "student" | "instructor" | "admin";
   token?: string;
   password?: string;
+  /** For instructors: "approved" | "pending" | "rejected" (backend-defined) */
   approval_status?: string;
 }
 
@@ -27,6 +28,7 @@ interface AuthContextType {
   logout: () => void;
 }
 
+const SESSION_KEY = "session_token";
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -34,20 +36,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [, setLocation] = useLocation();
 
-  // Decode token from localStorage on load
+  // Load session on mount
   useEffect(() => {
-    const token = localStorage.getItem("session_token");
+    const token = localStorage.getItem(SESSION_KEY);
     if (token) {
       try {
         const decoded: AuthUser = jwtDecode(token);
         decoded.token = token;
         setUser(decoded);
       } catch {
-        localStorage.removeItem("session_token");
+        localStorage.removeItem(SESSION_KEY);
       }
     }
     setIsLoading(false);
   }, []);
+
+  const redirectByRole = (decoded: AuthUser) => {
+    if (decoded.role === "student") {
+      setLocation("/student");
+      return;
+    }
+    if (decoded.role === "instructor") {
+      // Only push to instructor dashboard if approved, otherwise send to home
+      if (decoded.approval_status === "approved") {
+        setLocation("/instructor");
+      } else {
+        setLocation("/home");
+      }
+      return;
+    }
+    if (decoded.role === "admin") {
+      setLocation("/admin");
+      return;
+    }
+    // Fallback if role missing/unknown
+    setLocation("/home");
+  };
 
   const login = async (email: string, password: string): Promise<AuthUser> => {
     setIsLoading(true);
@@ -58,20 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const decoded: AuthUser = jwtDecode(token);
       decoded.token = token;
 
-      localStorage.setItem("session_token", token);
+      localStorage.setItem(SESSION_KEY, token);
       setUser(decoded);
 
-      // Redirect based on role
-      if (decoded.role === "student") {
-        setLocation("/student");
-      } else if (decoded.role === "instructor") {
-        if (decoded.approval_status === "approved") {
-          setLocation("/instructor");
-        } else {
-          setLocation("/home");
-        }
-      }
-
+      redirectByRole(decoded);
       return decoded;
     } catch (error) {
       console.error("Login error:", error);
@@ -97,27 +111,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const decoded: AuthUser = jwtDecode(token);
       decoded.token = token;
 
-      localStorage.setItem("session_token", token);
+      localStorage.setItem(SESSION_KEY, token);
       setUser(decoded);
 
-      if (decoded.role === "student") {
-        setLocation("/student");
-      } else if (decoded.role === "instructor") {
-        // Redirect to home page for instructors to await approval
-        setLocation("/home");
-      }
+      redirectByRole(decoded);
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = () => {
-    AuthService.logout();
-    localStorage.removeItem("session_token");
-    setTimeout(() => {
-      setUser(null);
-      setLocation("/login");
-    }, 50);
+    try {
+      AuthService.logout();
+    } finally {
+      localStorage.removeItem(SESSION_KEY);
+      // small delay so any cleanup/toasts can finish
+      setTimeout(() => {
+        setUser(null);
+        setLocation("/login");
+      }, 50);
+    }
   };
 
   return (
