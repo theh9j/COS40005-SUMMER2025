@@ -222,7 +222,7 @@ export default function Signup() {
             </div>
 
             <div>
-              <Label htmlFor="role">Role</Label>
+              <Label htmlFor="role">Occupation</Label>
               <Select
                 value={formData.role}
                 onValueChange={(value: Role) =>
@@ -238,7 +238,7 @@ export default function Signup() {
                   <SelectValue placeholder="Select your role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="student">Medical Student</SelectItem>
+                  <SelectItem value="student">Student</SelectItem>
                   <SelectItem value="instructor">Instructor</SelectItem>
                 </SelectContent>
               </Select>
