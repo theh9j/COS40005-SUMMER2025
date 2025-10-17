@@ -30,6 +30,7 @@ interface AuthContextType {
 }
 
 const SESSION_KEY = "session_token";
+const API_URL = "http://127.0.0.1:8000/api/user";
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -37,20 +38,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [, setLocation] = useLocation();
 
-  // Load session on mount
+  // Load session on mount and check status if instructor
   useEffect(() => {
     const token = localStorage.getItem(SESSION_KEY);
     if (token) {
-      try {
-        const decoded: AuthUser = jwtDecode(token);
-        decoded.token = token;
-        setUser(decoded);
-      } catch {
-        localStorage.removeItem(SESSION_KEY);
-      }
+      const loadUser = async () => {
+        setIsLoading(true);
+        try {
+          let decoded: AuthUser = jwtDecode(token);
+          decoded.token = token;
+
+          // If the user is an instructor, fetch their latest approval status
+          if (decoded.role === "instructor") {
+            const res = await fetch(`${API_URL}/approval-status?token=${token}`);
+            if (res.ok) {
+              const data = await res.json();
+              decoded.approval_status = data.approval_status;
+            } else {
+              // Handle case where status check fails but token is valid
+              decoded.approval_status = "pending"; // Default or error state
+            }
+          }
+          setUser(decoded);
+        } catch {
+          // If token is invalid, clear session
+          localStorage.removeItem(SESSION_KEY);
+          setUser(null);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      loadUser();
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, []);
+  }, []); // Empty dependency array ensures this runs only on mount
 
   const redirectByRole = (decoded: AuthUser) => {
     if (decoded.role === "student") {
@@ -80,8 +102,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token } = await AuthService.login(email, password);
       if (!token) throw new Error("Login failed — missing token");
 
-      const decoded: AuthUser = jwtDecode(token);
+      let decoded: AuthUser = jwtDecode(token);
       decoded.token = token;
+
+      if (decoded.role === "instructor") {
+        const res = await fetch(`${API_URL}/approval-status?token=${token}`);
+        const data = await res.json();
+        decoded.approval_status = data.approval_status;
+      }
 
       localStorage.setItem(SESSION_KEY, token);
       setUser(decoded);
@@ -109,8 +137,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token } = await AuthService.signup(userData);
       if (!token) throw new Error("Signup failed — missing token");
 
-      const decoded: AuthUser = jwtDecode(token);
+      let decoded: AuthUser = jwtDecode(token);
       decoded.token = token;
+
+      if (decoded.role === "instructor") {
+        const res = await fetch(`${API_URL}/approval-status?token=${token}`);
+        const data = await res.json();
+        decoded.approval_status = data.approval_status;
+      }
 
       localStorage.setItem(SESSION_KEY, token);
       setUser(decoded);

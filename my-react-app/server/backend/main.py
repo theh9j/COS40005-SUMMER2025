@@ -5,6 +5,7 @@ import random
 from pathlib import Path
 from core.security import hash_password
 from routes import auth, admin, online
+from routes.user import router as user_router
 
 app = FastAPI()
 
@@ -19,6 +20,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(online.router)
+app.include_router(user_router)
 
 @app.on_event("startup")
 async def startup_event():

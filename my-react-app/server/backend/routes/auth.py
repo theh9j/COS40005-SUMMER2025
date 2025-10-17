@@ -16,7 +16,7 @@ async def signup(user: User):
     user_dict = user.model_dump()
     user_dict["password"] = hash_password(user.password)
     user_dict["created_at"] = datetime.now()
-    
+
     result = await users_collection.insert_one(user_dict)
     new_user_id = result.inserted_id
     new_user = await users_collection.find_one({"_id": new_user_id})
@@ -38,7 +38,6 @@ async def signup(user: User):
         if not existing_approval:
             approval = Approval(id=user_id_str, status="pending")
             await approvals_collection.insert_one(approval.model_dump())
-        token_data["approval_status"] = "pending"
 
     token = create_access_token(token_data)
     return {"message": "User created", "token": token}
@@ -61,18 +60,6 @@ async def login(data: dict):
         "email": user["email"],
         "role": user.get("role", "student")
     }
-
-    if user.get("role") == "instructor":
-        approval_status = "pending"
-
-        approval_doc = await approvals_collection.find_one({"id": user_id_str})
-        
-        if approval_doc:
-            status = approval_doc.get("status")
-            if status and isinstance(status, str):
-                approval_status = status.lower()
-        
-        token_data["approval_status"] = approval_status
 
     token = create_access_token(token_data)
     return {"message": "Login successful", "token": token}
