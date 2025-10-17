@@ -10,6 +10,7 @@ class User(BaseModel):
     dob: str = "None"
     role: str
     suspension: bool = "0"
+    last_active: datetime | None = None
 
 class Approval(BaseModel):
     id: str

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from bson import ObjectId
 from db.connection import users_collection, approvals_collection
-from models.models import User, Approval
+from models.models import Approval
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -17,9 +18,15 @@ async def get_instructor_status(user):
 # 🔹 GET all users
 @router.get("/users")
 async def get_all_users():
+    now = datetime.utcnow()
+    online_cutoff = now - timedelta(minutes=10)
     users_cursor = users_collection.find({})
     users = []
+
     async for user in users_cursor:
+        last_active = user.get("last_active")
+        is_online = bool(last_active and last_active > online_cutoff)
+
         verified = await get_instructor_status(user)
         users.append({
             "id": str(user["_id"]),
@@ -29,6 +36,7 @@ async def get_all_users():
             "role": user.get("role", ""),
             "instructorVerified": verified,
             "active": user.get("suspension", False) in [0, False],
+            "online": is_online,
         })
     return users
 

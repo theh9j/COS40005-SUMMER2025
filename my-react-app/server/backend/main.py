@@ -4,7 +4,7 @@ from db.connection import db, users_collection, approvals_collection
 import random
 from pathlib import Path
 from core.security import hash_password
-from routes import auth, admin
+from routes import auth, admin, online
 
 app = FastAPI()
 
@@ -18,6 +18,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(online.router)
 
 @app.on_event("startup")
 async def startup_event():

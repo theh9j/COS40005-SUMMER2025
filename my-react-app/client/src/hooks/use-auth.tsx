@@ -145,3 +145,15 @@ export function useAuth() {
   if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }
+
+export function useHeartbeat(userId?: string) {
+  useEffect(() => {
+    if (!userId) return;
+    const interval = setInterval(() => {
+      fetch(`http://127.0.0.1:8000/activity/ping/${userId}`, { method: "POST" })
+        .catch(() => {});
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [userId]);
+}

@@ -5,7 +5,7 @@ import ProfileMenu from "@/components/profile-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { mockCases } from "@/lib/mock-data";
 import CaseCard from "@/components/case-card";
 import UploadModal from "@/components/upload-modal";
@@ -30,8 +30,28 @@ const VALID_TABS: StudentView[] = ["overview", "cases", "annotations", "collabor
 const VIEW_STORAGE_KEY = "student.activeView";
 
 export default function StudentDashboard() {
+
+  const [onlineCount, setOnlineCount] = useState<number>(0);
+
+  useEffect(() => {
+    async function fetchOnlineUsers() {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/admin/users");
+        if (!res.ok) throw new Error("Failed to load users");
+        const data = await res.json();
+        const online = data.filter((u: any) => u.online).length;
+        setOnlineCount(online);
+      } catch {
+        setOnlineCount(0);
+      }
+    }
+
+    fetchOnlineUsers(); 
+  }, []);
+
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
+  useHeartbeat(user?.user_id);
 
   // Persist the active sub-view so reloads restore it
   const [activeView, setActiveView] = useState<StudentView>(() => {
@@ -192,8 +212,10 @@ export default function StudentDashboard() {
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
-              <span className="text-sm text-muted-foreground">3 users online</span>
+              <div className={`w-2 h-2 rounded-full ${onlineCount > 0 ? "bg-green-500" : "bg-gray-400"} animate-pulse`}></div>
+              <span className="text-sm text-muted-foreground">
+                {onlineCount} {onlineCount === 1 ? "user" : "users"} online
+              </span>
             </div>
 
             {/* Avatar + Name + ProfileMenu */}
