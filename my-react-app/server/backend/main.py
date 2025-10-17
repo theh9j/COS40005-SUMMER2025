@@ -51,7 +51,7 @@ async def startup_event():
         for i in range(student_needed):
             first = f"Student{i+1}"
             last = random.choice(["Nguyen", "Tran", "Pham", "Le", "Do"])
-            email = f"{first.lower()}@university.edu"
+            email = f"{first.lower()}@swin.edu"
             student = {
                 "firstName": first,
                 "lastName": last,
