@@ -2,12 +2,13 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { Stethoscope, FolderOpen, Gauge, LogIn, LogOut } from "lucide-react";
 
 export default function Home() {
   const { user, logout, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  useHeartbeat(user?.user_id);
 
   useEffect(() => {
     console.log("Current user in dashboard:", user);

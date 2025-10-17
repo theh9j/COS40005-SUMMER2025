@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useAnnotation } from "@/hooks/use-annotation";
 import { mockCases } from "@/lib/mock-data";
 import AnnotationToolbar from "@/components/annotation-toolbar";
@@ -18,6 +18,7 @@ export default function AnnotationView() {
   const caseId = params?.caseId || "";
   const case_ = mockCases.find(c => c.id === caseId);
   const annotation = useAnnotation(caseId);
+  useHeartbeat(user?.user_id);
 
   useEffect(() => {
     if (!user) {

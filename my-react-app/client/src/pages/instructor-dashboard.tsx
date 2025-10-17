@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import {
   Presentation, Gauge, GraduationCap, ClipboardCheck, ChartBar,
   FolderOpen, Settings, LogOut, Clock, ChartLine, Check, Edit
@@ -19,6 +19,7 @@ const VALID_TABS: InstructorView[] = ["overview", "students", "grading", "analyt
 export default function InstructorDashboard() {
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
+  useHeartbeat(user?.user_id);
 
   const [activeView, setActiveView] = useState<InstructorView>(() => {
     const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;

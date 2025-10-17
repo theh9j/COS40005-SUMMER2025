@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { Search, ShieldCheck, UserCog, UserX, RefreshCw, CheckCircle2, XCircle, UserPlus2 } from "lucide-react";
 
 type Role = "student" | "instructor" | "admin";
@@ -25,6 +25,7 @@ const API_URL = "http://127.0.0.1:8000/api/admin";
 
 export default function AdminAccounts() {
   const { user, isLoading } = useAuth();
+  useHeartbeat(user?.user_id);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
