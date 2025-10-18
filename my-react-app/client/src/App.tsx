@@ -11,6 +11,7 @@ import StudentDashboard from "@/pages/student-dashboard";
 import InstructorDashboard from "@/pages/instructor-dashboard";
 import AnnotationView from "@/pages/annotation-view";
 import AdminAccounts from "@/pages/admin-accounts";
+import AIPlayground from "@/pages/ai-playground";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import Home from "@/pages/home";
 
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/admin" component={AdminAccounts} />
+      <Route path="/ai" component={AIPlayground} />
       <ProtectedRoute path="/student" component={StudentDashboard} />
       <ProtectedRoute path="/instructor" component={InstructorDashboard} />
       <ProtectedRoute path="/annotation/:caseId" component={AnnotationView} />
