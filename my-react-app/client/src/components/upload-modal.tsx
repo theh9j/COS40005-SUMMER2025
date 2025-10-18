@@ -27,7 +27,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
       status: "completed",
     },
     {
-      id: "2",
+      id: "2", 
       name: "chest_xray_002.dcm",
       size: "1.8 MB",
       progress: 65,
@@ -47,12 +47,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
   };
 
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) onClose(); // only close when dialog requests to close
-      }}
-    >
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="w-full max-w-2xl" data-testid="upload-modal">
         <DialogHeader>
           <div className="flex items-center justify-between">
@@ -70,7 +65,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
         <div className="space-y-6">
           {/* Drop Zone */}
-          <div
+          <div 
             className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:bg-secondary/50 transition-colors cursor-pointer"
             onClick={handleBrowseFiles}
             data-testid="drop-zone"
@@ -78,7 +73,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
             <CloudUpload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Drag and drop DICOM files here</h3>
             <p className="text-muted-foreground mb-4">or click to browse files</p>
-            <Button
+            <Button 
               className="bg-primary text-primary-foreground hover:opacity-90"
               data-testid="button-browse-files"
             >
@@ -89,7 +84,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
           {/* File List */}
           <div className="space-y-4">
             {files.map((file) => (
-              <div
+              <div 
                 key={file.id}
                 className="flex items-center justify-between p-3 bg-secondary rounded-lg"
                 data-testid={`file-${file.id}`}
@@ -125,14 +120,14 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
           {/* Actions */}
           <div className="flex justify-end space-x-4">
-            <Button
+            <Button 
               variant="secondary"
               onClick={onClose}
               data-testid="button-cancel-upload"
             >
               Cancel
             </Button>
-            <Button
+            <Button 
               onClick={handleUpload}
               className="bg-primary text-primary-foreground hover:opacity-90"
               data-testid="button-upload-files"
