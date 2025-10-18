@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useAnnotation } from "@/hooks/use-annotation";
 import { mockCases } from "@/lib/mock-data";
 import AnnotationToolbar from "@/components/annotation-toolbar";
@@ -15,34 +15,60 @@ import AnnotationPropertiesPanel from "@/components/annotation-properties-panel"
 import { ArrowLeft, Save } from "lucide-react";
 import DiscussionThread from "@/components/discussion/DiscussionThread";
 
+// Collaborative imports
+import { useVersions } from "@/hooks/use-versions";
+import { usePresence } from "@/hooks/use-presence";
+import VersionList from "@/components/versions/VersionList";
+import CompareToggle from "@/components/compare/CompareToggle";
+import PresenceBar from "@/components/presence/PresenceBar";
+
 export default function AnnotationView() {
   const [, setLocation] = useLocation();
-  const [, params] = useRoute("/annotation/:caseId");
+  const [, params] = useRoute<{ caseId: string }>("/annotation/:caseId");
   const { user } = useAuth();
   const caseId = params?.caseId || "";
-  const case_ = mockCases.find(c => c.id === caseId);
-  const annotation = useAnnotation(caseId, (user as any)?.user_id || "current-user");
+  const case_ = mockCases.find((c) => c.id === caseId);
+
+  const annotation = useAnnotation(caseId, user?.user_id || "current-user");
+
+  // Heartbeat and presence
+  useHeartbeat(user?.user_id);
+  const presence = usePresence(caseId, user?.user_id ?? "unknown");
+
+  // Versions
+  const { mine, peers, create } = useVersions(caseId);
+
+  // UI state toggles
   const [showHistory, setShowHistory] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
+  const [compare, setCompare] = useState<{ peer?: any; alpha?: number }>({});
 
+  // Redirect if not logged in
   useEffect(() => {
-    if (!user) {
-      setLocation("/login");
-    }
+    if (!user) setLocation("/login");
   }, [user, setLocation]);
 
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyboard = (e: KeyboardEvent) => {
       if (e.key === "Delete" && annotation.selectedAnnotationIds.length > 0) {
         annotation.deleteSelectedAnnotations();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "c" && annotation.selectedAnnotationIds.length > 0) {
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === "c" &&
+        annotation.selectedAnnotationIds.length > 0
+      ) {
         e.preventDefault();
         annotation.copySelectedAnnotations();
       } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
         annotation.pasteAnnotations();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "d" && annotation.selectedAnnotationIds.length > 0) {
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === "d" &&
+        annotation.selectedAnnotationIds.length > 0
+      ) {
         e.preventDefault();
         annotation.duplicateAnnotations(annotation.selectedAnnotationIds);
       }
@@ -52,6 +78,7 @@ export default function AnnotationView() {
     return () => window.removeEventListener("keydown", handleKeyboard);
   }, [annotation]);
 
+  // Auto-show properties when selecting
   useEffect(() => {
     if (annotation.selectedAnnotationIds.length > 0) {
       setShowProperties(true);
@@ -63,20 +90,33 @@ export default function AnnotationView() {
   }
 
   const handleBack = () => {
-    if (user.role === "student") {
-      setLocation("/student");
-    } else {
-      setLocation("/instructor");
+    if (user.role === "student") setLocation("/student");
+    else setLocation("/instructor");
+  };
+
+  // Save a version (both local + collaborative)
+  const handleSaveVersion = async () => {
+    try {
+      const mockData = {
+        annotations: annotation.annotations,
+        tool: annotation.tool,
+        color: annotation.color,
+        createdAt: new Date(),
+      };
+      await create(mockData);
+      console.log("Saved version:", mockData);
+    } catch (e) {
+      console.error("Save version failed", e);
     }
   };
 
-  const handleSaveVersion = () => {
-    if (annotation.annotations.length > 0) {
-      const lastAnnotation = annotation.annotations[annotation.annotations.length - 1];
-      annotation.saveVersion(lastAnnotation.id, "Saved progress");
-    }
+  // Compare toggle
+  const handleCompareChange = (peer?: any, alpha = 0.4) => {
+    setCompare({ peer, alpha });
+    console.log("Compare with peer:", peer, "opacity:", alpha);
   };
 
+  // Mock peer annotations (for offline/demo mode)
   const mockPeerAnnotations = [
     {
       user: {
@@ -120,15 +160,22 @@ export default function AnnotationView() {
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h1 className="text-lg font-semibold">{case_.title} - Annotation</h1>
+            <h1 className="text-lg font-semibold">
+              {case_.title} - Annotation
+            </h1>
           </div>
+
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
-              <span className="text-sm text-muted-foreground">Dr. Smith online</span>
+            <div className="hidden md:flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot" />
+              <span className="text-sm text-muted-foreground">
+                {presence?.users?.length
+                  ? `Online: ${presence.users.map((u) => u.name).join(", ")}`
+                  : "Online: You"}
+              </span>
             </div>
-            <Button 
-              className="bg-primary text-primary-foreground hover:opacity-90" 
+            <Button
+              className="bg-primary text-primary-foreground hover:opacity-90"
               onClick={handleSaveVersion}
               data-testid="button-save"
             >
@@ -139,9 +186,10 @@ export default function AnnotationView() {
         </div>
       </header>
 
+      {/* Main layout */}
       <div className="flex h-screen">
-        {/* Annotation Toolbar */}
-        <AnnotationToolbar 
+        {/* Toolbar */}
+        <AnnotationToolbar
           annotation={annotation}
           onToggleHistory={() => setShowHistory(!showHistory)}
           onToggleComparison={() => setShowComparison(!showComparison)}
@@ -149,9 +197,9 @@ export default function AnnotationView() {
           showComparison={showComparison}
         />
 
-        {/* Main Content Area */}
+        {/* Core content area */}
         <main className="flex-1 flex">
-          {/* Canvas Area */}
+          {/* Canvas */}
           <div className="flex-1 p-4">
             <AnnotationCanvas
               imageUrl={case_.imageUrl}
@@ -159,11 +207,10 @@ export default function AnnotationView() {
               peerAnnotations={annotation.peerAnnotations}
               versionOverlay={annotation.versionOverlay}
             />
+            <InlineTextEditor />
           </div>
 
-          {/* Inline Text Editor is handled within the canvas now */}
-
-          {/* Right Panels - Conditionally rendered */}
+          {/* Conditional right panels */}
           {showHistory && (
             <AnnotationHistory
               versions={annotation.versions}
@@ -173,11 +220,11 @@ export default function AnnotationView() {
               onDelete={annotation.deleteVersion}
             />
           )}
-          
+
           {showComparison && (
             <PeerComparison
               peerAnnotations={mockPeerAnnotations}
-              currentUserId={(user as any)?.user_id || "current-user"}
+              currentUserId={user?.user_id || "current-user"}
               onToggleUserAnnotations={annotation.togglePeerAnnotations}
               onSelectForComparison={annotation.togglePeerAnnotations}
             />
@@ -185,7 +232,9 @@ export default function AnnotationView() {
 
           {showProperties && annotation.selectedAnnotationIds.length > 0 && (
             <AnnotationPropertiesPanel
-              selectedAnnotations={annotation.annotations.filter(a => annotation.selectedAnnotationIds.includes(a.id))}
+              selectedAnnotations={annotation.annotations.filter((a) =>
+                annotation.selectedAnnotationIds.includes(a.id)
+              )}
               onClose={() => setShowProperties(false)}
               onUpdateAnnotation={annotation.updateAnnotation}
               onDeleteAnnotations={annotation.deleteSelectedAnnotations}
@@ -194,11 +243,50 @@ export default function AnnotationView() {
             />
           )}
 
+          {/* Default collaborative sidebar */}
           {!showHistory && !showComparison && !showProperties && (
             <aside className="w-80 bg-card border-l border-border flex flex-col">
-              <DiscussionThread imageId={caseId} />
-              <ChatPanel />
-              <FeedbackPanel />
+              <div className="p-3 border-b">
+                <h4 className="font-semibold">Collaboration</h4>
+                <PresenceBar presence={presence} />
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                <Button
+                  variant="outline"
+                  className="w-full justify-center"
+                  onClick={handleSaveVersion}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Version
+                </Button>
+
+                <VersionList
+                  title="My versions"
+                  items={mine}
+                  onSelect={(v) =>
+                    console.log("Load my version:", v.data || v)
+                  }
+                />
+                <VersionList
+                  title="Peers' versions"
+                  items={peers}
+                  onSelect={(v) =>
+                    console.log("Load peer version:", v.data || v)
+                  }
+                />
+
+                <CompareToggle
+                  peers={peers}
+                  onChange={(peer, alpha) =>
+                    handleCompareChange(peer, alpha)
+                  }
+                />
+
+                <DiscussionThread imageId={caseId} />
+                <ChatPanel />
+                <FeedbackPanel />
+              </div>
             </aside>
           )}
         </main>
