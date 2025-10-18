@@ -6,12 +6,19 @@ import {
   Circle,
   Triangle,
   Pen,
+  Type,
   Undo,
   Redo,
+  Clock,
+  Users,
 } from "lucide-react";
 
 interface AnnotationToolbarProps {
   annotation: ReturnType<typeof useAnnotation>;
+  onToggleHistory?: () => void;
+  onToggleComparison?: () => void;
+  showHistory?: boolean;
+  showComparison?: boolean;
 }
 
 const tools: { id: AnnotationTool; icon: any; label: string }[] = [
@@ -20,6 +27,7 @@ const tools: { id: AnnotationTool; icon: any; label: string }[] = [
   { id: "circle", icon: Circle, label: "Circle" },
   { id: "polygon", icon: Triangle, label: "Polygon" },
   { id: "freehand", icon: Pen, label: "Freehand" },
+  { id: "text", icon: Type, label: "Text" },
 ];
 
 const colors = [
@@ -31,7 +39,13 @@ const colors = [
   "#f97316", // orange
 ];
 
-export default function AnnotationToolbar({ annotation }: AnnotationToolbarProps) {
+export default function AnnotationToolbar({ 
+  annotation,
+  onToggleHistory,
+  onToggleComparison,
+  showHistory = false,
+  showComparison = false,
+}: AnnotationToolbarProps) {
   const { tool, color, setTool, setColor, undo, redo, canUndo, canRedo } = annotation;
 
   return (
@@ -100,6 +114,42 @@ export default function AnnotationToolbar({ annotation }: AnnotationToolbarProps
         >
           <Redo className="h-5 w-5" />
         </Button>
+      </div>
+
+      {/* Version History & Peer Comparison */}
+      <div className="border-t border-border pt-4 space-y-2">
+        {onToggleHistory && (
+          <Button
+            variant={showHistory ? "default" : "secondary"}
+            size="sm"
+            className={`annotation-tool w-12 h-12 ${
+              showHistory 
+                ? "bg-primary text-primary-foreground" 
+                : "bg-secondary text-secondary-foreground hover:bg-muted"
+            }`}
+            onClick={onToggleHistory}
+            title="Version History"
+            data-testid="button-history"
+          >
+            <Clock className="h-5 w-5" />
+          </Button>
+        )}
+        {onToggleComparison && (
+          <Button
+            variant={showComparison ? "default" : "secondary"}
+            size="sm"
+            className={`annotation-tool w-12 h-12 ${
+              showComparison 
+                ? "bg-primary text-primary-foreground" 
+                : "bg-secondary text-secondary-foreground hover:bg-muted"
+            }`}
+            onClick={onToggleComparison}
+            title="Peer Comparison"
+            data-testid="button-comparison"
+          >
+            <Users className="h-5 w-5" />
+          </Button>
+        )}
       </div>
     </aside>
   );
