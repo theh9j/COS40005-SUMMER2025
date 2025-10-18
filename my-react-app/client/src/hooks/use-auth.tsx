@@ -11,7 +11,7 @@ interface AuthUser {
   role?: "student" | "instructor" | "admin";
   token?: string;
   password?: string;
-  /** For instructors: "approved" | "pending" | "rejected" (backend-defined) */
+  /** For instructors: "verified" | "pending" | "rejected" (backend-defined) */
   approval_status?: string;
 }
 
@@ -80,8 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (decoded.role === "instructor") {
-      // Only push to instructor dashboard if approved, otherwise send to home
-      if (decoded.approval_status === "approved") {
+      // Only push to instructor dashboard if verified, otherwise send to home
+      if (decoded.approval_status === "verified") {
         setLocation("/instructor");
       } else {
         setLocation("/home");

@@ -22,8 +22,8 @@ interface ProtectedRouteProps {
 function ProtectedRoute({ component: Component, ...rest }: ProtectedRouteProps) {
   const { user } = useAuth();
 
-  // If an instructor is not approved, redirect them to the home page
-  if (user?.role === "instructor" && user?.approval_status !== "approved") {
+  // If an instructor is not verified, redirect them to the home page
+  if (user?.role === "instructor" && user?.approval_status !== "verified") {
     // Allow access only to the home page
     if (rest.path !== "/" && rest.path !== "/home") {
       return <Redirect to="/home" />;
