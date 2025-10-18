@@ -1,3 +1,4 @@
+// src/pages/admin-accounts.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,7 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { Search, ShieldCheck, UserCog, UserX, RefreshCw, CheckCircle2, XCircle, UserPlus2 } from "lucide-react";
+import {
+  Search,
+  ShieldCheck,
+  ShieldOff,      // ✅ NEW: separate revoke icon
+  UserCog,
+  UserX,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  UserPlus2,
+  LogOut,        // ✅ NEW: admin logout icon
+} from "lucide-react";
 
 type Role = "student" | "instructor" | "admin";
 
@@ -24,7 +36,7 @@ const ROLE_OPTIONS: Role[] = ["student", "instructor", "admin"];
 const API_URL = "http://127.0.0.1:8000/api/admin";
 
 export default function AdminAccounts() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth(); // ✅ include logout
   useHeartbeat(user?.user_id);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -179,7 +191,13 @@ export default function AdminAccounts() {
             <h1 className="text-xl font-semibold">Admin · Account Management</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing}>
+            {/* ✅ Admin Logout */}
+            <Button variant="secondary" size="sm" onClick={logout} title="Log out">
+              <LogOut className="h-4 w-4 mr-1" />
+              Logout
+            </Button>
+
+            <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing} title="Refresh list">
               <RefreshCw className="h-4 w-4 mr-1" />
               Refresh
             </Button>
@@ -244,7 +262,9 @@ export default function AdminAccounts() {
               <tbody>
                 {filtered.map((u) => (
                   <tr key={u.id} className="border-t border-border">
-                    <td className="py-3 px-4 font-medium">{u.firstName} {u.lastName}</td>
+                    <td className="py-3 px-4 font-medium">
+                      {u.firstName} {u.lastName}
+                    </td>
                     <td className="py-3 px-4 text-muted-foreground">{u.id}</td>
                     <td className="py-3 px-4">
                       <Select value={u.role} onValueChange={(v) => changeRole(u.id, v as Role)}>
@@ -272,14 +292,30 @@ export default function AdminAccounts() {
                               <XCircle className="h-4 w-4" /> Pending
                             </span>
                           )}
-                          <Button
-                            variant={u.instructorVerified ? "secondary" : "default"}
-                            size="sm"
-                            onClick={() => verifyInstructor(u.id, !u.instructorVerified)}
-                          >
-                            <ShieldCheck className="h-4 w-4 mr-1" />
-                            {u.instructorVerified ? "Revoke" : "Verify"}
-                          </Button>
+
+                          {/* ✅ Different icon + red hover for revoke */}
+                          {u.instructorVerified ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              title="Revoke verification"
+                              onClick={() => verifyInstructor(u.id, false)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <ShieldOff className="h-4 w-4 mr-1" />
+                              Revoke
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              title="Verify instructor"
+                              onClick={() => verifyInstructor(u.id, true)}
+                            >
+                              <ShieldCheck className="h-4 w-4 mr-1" />
+                              Verify
+                            </Button>
+                          )}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>
