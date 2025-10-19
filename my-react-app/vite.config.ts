@@ -34,10 +34,11 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5000,
-    hmr: {
-      clientPort: 443,
+    hmr: process.env.REPLIT_DOMAINS ? {
       protocol: "wss",
-    },
+      host: process.env.REPLIT_DOMAINS,
+      clientPort: 443,
+    } : true,
     fs: {
       strict: true,
       deny: ["**/.*"],
