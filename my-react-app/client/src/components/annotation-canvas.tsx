@@ -129,9 +129,15 @@ export default function AnnotationCanvas({
       ctx.stroke();
     } else if (ann.type === "text") {
       if (coords.text) {
+        // Draw colored background box
+        ctx.fillStyle = ann.color;
+        ctx.fillRect(imgX + coords.x, imgY + coords.y, coords.width || 200, coords.height || 40);
+        
+        // Draw border
         ctx.strokeRect(imgX + coords.x, imgY + coords.y, coords.width || 200, coords.height || 40);
         
-        ctx.fillStyle = ann.color;
+        // Draw white text
+        ctx.fillStyle = "white";
         ctx.font = "14px sans-serif";
         
         const padding = 5;

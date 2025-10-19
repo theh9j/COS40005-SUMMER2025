@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAnnotation, AnnotationTool } from "@/hooks/use-annotation";
 import {
@@ -30,14 +31,6 @@ const tools: { id: AnnotationTool; icon: any; label: string }[] = [
   { id: "text", icon: Type, label: "Text" },
 ];
 
-const colors = [
-  "#ef4444", // red
-  "#3b82f6", // blue
-  "#10b981", // green
-  "#f59e0b", // yellow
-  "#8b5cf6", // purple
-  "#f97316", // orange
-];
 
 export default function AnnotationToolbar({ 
   annotation,
@@ -47,6 +40,7 @@ export default function AnnotationToolbar({
   showComparison = false,
 }: AnnotationToolbarProps) {
   const { tool, color, setTool, setColor, undo, redo, canUndo, canRedo } = annotation;
+  const [hexInput, setHexInput] = useState(color);
 
   return (
     <aside className="w-20 bg-card border-r border-border flex flex-col items-center py-4 space-y-4" data-testid="annotation-toolbar">
@@ -74,20 +68,49 @@ export default function AnnotationToolbar({
         );
       })}
       
-      {/* Color Palette */}
-      <div className="border-t border-border pt-4 space-y-2">
-        {colors.map((colorOption) => (
-          <button
-            key={colorOption}
-            className={`w-8 h-8 rounded border-2 cursor-pointer ${
-              color === colorOption ? "border-foreground" : "border-gray-300"
-            }`}
-            style={{ backgroundColor: colorOption }}
-            onClick={() => setColor(colorOption)}
-            title={colorOption}
-            data-testid={`color-${colorOption.replace("#", "")}`}
+      {/* Color Picker */}
+      <div className="border-t border-border pt-4 space-y-2 flex flex-col items-center">
+        <label 
+          htmlFor="color-picker" 
+          className="w-12 h-12 rounded border-2 cursor-pointer flex items-center justify-center"
+          style={{ backgroundColor: color, borderColor: "#000" }}
+          title={color}
+        >
+          <input
+            id="color-picker"
+            type="color"
+            value={color}
+            onChange={(e) => {
+              const newColor = e.target.value;
+              setColor(newColor);
+              setHexInput(newColor);
+            }}
+            className="w-0 h-0 opacity-0 absolute"
+            data-testid="color-picker"
           />
-        ))}
+        </label>
+        <input
+          type="text"
+          value={hexInput}
+          onChange={(e) => {
+            const value = e.target.value;
+            setHexInput(value);
+            // Only update the shared color when it's a complete valid hex code
+            if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+              setColor(value);
+            }
+          }}
+          onBlur={() => {
+            // Reset to the current valid color if input is invalid
+            if (!/^#[0-9A-Fa-f]{6}$/.test(hexInput)) {
+              setHexInput(color);
+            }
+          }}
+          className="w-16 px-1 py-1 text-xs text-center border border-border rounded"
+          placeholder="#000000"
+          maxLength={7}
+          data-testid="color-hex-input"
+        />
       </div>
       
       {/* Undo/Redo */}
