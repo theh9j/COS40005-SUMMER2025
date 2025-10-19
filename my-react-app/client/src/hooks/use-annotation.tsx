@@ -604,6 +604,39 @@ export function useAnnotation(caseId: string, userId?: string) {
     });
   }, [userId]);
 
+  const saveAllAnnotationsSnapshot = useCallback((changeDescription?: string) => {
+    setState(prev => {
+      if (prev.annotations.length === 0) {
+        console.warn('No annotations to save');
+        return prev;
+      }
+
+      const newVersions: AnnotationVersion[] = prev.annotations.map(ann => ({
+        id: Math.random().toString(36).substr(2, 9),
+        annotationId: ann.id,
+        userId: userId || "1",
+        version: prev.currentVersion + 1,
+        type: ann.type,
+        coordinates: ann.coordinates,
+        color: ann.color,
+        label: ann.label || null,
+        changeDescription: changeDescription || null,
+        createdAt: new Date(),
+      }));
+
+      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+      newHistory.push(JSON.parse(JSON.stringify(prev.annotations)));
+
+      return {
+        ...prev,
+        versions: [...prev.versions, ...newVersions],
+        currentVersion: prev.currentVersion + 1,
+        history: newHistory,
+        historyIndex: newHistory.length - 1,
+      };
+    });
+  }, [userId]);
+
   const restoreVersion = useCallback((version: AnnotationVersion) => {
     setState(prev => {
       const existingAnnotation = prev.annotations.find(a => a.id === version.annotationId);
@@ -902,6 +935,7 @@ export function useAnnotation(caseId: string, userId?: string) {
     undo,
     redo,
     saveVersion,
+    saveAllAnnotationsSnapshot,
     restoreVersion,
     previewVersion,
     clearVersionOverlay,
