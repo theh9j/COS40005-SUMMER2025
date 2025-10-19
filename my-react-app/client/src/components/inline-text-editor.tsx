@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from "react";
 interface InlineTextEditorProps {
   x: number;
   y: number;
+  width?: number;
+  height?: number;
   color: string;
   onComplete: (text: string) => void;
   onCancel: () => void;
@@ -11,12 +13,14 @@ interface InlineTextEditorProps {
 export default function InlineTextEditor({ 
   x, 
   y, 
+  width,
+  height,
   color, 
   onComplete, 
   onCancel 
 }: InlineTextEditorProps) {
   const [text, setText] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -35,9 +39,8 @@ export default function InlineTextEditor({
   };
 
   return (
-    <input
+    <textarea
       ref={inputRef}
-      type="text"
       value={text}
       onChange={(e) => setText(e.target.value)}
       onKeyDown={handleKeyDown}
@@ -48,14 +51,16 @@ export default function InlineTextEditor({
           onCancel();
         }
       }}
-      className="absolute border-2 px-2 py-1 rounded text-sm outline-none"
+      className="absolute border-2 px-2 py-1 rounded text-sm outline-none resize-none bg-white"
       style={{
         left: `${x}px`,
         top: `${y}px`,
+        width: width ? `${width}px` : "200px",
+        height: height ? `${height}px` : "40px",
         borderColor: color,
         color: color,
-        minWidth: "100px",
         zIndex: 1000,
+        overflow: "hidden",
       }}
       placeholder="Type text..."
     />

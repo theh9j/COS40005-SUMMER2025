@@ -27,10 +27,12 @@ export const annotations = pgTable("annotations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   caseId: varchar("case_id").references(() => medicalCases.id),
   userId: varchar("user_id").references(() => users.id),
-  type: text("type").notNull().$type<"rectangle" | "circle" | "polygon" | "freehand">(),
+  type: text("type").notNull().$type<"rectangle" | "circle" | "polygon" | "freehand" | "text">(),
   coordinates: jsonb("coordinates").notNull(),
   color: text("color").notNull(),
   label: text("label"),
+  version: integer("version"),
+  updatedAt: timestamp("updated_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -81,3 +83,16 @@ export type Annotation = typeof annotations.$inferSelect;
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+
+export type AnnotationVersion = {
+  id: string;
+  annotationId: string;
+  userId: string;
+  version: number;
+  type: "rectangle" | "circle" | "polygon" | "freehand" | "text";
+  coordinates: any;
+  color: string;
+  label: string | null;
+  changeDescription: string | null;
+  createdAt: Date;
+};
