@@ -21,8 +21,9 @@ interface AnnotationState {
   isResizing: boolean;
   resizeHandle: string | null;
   resizeAnchor: { x: number; y: number } | null;
-  textInputPosition: { x: number; y: number } | null;
+  textInputPosition: { x: number; y: number; width?: number; height?: number } | null;
   clipboard: Annotation[];
+  imageBounds: { width: number; height: number };
 }
 
 export function useAnnotation(caseId: string, userId?: string) {
@@ -46,6 +47,7 @@ export function useAnnotation(caseId: string, userId?: string) {
     resizeAnchor: null,
     textInputPosition: null,
     clipboard: [],
+    imageBounds: { width: 800, height: 600 },
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -157,8 +159,10 @@ export function useAnnotation(caseId: string, userId?: string) {
           const distance = Math.sqrt(Math.pow(x - coords.x, 2) + Math.pow(y - coords.y, 2));
           return distance <= coords.radius;
         } else if (ann.type === "text") {
-          return x >= coords.x && x <= coords.x + 200 &&
-                 y >= coords.y - 20 && y <= coords.y + 20;
+          const textWidth = coords.width || 200;
+          const textHeight = coords.height || 40;
+          return x >= coords.x && x <= coords.x + textWidth &&
+                 y >= coords.y && y <= coords.y + textHeight;
         } else if (ann.type === "polygon" && coords.points && Array.isArray(coords.points)) {
           let inside = false;
           const points = coords.points;
@@ -233,7 +237,13 @@ export function useAnnotation(caseId: string, userId?: string) {
     if (state.tool === "text") {
       setState(prev => ({
         ...prev,
-        textInputPosition: { x, y },
+        isDrawing: true,
+        currentAnnotation: {
+          caseId,
+          type: "text",
+          coordinates: { x, y, width: 0, height: 0 },
+          color: prev.color,
+        },
       }));
       return;
     }
@@ -387,7 +397,7 @@ export function useAnnotation(caseId: string, userId?: string) {
       const startCoords = prev.currentAnnotation.coordinates as any;
       let updatedCoords;
 
-      if (prev.tool === "rectangle") {
+      if (prev.tool === "rectangle" || prev.tool === "text") {
         updatedCoords = {
           x: Math.min(startCoords.x, currentX),
           y: Math.min(startCoords.y, currentY),
@@ -451,6 +461,38 @@ export function useAnnotation(caseId: string, userId?: string) {
       }
 
       if (!prev.isDrawing || !prev.currentAnnotation) return prev;
+
+      if (prev.tool === "text") {
+        const coords = prev.currentAnnotation.coordinates as any;
+        const minSize = 20;
+        
+        if (coords.width < minSize || coords.height < minSize) {
+          return {
+            ...prev,
+            isDrawing: false,
+            currentAnnotation: null,
+          };
+        }
+        
+        const maxWidth = prev.imageBounds.width;
+        const maxHeight = prev.imageBounds.height;
+        const clampedX = Math.max(0, Math.min(coords.x, maxWidth - coords.width));
+        const clampedY = Math.max(0, Math.min(coords.y, maxHeight - coords.height));
+        const clampedWidth = Math.min(coords.width, maxWidth - clampedX);
+        const clampedHeight = Math.min(coords.height, maxHeight - clampedY);
+        
+        return {
+          ...prev,
+          isDrawing: false,
+          currentAnnotation: null,
+          textInputPosition: { 
+            x: clampedX, 
+            y: clampedY,
+            width: clampedWidth,
+            height: clampedHeight
+          },
+        };
+      }
 
       const newAnnotation: Annotation = {
         id: Math.random().toString(36).substr(2, 9),
@@ -766,12 +808,19 @@ export function useAnnotation(caseId: string, userId?: string) {
   const completeTextInput = useCallback((text: string) => {
     if (!state.textInputPosition) return;
 
+    const coords = state.textInputPosition;
     const newAnnotation: Annotation = {
       id: Math.random().toString(36).substr(2, 9),
       caseId,
       userId: userId || "1",
       type: "text",
-      coordinates: { ...state.textInputPosition, text },
+      coordinates: { 
+        x: coords.x, 
+        y: coords.y, 
+        width: coords.width || 200,
+        height: coords.height || 40,
+        text 
+      },
       color: state.color,
       createdAt: new Date(),
     } as Annotation;
@@ -787,12 +836,17 @@ export function useAnnotation(caseId: string, userId?: string) {
         history: newHistory,
         historyIndex: newHistory.length - 1,
         textInputPosition: null,
+        currentAnnotation: null,
       };
     });
   }, [state.textInputPosition, state.color, caseId, userId]);
 
   const cancelTextInput = useCallback(() => {
-    setState(prev => ({ ...prev, textInputPosition: null }));
+    setState(prev => ({ ...prev, textInputPosition: null, currentAnnotation: null }));
+  }, []);
+
+  const setImageBounds = useCallback((bounds: { width: number; height: number }) => {
+    setState(prev => ({ ...prev, imageBounds: bounds }));
   }, []);
 
   return {
@@ -832,5 +886,6 @@ export function useAnnotation(caseId: string, userId?: string) {
     duplicateAnnotations,
     completeTextInput,
     cancelTextInput,
+    setImageBounds,
   };
 }
