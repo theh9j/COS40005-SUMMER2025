@@ -21,8 +21,27 @@ interface AnnotationState {
   isResizing: boolean;
   resizeHandle: string | null;
   resizeAnchor: { x: number; y: number } | null;
-  textInputPosition: { x: number; y: number } | null;
+  textInputPosition: { x: number; y: number; width?: number; height?: number } | null;
   clipboard: Annotation[];
+  imageBounds: { width: number; height: number };
+}
+
+function clampRectToImageBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  imageBounds: { width: number; height: number }
+): { x: number; y: number; width: number; height: number } {
+  const maxWidth = imageBounds.width;
+  const maxHeight = imageBounds.height;
+  
+  const clampedX = Math.max(0, Math.min(x, maxWidth - width));
+  const clampedY = Math.max(0, Math.min(y, maxHeight - height));
+  const clampedWidth = Math.min(width, maxWidth - clampedX);
+  const clampedHeight = Math.min(height, maxHeight - clampedY);
+  
+  return { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
 }
 
 export function useAnnotation(caseId: string, userId?: string) {
@@ -46,6 +65,7 @@ export function useAnnotation(caseId: string, userId?: string) {
     resizeAnchor: null,
     textInputPosition: null,
     clipboard: [],
+    imageBounds: { width: 800, height: 600 },
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -157,8 +177,10 @@ export function useAnnotation(caseId: string, userId?: string) {
           const distance = Math.sqrt(Math.pow(x - coords.x, 2) + Math.pow(y - coords.y, 2));
           return distance <= coords.radius;
         } else if (ann.type === "text") {
-          return x >= coords.x && x <= coords.x + 200 &&
-                 y >= coords.y - 20 && y <= coords.y + 20;
+          const textWidth = coords.width || 200;
+          const textHeight = coords.height || 40;
+          return x >= coords.x && x <= coords.x + textWidth &&
+                 y >= coords.y && y <= coords.y + textHeight;
         } else if (ann.type === "polygon" && coords.points && Array.isArray(coords.points)) {
           let inside = false;
           const points = coords.points;
@@ -233,7 +255,13 @@ export function useAnnotation(caseId: string, userId?: string) {
     if (state.tool === "text") {
       setState(prev => ({
         ...prev,
-        textInputPosition: { x, y },
+        isDrawing: true,
+        currentAnnotation: {
+          caseId,
+          type: "text",
+          coordinates: { x, y, width: 0, height: 0 },
+          color: prev.color,
+        },
       }));
       return;
     }
@@ -270,14 +298,17 @@ export function useAnnotation(caseId: string, userId?: string) {
       setState(prev => {
         if (!prev.resizeAnchor) return prev;
         
+        const clampedCurrentX = Math.max(0, Math.min(currentX, prev.imageBounds.width));
+        const clampedCurrentY = Math.max(0, Math.min(currentY, prev.imageBounds.height));
+        
         const targetId = prev.selectedAnnotationIds[0];
         const updatedAnnotations = prev.annotations.map(ann => {
           if (ann.id !== targetId || ann.type !== "rectangle") return ann;
 
           let x1 = prev.resizeAnchor!.x;
           let y1 = prev.resizeAnchor!.y;
-          let x2 = currentX;
-          let y2 = currentY;
+          let x2 = clampedCurrentX;
+          let y2 = clampedCurrentY;
 
           switch (prev.resizeHandle) {
             case 'n':
@@ -285,9 +316,9 @@ export function useAnnotation(caseId: string, userId?: string) {
               x1 = (ann.coordinates as any).x;
               x2 = (ann.coordinates as any).x + (ann.coordinates as any).width;
               if (prev.resizeHandle === 'n') {
-                y2 = currentY;
+                y2 = clampedCurrentY;
               } else {
-                y2 = currentY;
+                y2 = clampedCurrentY;
               }
               break;
             case 'e':
@@ -295,9 +326,9 @@ export function useAnnotation(caseId: string, userId?: string) {
               y1 = (ann.coordinates as any).y;
               y2 = (ann.coordinates as any).y + (ann.coordinates as any).height;
               if (prev.resizeHandle === 'e') {
-                x2 = currentX;
+                x2 = clampedCurrentX;
               } else {
-                x2 = currentX;
+                x2 = clampedCurrentX;
               }
               break;
           }
@@ -309,12 +340,12 @@ export function useAnnotation(caseId: string, userId?: string) {
 
           return { 
             ...ann, 
-            coordinates: { 
-              x: minX, 
-              y: minY, 
-              width, 
-              height 
-            } 
+            coordinates: {
+              x: minX,
+              y: minY,
+              width,
+              height
+            }
           };
         });
 
@@ -337,23 +368,32 @@ export function useAnnotation(caseId: string, userId?: string) {
             let newCoords;
 
             if (ann.type === "rectangle") {
-              newCoords = {
-                ...coords,
-                x: coords.x + deltaX,
-                y: coords.y + deltaY,
-              };
+              const clamped = clampRectToImageBounds(
+                coords.x + deltaX,
+                coords.y + deltaY,
+                coords.width || 0,
+                coords.height || 0,
+                prev.imageBounds
+              );
+              newCoords = clamped;
             } else if (ann.type === "circle") {
+              const radius = coords.radius || 0;
+              const clampedX = Math.max(radius, Math.min(coords.x + deltaX, prev.imageBounds.width - radius));
+              const clampedY = Math.max(radius, Math.min(coords.y + deltaY, prev.imageBounds.height - radius));
               newCoords = {
                 ...coords,
-                x: coords.x + deltaX,
-                y: coords.y + deltaY,
+                x: clampedX,
+                y: clampedY,
               };
             } else if (ann.type === "text") {
-              newCoords = {
-                ...coords,
-                x: coords.x + deltaX,
-                y: coords.y + deltaY,
-              };
+              const clamped = clampRectToImageBounds(
+                coords.x + deltaX,
+                coords.y + deltaY,
+                coords.width || 0,
+                coords.height || 0,
+                prev.imageBounds
+              );
+              newCoords = clamped;
             } else if (ann.type === "polygon" || ann.type === "freehand") {
               newCoords = {
                 points: coords.points.map((p: any) => ({
@@ -387,7 +427,7 @@ export function useAnnotation(caseId: string, userId?: string) {
       const startCoords = prev.currentAnnotation.coordinates as any;
       let updatedCoords;
 
-      if (prev.tool === "rectangle") {
+      if (prev.tool === "rectangle" || prev.tool === "text") {
         updatedCoords = {
           x: Math.min(startCoords.x, currentX),
           y: Math.min(startCoords.y, currentY),
@@ -451,6 +491,38 @@ export function useAnnotation(caseId: string, userId?: string) {
       }
 
       if (!prev.isDrawing || !prev.currentAnnotation) return prev;
+
+      if (prev.tool === "text") {
+        const coords = prev.currentAnnotation.coordinates as any;
+        const minSize = 20;
+        
+        if (coords.width < minSize || coords.height < minSize) {
+          return {
+            ...prev,
+            isDrawing: false,
+            currentAnnotation: null,
+          };
+        }
+        
+        const maxWidth = prev.imageBounds.width;
+        const maxHeight = prev.imageBounds.height;
+        const clampedX = Math.max(0, Math.min(coords.x, maxWidth - coords.width));
+        const clampedY = Math.max(0, Math.min(coords.y, maxHeight - coords.height));
+        const clampedWidth = Math.min(coords.width, maxWidth - clampedX);
+        const clampedHeight = Math.min(coords.height, maxHeight - clampedY);
+        
+        return {
+          ...prev,
+          isDrawing: false,
+          currentAnnotation: null,
+          textInputPosition: { 
+            x: clampedX, 
+            y: clampedY,
+            width: clampedWidth,
+            height: clampedHeight
+          },
+        };
+      }
 
       const newAnnotation: Annotation = {
         id: Math.random().toString(36).substr(2, 9),
@@ -528,6 +600,39 @@ export function useAnnotation(caseId: string, userId?: string) {
         ...prev,
         versions: [...prev.versions, newVersion],
         currentVersion: newVersion.version,
+      };
+    });
+  }, [userId]);
+
+  const saveAllAnnotationsSnapshot = useCallback((changeDescription?: string) => {
+    setState(prev => {
+      if (prev.annotations.length === 0) {
+        console.warn('No annotations to save');
+        return prev;
+      }
+
+      const newVersions: AnnotationVersion[] = prev.annotations.map(ann => ({
+        id: Math.random().toString(36).substr(2, 9),
+        annotationId: ann.id,
+        userId: userId || "1",
+        version: prev.currentVersion + 1,
+        type: ann.type,
+        coordinates: ann.coordinates,
+        color: ann.color,
+        label: ann.label || null,
+        changeDescription: changeDescription || null,
+        createdAt: new Date(),
+      }));
+
+      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+      newHistory.push(JSON.parse(JSON.stringify(prev.annotations)));
+
+      return {
+        ...prev,
+        versions: [...prev.versions, ...newVersions],
+        currentVersion: prev.currentVersion + 1,
+        history: newHistory,
+        historyIndex: newHistory.length - 1,
       };
     });
   }, [userId]);
@@ -766,12 +871,19 @@ export function useAnnotation(caseId: string, userId?: string) {
   const completeTextInput = useCallback((text: string) => {
     if (!state.textInputPosition) return;
 
+    const coords = state.textInputPosition;
     const newAnnotation: Annotation = {
       id: Math.random().toString(36).substr(2, 9),
       caseId,
       userId: userId || "1",
       type: "text",
-      coordinates: { ...state.textInputPosition, text },
+      coordinates: { 
+        x: coords.x, 
+        y: coords.y, 
+        width: coords.width || 200,
+        height: coords.height || 40,
+        text 
+      },
       color: state.color,
       createdAt: new Date(),
     } as Annotation;
@@ -787,12 +899,17 @@ export function useAnnotation(caseId: string, userId?: string) {
         history: newHistory,
         historyIndex: newHistory.length - 1,
         textInputPosition: null,
+        currentAnnotation: null,
       };
     });
   }, [state.textInputPosition, state.color, caseId, userId]);
 
   const cancelTextInput = useCallback(() => {
-    setState(prev => ({ ...prev, textInputPosition: null }));
+    setState(prev => ({ ...prev, textInputPosition: null, currentAnnotation: null }));
+  }, []);
+
+  const setImageBounds = useCallback((bounds: { width: number; height: number }) => {
+    setState(prev => ({ ...prev, imageBounds: bounds }));
   }, []);
 
   return {
@@ -818,6 +935,7 @@ export function useAnnotation(caseId: string, userId?: string) {
     undo,
     redo,
     saveVersion,
+    saveAllAnnotationsSnapshot,
     restoreVersion,
     previewVersion,
     clearVersionOverlay,
@@ -832,5 +950,6 @@ export function useAnnotation(caseId: string, userId?: string) {
     duplicateAnnotations,
     completeTextInput,
     cancelTextInput,
+    setImageBounds,
   };
 }

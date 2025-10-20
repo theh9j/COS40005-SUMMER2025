@@ -23,7 +23,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
         {
           id: 1,
           imageId,
-          author: "Do Duy Long",
+          author: "Nguyen Van A",
           role: "Student",
           content: "I think there is an opacity in the right upper lobe.",
           timestamp: new Date().toLocaleString(),
