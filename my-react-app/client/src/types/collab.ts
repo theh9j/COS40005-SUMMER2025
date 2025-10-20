@@ -1,5 +1,16 @@
 export type Role = "Student" | "Instructor" | "Admin";
 
+export interface CaseItem {
+  id: string;
+  title: string;
+  modality: "XRay" | "CT" | "MRI";
+  ownerId: string;
+  ownerName: string;
+  sharedTo: string[];
+  createdAt: string;
+  updatedAt: string;
+  imageUrl: string;
+}
 
 export interface Version {
   id: string;

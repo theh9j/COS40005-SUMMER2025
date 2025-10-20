@@ -97,6 +97,7 @@ export default function AnnotationView() {
   // Save a version (both local + collaborative)
   const handleSaveVersion = async () => {
     try {
+      annotation.saveAllAnnotationsSnapshot();
       const mockData = {
         annotations: annotation.annotations,
         tool: annotation.tool,
