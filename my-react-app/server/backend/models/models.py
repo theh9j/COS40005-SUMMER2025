@@ -15,3 +15,7 @@ class User(BaseModel):
 class Approval(BaseModel):
     id: str
     status: str = "pending"
+
+class UserUpdate(BaseModel):
+    firstName: str
+    lastName: str
