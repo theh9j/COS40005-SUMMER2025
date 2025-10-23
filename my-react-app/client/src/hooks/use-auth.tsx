@@ -11,7 +11,6 @@ interface AuthUser {
   role?: "student" | "instructor" | "admin";
   token?: string;
   password?: string;
-  /** For instructors: "verified" | "pending" | "rejected" (backend-defined) */
   approval_status?: string;
 }
 
@@ -27,6 +26,7 @@ interface AuthContextType {
     role: "student" | "instructor";
   }) => Promise<void>;
   logout: () => void;
+  updateUser: (data: { firstName: string, lastName: string }) => Promise<AuthUser>;
 }
 
 const SESSION_KEY = "session_token";
@@ -55,7 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const data = await res.json();
               decoded.approval_status = data.approval_status;
             } else {
-              // Handle case where status check fails but token is valid
               decoded.approval_status = "pending"; // Default or error state
             }
           }
@@ -72,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setIsLoading(false);
     }
-  }, []); // Empty dependency array ensures this runs only on mount
+  }, []);
 
   const redirectByRole = (decoded: AuthUser) => {
     if (decoded.role === "student") {
@@ -167,9 +166,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }, 50);
     }
   };
+  
+  const updateUser = async (data: { firstName: string, lastName: string }): Promise<AuthUser> => {
+    if (!user || !user.token) throw new Error("No user or token found");
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/update?token=${user.token}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to update user");
+      }
+
+      const { token: newToken } = await response.json();
+      if (!newToken) throw new Error("Update failed — missing new token");
+
+      // Decode the new token to get the updated user data
+      let decoded: AuthUser = jwtDecode(newToken);
+      decoded.token = newToken;
+      
+      // Re-check approval status if instructor (mirroring login/signup logic)
+      if (decoded.role === "instructor") {
+        const res = await fetch(`${API_URL}/approval-status?token=${newToken}`);
+        if (res.ok) {
+          const statusData = await res.json();
+          decoded.approval_status = statusData.approval_status;
+        } else {
+          decoded.approval_status = "pending"; // Default or error state
+        }
+      }
+
+      // Update local storage and app state
+      localStorage.setItem(SESSION_KEY, newToken);
+      setUser(decoded);
+
+      return decoded;
+    } catch (error) {
+      console.error("Update user error:", error);
+      // Don't nullify user, just throw the error
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

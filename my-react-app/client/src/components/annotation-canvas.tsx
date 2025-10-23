@@ -38,6 +38,7 @@ export default function AnnotationCanvas({
     completeTextInput,
     cancelTextInput,
     color,
+    setImageBounds: updateAnnotationImageBounds,
   } = annotation;
 
   useEffect(() => {
@@ -57,6 +58,9 @@ export default function AnnotationCanvas({
       };
 
       setImageBounds(bounds);
+      if (updateAnnotationImageBounds) {
+        updateAnnotationImageBounds({ width: bounds.width, height: bounds.height });
+      }
     };
 
     updateImageBounds();
@@ -123,10 +127,49 @@ export default function AnnotationCanvas({
         }
       });
       ctx.stroke();
-    } else if (ann.type === "text" && coords.text) {
-      ctx.fillStyle = ann.color;
-      ctx.font = "16px sans-serif";
-      ctx.fillText(coords.text, imgX + coords.x, imgY + coords.y);
+    } else if (ann.type === "text") {
+      if (coords.text) {
+        // Draw colored background box
+        ctx.fillStyle = ann.color;
+        ctx.fillRect(imgX + coords.x, imgY + coords.y, coords.width || 200, coords.height || 40);
+        
+        // Draw border
+        ctx.strokeRect(imgX + coords.x, imgY + coords.y, coords.width || 200, coords.height || 40);
+        
+        // Draw white text
+        ctx.fillStyle = "white";
+        ctx.font = "14px sans-serif";
+        
+        const padding = 5;
+        const maxWidth = (coords.width || 200) - (padding * 2);
+        const lineHeight = 18;
+        const words = coords.text.split(' ');
+        let line = '';
+        let yPos = imgY + coords.y + padding + lineHeight;
+        
+        for (let i = 0; i < words.length; i++) {
+          const testLine = line + words[i] + ' ';
+          const metrics = ctx.measureText(testLine);
+          
+          if (metrics.width > maxWidth && i > 0) {
+            ctx.fillText(line, imgX + coords.x + padding, yPos);
+            line = words[i] + ' ';
+            yPos += lineHeight;
+            
+            if (yPos > imgY + coords.y + (coords.height || 40) - padding) {
+              break;
+            }
+          } else {
+            line = testLine;
+          }
+        }
+        
+        if (line.trim() && yPos <= imgY + coords.y + (coords.height || 40) - padding) {
+          ctx.fillText(line, imgX + coords.x + padding, yPos);
+        }
+      } else {
+        ctx.strokeRect(imgX + coords.x, imgY + coords.y, coords.width || 200, coords.height || 40);
+      }
     }
 
     if (ann.label && ann.type !== "text") {
@@ -387,6 +430,8 @@ export default function AnnotationCanvas({
         <InlineTextEditor
           x={imageBounds.x + textInputPosition.x}
           y={imageBounds.y + textInputPosition.y}
+          width={textInputPosition.width}
+          height={textInputPosition.height}
           color={color}
           onComplete={completeTextInput}
           onCancel={cancelTextInput}
