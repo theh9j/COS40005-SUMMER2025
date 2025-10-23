@@ -205,34 +205,35 @@ export function useAnnotation(caseId: string, userId: string) {
 
   // Load
   async function loadVersions() {
-  if (!caseId) return;
+    if (!caseId || !userId) return;
 
-  setState((prev) => ({ ...prev, versionsLoading: true }));
+    setState((prev) => ({ ...prev, versionsLoading: true }));
 
-  try {
-    const res = await fetch(`http://127.0.0.1:8000/api/annotations/versions/${caseId}`);
-    if (!res.ok) throw new Error("Failed to fetch versions");
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:8000/api/annotations/versions/${caseId}?userId=${userId}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch versions");
 
-    const data = await res.json();
-    const versionsArray = Array.isArray(data)
-  ? data.map((v) => ({
-      ...v,
-      id: v._id ?? v.id, 
-      version: v.version ?? 0,  
-    }))
-  : [];
+      const data = await res.json();
+      const versionsArray = Array.isArray(data)
+        ? data.map((v) => ({
+            ...v,
+            id: v._id ?? v.id,
+            version: v.version ?? 0,
+          }))
+        : [];
 
-    setState((prev) => ({
-      ...prev,
-      versions: versionsArray,
-      versionsLoading: false,
-    }));
-  } catch (err) {
-    console.error("Error loading versions:", err);
-    setState((prev) => ({ ...prev, versions: [], versionsLoading: false }));
+      setState((prev) => ({
+        ...prev,
+        versions: versionsArray,
+        versionsLoading: false,
+      }));
+    } catch (err) {
+      console.error("Error loading versions:", err);
+      setState((prev) => ({ ...prev, versions: [], versionsLoading: false }));
+    }
   }
-}
-
   // --- Finish drawing
   async function finishDrawing(coordinates: any) {
     if (!state.drawType || !state.isDrawing) return;
@@ -366,20 +367,20 @@ export function useAnnotation(caseId: string, userId: string) {
 
   // --- Save snapshot
   async function saveAllAnnotationsSnapshot() {
-  try {
-    const res = await fetch(`${API_BASE}/snapshot/${caseId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, annotations: state.annotations }),
-    });
-    if (!res.ok) throw new Error("Failed to save snapshot");
-    const saved = await res.json();
-    console.log("Snapshot saved:", saved);
-    await loadVersions(); // ✅ refresh version history
-  } catch (err) {
-    console.error("Snapshot save failed:", err);
+    try {
+      const res = await fetch(`${API_BASE}/snapshot/${caseId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, annotations: state.annotations }),
+      });
+      if (!res.ok) throw new Error("Failed to save snapshot");
+      const saved = await res.json();
+      console.log("Snapshot saved:", saved);
+      await loadVersions(); // reload only this user’s versions
+    } catch (err) {
+      console.error("Snapshot save failed:", err);
+    }
   }
-}
 
   // --- Clear all
   function clearAllAnnotations() {

@@ -43,14 +43,27 @@ async def update_annotation(annotation_id: str, update: dict):
     await ws_manager.broadcast(doc["caseId"], {"type": "update", "annotation": doc})
     return doc
 
-@router.delete("/{annotation_id}")
-async def delete_annotation(annotation_id: str):
-    doc = await annotations_collection.find_one({"_id": ObjectId(annotation_id)})
+@router.delete("/versions/{version_id}")
+async def delete_version(version_id: str, userId: str):
+    doc = await versions_collection.find_one({"_id": ObjectId(version_id)})
+
     if not doc:
-        raise HTTPException(404, "Annotation not found")
-    await annotations_collection.delete_one({"_id": ObjectId(annotation_id)})
-    await ws_manager.broadcast(doc["caseId"], {"type": "delete", "annotationId": annotation_id})
-    return {"deletedId": annotation_id}
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    if doc["userId"] != userId:
+        raise HTTPException(status_code=403, detail="You can only delete your own versions")
+
+    case_id = doc["caseId"]
+    version_number = doc["version"]
+
+    await versions_collection.delete_one({"_id": ObjectId(version_id)})
+
+    await versions_collection.update_many(
+        {"caseId": case_id, "userId": userId, "version": {"$gt": version_number}},
+        {"$inc": {"version": -1}},
+    )
+
+    return {"message": f"Deleted version {version_number}"}
 
 @router.post("/snapshot/{case_id}")
 async def save_snapshot(case_id: str, payload: dict):
@@ -74,34 +87,18 @@ async def save_snapshot(case_id: str, payload: dict):
     return clean_obj(version_doc)
 
 @router.get("/versions/{case_id}")
-async def get_versions(case_id: str):
-    versions = await versions_collection.find({"caseId": case_id}).sort("version", -1).to_list(None)
+async def get_versions(case_id: str, userId: str):
+    """Return version history for a specific user in a specific case."""
+    versions = await versions_collection.find({
+        "caseId": case_id,
+        "userId": userId
+    }).sort("version", -1).to_list(None)
 
     cleaned = []
     for v in versions:
         v["_id"] = str(v["_id"])
+        v["id"] = v["_id"]
         if "version" not in v:
             v["version"] = 0
-        v["id"] = v["_id"]
         cleaned.append(clean_obj(v))
-
     return cleaned
-
-@router.delete("/versions/{version_id}")
-async def delete_version(version_id: str):
-    doc = await versions_collection.find_one({"_id": ObjectId(version_id)})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Version not found")
-
-    case_id = doc["caseId"]
-    version_number = doc["version"]
-
-    await versions_collection.delete_one({"_id": ObjectId(version_id)})
-
-    # Shift down all versions after this one
-    await versions_collection.update_many(
-        {"caseId": case_id, "version": {"$gt": version_number}},
-        {"$inc": {"version": -1}}
-    )
-
-    return {"message": f"Deleted version {version_number}"}
