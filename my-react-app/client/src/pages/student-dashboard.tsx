@@ -46,7 +46,7 @@ export default function StudentDashboard() {
       }
     }
 
-    fetchOnlineUsers(); 
+    fetchOnlineUsers();
   }, []);
 
   const [, setLocation] = useLocation();
@@ -206,10 +206,13 @@ export default function StudentDashboard() {
       {/* Sticky Header */}
       <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setLocation("/home")}
+            className="flex items-center space-x-4 focus:outline-none hover:opacity-80 transition"
+          >
             <UserRound className="h-8 w-8 text-primary" />
             <h1 className="text-xl font-semibold">Medical Imaging Platform</h1>
-          </div>
+          </button>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${onlineCount > 0 ? "bg-green-500" : "bg-gray-400"} animate-pulse`}></div>
