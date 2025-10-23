@@ -6,12 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { mockCases } from "@/lib/mock-data";
+import { mockCases, mockPerformanceData, mockUpcomingAssignments } from "@/lib/mock-data";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import CaseCard from "@/components/case-card";
 import UploadModal from "@/components/upload-modal";
 import {
   UserRound, Gauge, FolderOpen, Edit, Users, ChartLine, Settings,
-  CheckCircle, MessageCircle, Flame, LogOut, Upload
+  CheckCircle, MessageCircle, Flame, LogOut, Upload, Calendar, AlertCircle
 } from "lucide-react";
 
 type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "progress" | "settings";
@@ -296,6 +297,56 @@ export default function StudentDashboard() {
                 <StatCard label="Active Annotations" value={stats.activeAnnotations} icon={Edit} valueClass="text-accent" testId="stat-active-annotations" />
                 <StatCard label="Feedback Received" value={stats.feedbackReceived} icon={MessageCircle} valueClass="text-yellow-500" testId="stat-feedback-received" />
                 <StatCard label="Study Streak (days)" value={stats.studyStreakDays} icon={Flame} valueClass="text-orange-500" testId="stat-study-streak" />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Performance Trend</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={mockPerformanceData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="week" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-sm text-muted-foreground mt-2">Your performance has improved by 19% over the last 7 weeks</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center">
+                      <Calendar className="h-5 w-5 mr-2 text-primary" />
+                      Upcoming Assignments
+                    </h3>
+                    <div className="space-y-3">
+                      {mockUpcomingAssignments.map((assignment) => {
+                        const daysUntilDue = Math.ceil((assignment.dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                        const isUrgent = daysUntilDue <= 2;
+                        return (
+                          <div key={assignment.id} className={`p-3 rounded-lg border ${isUrgent ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-sm">{assignment.title}</p>
+                                <p className="text-xs text-muted-foreground mt-1">{assignment.category}</p>
+                              </div>
+                              {isUrgent && <AlertCircle className="h-4 w-4 text-red-500" />}
+                            </div>
+                            <div className="flex items-center justify-between mt-2">
+                              <span className={`text-xs px-2 py-1 rounded ${assignment.priority === 'high' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                {assignment.priority}
+                              </span>
+                              <span className="text-xs text-muted-foreground">Due in {daysUntilDue} days</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
