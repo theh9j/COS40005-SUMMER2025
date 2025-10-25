@@ -201,35 +201,54 @@ export default function InstructorDashboard() {
                       <AlertTriangle className="h-5 w-5 mr-2 text-red-500" />
                       At-Risk Student Alerts
                     </h3>
-                    <span className="text-sm text-muted-foreground">{mockAtRiskStudents.length} students need attention</span>
+                    <span className="text-sm text-muted-foreground">
+                      {mockAtRiskStudents.length} students need attention
+                    </span>
                   </div>
+
                   <div className="space-y-4">
                     {mockAtRiskStudents.map((student) => (
-                      <div key={student.id} className="p-4 border border-red-200 bg-red-50 rounded-lg">
+                      <div
+                        key={student.id}
+                        className="p-4 border border-red-500/30 rounded-lg hover:bg-muted transition"
+                      >
                         <div className="flex items-start space-x-4">
-                          <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full" />
+                          <img
+                            src={student.avatar}
+                            alt={student.name}
+                            className="w-12 h-12 rounded-full"
+                          />
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-2">
                               <p className="font-medium">{student.name}</p>
                               <div className="flex items-center space-x-2">
-                                {student.trend === 'declining' && (
-                                  <span className="flex items-center text-xs text-red-600">
+                                {student.trend === "declining" && (
+                                  <span className="flex items-center text-xs text-red-500">
                                     <TrendingDown className="h-3 w-3 mr-1" />
                                     Declining
                                   </span>
                                 )}
-                                <span className="text-sm font-semibold text-red-600">Score: {student.score}%</span>
+                                <span className="text-sm font-semibold text-red-500">
+                                  Score: {student.score}%
+                                </span>
                               </div>
                             </div>
-                            <p className="text-sm text-muted-foreground mb-2">{student.issue}</p>
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {student.issue}
+                            </p>
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-muted-foreground">Last active: {student.lastActive}</span>
+                              <span className="text-xs text-muted-foreground">
+                                Last active: {student.lastActive}
+                              </span>
                               <div className="flex space-x-2">
                                 <Button size="sm" variant="outline" className="h-7 text-xs">
                                   <Mail className="h-3 w-3 mr-1" />
                                   Contact
                                 </Button>
-                                <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700">
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                                >
                                   View Details
                                 </Button>
                               </div>
@@ -241,6 +260,7 @@ export default function InstructorDashboard() {
                   </div>
                 </CardContent>
               </Card>
+
             </div>           
           )}
           {/* ———————————————————————————— */}
