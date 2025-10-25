@@ -327,7 +327,7 @@ export default function StudentDashboard() {
                         const daysUntilDue = Math.ceil((assignment.dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                         const isUrgent = daysUntilDue <= 2;
                         return (
-                          <div key={assignment.id} className={`p-3 rounded-lg border ${isUrgent ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                          <div key={assignment.id} className={`p-3 rounded-lg border ${ isUrgent? 'border-destructive/30 bg-destructive/10': 'border-border bg-muted'}`}>
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <p className="font-medium text-sm">{assignment.title}</p>
@@ -377,13 +377,13 @@ export default function StudentDashboard() {
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold mb-4">Recent Feedback</h3>
                     <div className="space-y-4">
-                      <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                      <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
                         <div className="flex items-start space-x-3">
                           <img src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" alt="Dr. Smith" className="w-8 h-8 rounded-full" />
                           <div><p className="font-medium text-sm">Dr. Smith</p><p className="text-sm text-muted-foreground">Great work on identifying the lesion. Consider the surrounding tissue changes.</p></div>
                         </div>
                       </div>
-                      <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                      <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
                         <div className="flex items-start space-x-3">
                           <img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" alt="Dr. Johnson" className="w-8 h-8 rounded-full" />
                           <div><p className="font-medium text-sm">Dr. Johnson</p><p className="text-sm text-muted-foreground">Excellent annotation accuracy. Your diagnostic skills are improving!</p></div>
@@ -448,11 +448,11 @@ export default function StudentDashboard() {
                 <CardContent className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Study Timeline</h3>
                   <div className="space-y-4">
-                    <div className="flex items-center space-x-4 p-3 border-l-4 border-green-500 bg-green-50">
+                    <div className="flex items-center space-x-4 p-3 border-l-4 border-green-500 bg-green-500/10">
                       <div className="flex-shrink-0"><div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm"><CheckCircle className="h-4 w-4" /></div></div>
                       <div className="flex-1"><p className="font-medium">Completed Brain MRI Case</p><p className="text-sm text-muted-foreground">2 hours ago - Score: 95%</p></div>
                     </div>
-                    <div className="flex items-center space-x-4 p-3 border-l-4 border-blue-500 bg-blue-50">
+                    <div className="flex items-center space-x-4 p-3 border-l-4 border-primary bg-primary/10">
                       <div className="flex-shrink-0"><div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm"><MessageCircle className="h-4 w-4" /></div></div>
                       <div className="flex-1"><p className="font-medium">Received Feedback</p><p className="text-sm text-muted-foreground">4 hours ago - Dr. Smith reviewed your work</p></div>
                     </div>
