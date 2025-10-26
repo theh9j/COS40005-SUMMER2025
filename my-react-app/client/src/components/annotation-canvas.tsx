@@ -44,11 +44,13 @@ export default function AnnotationCanvas({
   useEffect(() => {
     const updateImageBounds = () => {
       const canvas = canvasRef.current;
+      const container = containerRef.current;
       const image = imageRef.current;
-      if (!canvas || !image) return;
+      if (!canvas || !image || !container) return;
 
       const canvasRect = canvas.getBoundingClientRect();
       const imageRect = image.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
 
       const bounds: ImageBounds = {
         x: imageRect.left - canvasRect.left,
@@ -56,6 +58,9 @@ export default function AnnotationCanvas({
         width: imageRect.width,
         height: imageRect.height,
       };
+
+      canvas.width = containerRect.width;
+      canvas.height = containerRect.height;
 
       setImageBounds(bounds);
       if (updateAnnotationImageBounds) {
@@ -103,6 +108,18 @@ export default function AnnotationCanvas({
     } else if (ann.type === "circle" && coords.radius) {
       ctx.beginPath();
       ctx.arc(imgX + coords.x, imgY + coords.y, coords.radius, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.fill();
+    } else if (ann.type === "triangle" && coords.points && Array.isArray(coords.points)) {
+      ctx.beginPath();
+      coords.points.forEach((point: { x: number; y: number }, index: number) => {
+        if (index === 0) {
+          ctx.moveTo(imgX + point.x, imgY + point.y);
+        } else {
+          ctx.lineTo(imgX + point.x, imgY + point.y);
+        }
+      });
+      ctx.closePath();
       ctx.stroke();
       ctx.fill();
     } else if (ann.type === "polygon" && coords.points && Array.isArray(coords.points)) {
@@ -224,6 +241,21 @@ export default function AnnotationCanvas({
       ctx.fillRect(imgX + coords.x + coords.radius - 4, imgY + coords.y - 4, 8, 8);
       ctx.fillRect(imgX + coords.x - 4, imgY + coords.y + coords.radius - 4, 8, 8);
       ctx.fillRect(imgX + coords.x - coords.radius - 4, imgY + coords.y - 4, 8, 8);
+    } else if (ann.type === "triangle" && coords.points && Array.isArray(coords.points)) {
+      const xs = coords.points.map((p: any) => p.x);
+      const ys = coords.points.map((p: any) => p.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      
+      ctx.strokeRect(imgX + minX - 5, imgY + minY - 5, maxX - minX + 10, maxY - minY + 10);
+      
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#3b82f6';
+      coords.points.forEach((point: { x: number; y: number }) => {
+        ctx.fillRect(imgX + point.x - 4, imgY + point.y - 4, 8, 8);
+      });
     } else if (ann.type === "polygon" && coords.points && Array.isArray(coords.points)) {
       const xs = coords.points.map((p: any) => p.x);
       const ys = coords.points.map((p: any) => p.y);
@@ -295,16 +327,16 @@ export default function AnnotationCanvas({
     // Draw current user's annotations
     annotations.forEach((ann) => {
       const isSelected = annotation.selectedAnnotationIds?.includes(ann.id) || false;
-      drawAnnotation(ctx, ann, 0.5, isSelected);
+      drawAnnotation(ctx, ann as any, 0.5, isSelected);
       
       if (isSelected) {
-        drawSelectionIndicators(ctx, ann);
+        drawSelectionIndicators(ctx, ann as any);
       }
     });
 
     // Draw current annotation being drawn
     if (currentAnnotation) {
-      drawAnnotation(ctx, currentAnnotation, 0.5);
+      drawAnnotation(ctx, currentAnnotation as any, 0.5);
     }
   }, [annotations, currentAnnotation, canvasRef, peerAnnotations, versionOverlay, annotation.selectedAnnotationIds, imageBounds]);
 
@@ -373,11 +405,13 @@ export default function AnnotationCanvas({
         onLoad={() => {
           const updateImageBounds = () => {
             const canvas = canvasRef.current;
+            const container = containerRef.current;
             const image = imageRef.current;
-            if (!canvas || !image) return;
+            if (!canvas || !image || !container) return;
 
             const canvasRect = canvas.getBoundingClientRect();
             const imageRect = image.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
 
             const bounds: ImageBounds = {
               x: imageRect.left - canvasRect.left,
@@ -386,7 +420,13 @@ export default function AnnotationCanvas({
               height: imageRect.height,
             };
 
+            canvas.width = containerRect.width;
+            canvas.height = containerRect.height;
+
             setImageBounds(bounds);
+            if (updateAnnotationImageBounds) {
+              updateAnnotationImageBounds({ width: bounds.width, height: bounds.height });
+            }
           };
           updateImageBounds();
         }}
@@ -395,9 +435,7 @@ export default function AnnotationCanvas({
       {/* Canvas Overlay */}
       <canvas
         ref={canvasRef}
-        width={800}
-        height={600}
-        className="absolute inset-0 cursor-crosshair"
+        className="absolute inset-0 w-full h-full cursor-crosshair"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
