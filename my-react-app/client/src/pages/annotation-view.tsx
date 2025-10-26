@@ -168,7 +168,7 @@ export default function AnnotationView() {
 
           <div className="flex items-center space-x-4">
             <div className="hidden md:flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot" />
+              <div className="w-2 h-2 bg-green-500/80 dark:bg-green-400/80 rounded-full pulse-dot" />
               <span className="text-sm text-muted-foreground">
                 {presence?.users?.length
                   ? `Online: ${presence.users.map((u) => u.name).join(", ")}`
@@ -208,7 +208,6 @@ export default function AnnotationView() {
               peerAnnotations={annotation.peerAnnotations}
               versionOverlay={annotation.versionOverlay}
             />
-            <InlineTextEditor />
           </div>
 
           {/* Conditional right panels */}
@@ -241,6 +240,7 @@ export default function AnnotationView() {
               onDeleteAnnotations={annotation.deleteSelectedAnnotations}
               onLockAnnotations={annotation.lockAnnotations}
               onDuplicateAnnotations={annotation.duplicateAnnotations}
+              onToggleVisibility={annotation.toggleAnnotationsVisibility}
             />
           )}
 
