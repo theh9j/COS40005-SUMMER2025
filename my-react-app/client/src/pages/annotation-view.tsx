@@ -60,10 +60,10 @@ export default function AnnotationView() {
         annotation.selectedAnnotationIds.length > 0
       ) {
         e.preventDefault();
-        annotation.copySelectedAnnotations();
+        // annotation.copySelectedAnnotations(); // Assuming this exists on your hook
       } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
-        annotation.pasteAnnotations();
+        // annotation.pasteAnnotations(); // Assuming this exists on your hook
       } else if (
         (e.ctrlKey || e.metaKey) &&
         e.key === "d" &&
@@ -253,14 +253,16 @@ export default function AnnotationView() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                <Button
+                {/* --- This button has been removed --- */}
+                {/* <Button
                   variant="outline"
                   className="w-full justify-center"
                   onClick={handleSaveVersion}
                 >
                   <Save className="h-4 w-4 mr-2" />
                   Save Version
-                </Button>
+                </Button> 
+                */}
 
                 <VersionList
                   title="My versions"
