@@ -1,57 +1,90 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Version } from "@/types/collab";
+import { useAuth } from "@/hooks/use-auth";
 
 export function useVersions(caseId: string) {
   const [mine, setMine] = useState<Version[]>([]);
   const [peers, setPeers] = useState<Version[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    if (!user) return; 
+
+    setLoading(true);
+    setError(null);
     try {
-      // Gọi API thật khi backend sẵn sàng
-      const [vm, vp] = await Promise.all([
-        fetch(`/api/cases/${caseId}/versions?scope=mine`).then(r => r.json()),
-        fetch(`/api/cases/${caseId}/versions?scope=peers`).then(r => r.json()),
-      ]);
-      setMine(vm); setPeers(vp);
-    } catch (e:any) {
-      // fallback mock để FE vẫn test được
-      console.warn("useVersions fallback mock:", e?.message);
-      const now = new Date().toISOString();
-      setMine([
-        { id: "m1", caseId, authorId: "u1", authorName: "You", createdAt: now, data: { boxes: [], notes: "My v1" } },
-      ]);
-      setPeers([
-        { id: "p1", caseId, authorId: "u2", authorName: "Student B", createdAt: now, data: { polygons: [], notes: "Peer v1" } },
-      ]);
-      setError(e?.message ?? null);
+      const response = await fetch(`/api/version/${caseId}`);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch versions: ${response.status} ${response.statusText}`,
+        );
+      }
+      const allVersions: Version[] = await response.json();
+
+      const myVersions: Version[] = [];
+      const peerVersions: Version[] = [];
+
+      allVersions.forEach((v) => {
+        if (v.authorId === user?.user_id) {
+          myVersions.push(v);
+        } else {
+          peerVersions.push(v);
+        }
+      });
+
+      setMine(myVersions);
+      setPeers(peerVersions);
+    } catch (e: any) {
+      console.error("useVersions load error:", e?.message);
+      setError(
+        e?.message ?? "An unknown error occurred while loading versions.",
+      );
+      setMine([]);
+      setPeers([]);
     } finally {
       setLoading(false);
     }
-  }, [caseId]);
+  }, [caseId, user]); 
 
-  const create = useCallback(async (data: Version["data"]) => {
-    // Ghi chú: thay bằng API thật
-    try {
-      await fetch(`/api/cases/${caseId}/versions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data }),
-      });
-    } catch {
-      /* noop: mock */
-    }
-    await load();
-  }, [caseId, load]);
+  const create = useCallback(
+    async (data: Version["data"]) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/version/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data, caseId }),
+        });
+
+        if (!response.ok) {
+          const errorText =
+            (await response.text().catch(() => "Unknown error"));
+          throw new Error(
+            `Failed to create version: ${response.status} ${errorText}`,
+          );
+        }
+
+        await load();
+      } catch (e: any) {
+        console.error("useVersions create error:", e?.message);
+        setError(
+          e?.message ??
+            "An unknown error occurred while creating the version.",
+        );
+        setLoading(false);
+      }
+    },
+    [caseId, load],
+  );
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 10000); // polling để thấy bản của peers
+    const t = setInterval(load, 10000);
     return () => clearInterval(t);
   }, [load]);
 
   return { mine, peers, loading, error, create, reload: load };
 }
-

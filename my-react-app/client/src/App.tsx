@@ -15,17 +15,27 @@ import AIPlayground from "@/pages/ai-playground";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import Home from "@/pages/home";
 
-interface ProtectedRouteProps {
+interface RouteProps {
   component: React.ComponentType<any>;
-  [key: string]: any; 
+  [key: string]: any;
 }
 
-function ProtectedRoute({ component: Component, ...rest }: ProtectedRouteProps) {
-  const { user } = useAuth();
+function ProtectedRoute({ component: Component, ...rest }: RouteProps) {
+  const { user, isLoading } = useAuth();
 
-  // If an instructor is not verified, redirect them to the home page
-  if (user?.role === "instructor" && user?.approval_status !== "verified") {
-    // Allow access only to the home page
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+
+  if (user.role === "instructor" && user.approval_status !== "verified") {
     if (rest.path !== "/" && rest.path !== "/home") {
       return <Redirect to="/home" />;
     }
@@ -34,18 +44,41 @@ function ProtectedRoute({ component: Component, ...rest }: ProtectedRouteProps) 
   return <Route {...rest} component={Component} />;
 }
 
+function GuestRoute({ component: Component, ...rest }: RouteProps) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
+  if (user) {
+    const redirectPath =
+      user.role === "instructor" ? "/instructor" : "/student";
+    return <Redirect to={redirectPath} />;
+  }
+
+  return <Route {...rest} component={Component} />;
+}
+
 function Router() {
   return (
     <Switch>
+      <GuestRoute path="/login" component={Login} />
+      <GuestRoute path="/signup" component={Signup} />
+
       <Route path="/" component={Home} />
       <Route path="/home" component={Home} />
-      <Route path="/login" component={Login} />
-      <Route path="/signup" component={Signup} />
-      <Route path="/admin" component={AdminAccounts} />
-      <Route path="/ai" component={AIPlayground} />
+
+      <ProtectedRoute path="/admin" component={AdminAccounts} />
+      <ProtectedRoute path="/ai" component={AIPlayground} />
       <ProtectedRoute path="/student" component={StudentDashboard} />
       <ProtectedRoute path="/instructor" component={InstructorDashboard} />
       <ProtectedRoute path="/annotation/:caseId" component={AnnotationView} />
+
       <Route component={NotFound} />
     </Switch>
   );
