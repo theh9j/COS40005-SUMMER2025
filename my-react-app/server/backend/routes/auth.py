@@ -12,6 +12,9 @@ async def signup(user: User):
     existing_user = await users_collection.find_one({"email": user.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    banned_user = await users_collection.find_one({"suspension": 1})
+    if banned_user:
+        raise HTTPException(status_code=400, detail="Account suspended")
 
     user_dict = user.model_dump()
     user_dict["password"] = hash_password(user.password)
