@@ -52,7 +52,7 @@ async def login(data: dict):
     if not user or not verify_password(password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    banned_user = await users_collection.find_one({"suspension": 1})
+    banned_user = await users_collection.find_one({"suspension": 1,"email": email})
     if banned_user:
         raise HTTPException(status_code=400, detail="Account suspended")
 
