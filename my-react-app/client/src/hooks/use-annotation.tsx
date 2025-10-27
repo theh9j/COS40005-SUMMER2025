@@ -349,20 +349,63 @@ export function useAnnotation(caseId: string, userId: string) {
     });
   };
   
+  const saveAllAnnotationsSnapshot = async () => {
+    try {
+      await fetch("http://localhost:8000/annotations/version", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caseId,
+          userId,
+          annotations: state.annotations,
+        }),
+      });
+      await loadVersions();
+    } catch (error) {
+      console.error("Failed to save snapshot:", error);
+    }
+  };
+
+  const loadVersions = async () => {
+    setState(prev => ({ ...prev, versionsLoading: true }));
+    try {
+      const res = await fetch(`http://localhost:8000/annotations/version/${caseId}/${userId}`);
+      const data = await res.json();
+
+      setState(prev => ({
+        ...prev,
+        versions: data,
+        versionsLoading: false,
+      }));
+    } catch (error) {
+      console.error("Failed to load versions:", error);
+      setState(prev => ({ ...prev, versionsLoading: false }));
+    }
+  };
+
+  const deleteVersion = async (id: string) => {
+    try {
+      await fetch(`http://localhost:8000/annotations/version/${id}`, { method: "DELETE" });
+      await loadVersions();
+    } catch (error) {
+      console.error("Failed to delete version:", error);
+    }
+  };
+
   const stubs = {
-    saveAllAnnotationsSnapshot: () => console.log("Save snapshot"),
-    loadVersions: () => console.log("Load versions"),
+    saveAllAnnotationsSnapshot,
+    loadVersions,
+    deleteVersion,
     lockAnnotations: (ids: string[], locked: boolean) => console.log("Lock", ids, locked),
     duplicateAnnotations: (ids: string[]) => console.log("Duplicate", ids),
     setImageBounds: (bounds: { width: number; height: number; }) => setState(prev => ({...prev, imageBounds: bounds})),
     peerAnnotations: [],
-    versions: [],
-    versionsLoading: false,
+    versions: state.versions,
+    versionsLoading: state.versionsLoading,
     versionOverlay: null,
     currentVersion: undefined,
     previewVersion: () => {},
     restoreVersion: () => {},
-    deleteVersion: () => {},
     togglePeerAnnotations: () => {},
   };
 
