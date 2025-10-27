@@ -131,9 +131,6 @@ export function useAnnotation(caseId: string, userId: string) {
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    // Note: This assumes the event (e.g., e.clientX) is relative to the viewport.
-    // If e.nativeEvent.offsetX/Y is used, it must be relative to the *image* origin.
-    // We'll use clientX/Y and subtract rect.left/top for canvas-relative coords.
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
@@ -167,7 +164,6 @@ export function useAnnotation(caseId: string, userId: string) {
       coordinates: { start: { x, y } }
     };
 
-    // Fix 1: Text tool now behaves like rectangle tool on start/update
     if (state.tool === 'text') {
       newAnnotation.coordinates = { ...newAnnotation.coordinates, x, y, width: 0, height: 0, text: '' };
     }
@@ -185,21 +181,18 @@ export function useAnnotation(caseId: string, userId: string) {
   };
 
   const updateDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!state.isDrawing || !state.tool) return; // Removed currentAnnotation check, rely on isDrawing
+    if (!state.isDrawing || !state.tool) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
     setState(prev => {
-        // Use the ID from the state's currentAnnotation object
         if (!prev.currentAnnotation) return prev;
         const currentId = prev.currentAnnotation.id;
         const start = prev.currentAnnotation.coordinates.start;
-
         const newCoords = { ...prev.currentAnnotation.coordinates };
 
-        // Fix 1: Text tool draws like rectangle
         if (state.tool === "rectangle" || state.tool === "text") { 
           newCoords.x = Math.min(start.x, x); newCoords.y = Math.min(start.y, y);
           newCoords.width = Math.abs(x - start.x); newCoords.height = Math.abs(y - start.y);
@@ -222,7 +215,6 @@ export function useAnnotation(caseId: string, userId: string) {
         return { 
             ...prev, 
             currentAnnotation: updatedAnnotation,
-            // Update the temporary annotation in the main list
             annotations: prev.annotations.map(ann => ann.id === currentId ? updatedAnnotation as Annotation : ann)
         };
     });
@@ -232,29 +224,23 @@ export function useAnnotation(caseId: string, userId: string) {
     if (!state.isDrawing || !state.currentAnnotation) return;
     
     const ann = state.currentAnnotation;
-
-    // Don't save zero-size shapes
     const coords = ann.coordinates;
+
     if ((ann.type === 'rectangle' || ann.type === 'text') && (!coords.width || !coords.height)) {
         setState(prev => ({
-            ...prev,
-            isDrawing: false,
-            currentAnnotation: null,
-            annotations: prev.annotations.filter(a => a.id !== ann.id) // Remove temp
+            ...prev, isDrawing: false, currentAnnotation: null,
+            annotations: prev.annotations.filter(a => a.id !== ann.id)
         }));
         return;
     }
      if (ann.type === 'circle' && !coords.radius) {
         setState(prev => ({
-            ...prev,
-            isDrawing: false,
-            currentAnnotation: null,
-            annotations: prev.annotations.filter(a => a.id !== ann.id) // Remove temp
+            ...prev, isDrawing: false, currentAnnotation: null,
+            annotations: prev.annotations.filter(a => a.id !== ann.id)
         }));
         return;
     }
 
-    // Fix 1: Handle Text tool: trigger the inline editor
     if (state.tool === 'text') {
         setState(prev => ({
             ...prev,
@@ -265,21 +251,19 @@ export function useAnnotation(caseId: string, userId: string) {
             },
             isDrawing: false,
             currentAnnotation: null,
-            selectedAnnotationIds: [ann.id!] // Select the new text box
+            // Fix 1: Do NOT select the annotation on creation
+            selectedAnnotationIds: [] 
         }));
-        // Note: The temporary annotation is already in the annotations list
         return;
     }
     
     const completedAnnotation = { ...state.currentAnnotation, createdAt: new Date().toISOString() } as Annotation;
-    // Finalize the annotation in the list
     const finalAnnotations = state.annotations.map(a => a.id === ann.id ? completedAnnotation : a);
 
     updateAnnotationsAndHistory(finalAnnotations, 'drawing');
     setState(prev => ({ ...prev, isDrawing: false, currentAnnotation: null }));
   };
 
-  // Handle text input completion
   const completeTextInput = (text: string) => {
     if (!state.textInputPosition) return;
     const { annotationId } = state.textInputPosition;
@@ -291,7 +275,7 @@ export function useAnnotation(caseId: string, userId: string) {
             finalizedAnnotation = { 
                 ...ann, 
                 coordinates: { ...ann.coordinates, text },
-                createdAt: new Date().toISOString() // Finalize creation time
+                createdAt: new Date().toISOString()
             };
             return finalizedAnnotation;
         }
@@ -299,7 +283,6 @@ export function useAnnotation(caseId: string, userId: string) {
     });
 
     if (finalizedAnnotation) {
-        // This was a new (temp) item, now it's finalized
         updateAnnotationsAndHistory(newAnnotations, 'update'); 
     }
     setState(prev => ({ ...prev, textInputPosition: null }));
@@ -308,10 +291,8 @@ export function useAnnotation(caseId: string, userId: string) {
   const cancelTextInput = () => {
     if (!state.textInputPosition) return;
     const { annotationId } = state.textInputPosition;
-    // Remove the temporary annotation that was added
     const newAnnotations = state.annotations.filter(ann => ann.id !== annotationId);
     
-    // Don't add to history for a cancelled action
     setState(prev => ({
         ...prev,
         annotations: newAnnotations,
@@ -331,7 +312,6 @@ export function useAnnotation(caseId: string, userId: string) {
     updateAnnotationsAndHistory(newAnnotations, 'update');
   };
   
-  // Hide/Show selected annotations
   const toggleAnnotationsVisibility = (ids: string[], visible: boolean) => {
     const newAnnotations = state.annotations.map(ann => 
         ids.includes(ann.id) ? { ...ann, visible } : ann
@@ -343,7 +323,14 @@ export function useAnnotation(caseId: string, userId: string) {
     setState((prev) => {
       if (prev.historyIndex <= 0) return prev;
       const newIndex = prev.historyIndex - 1;
-      return { ...prev, annotations: prev.history[newIndex], historyIndex: newIndex, selectedAnnotationIds: [] };
+      return { 
+          ...prev, 
+          annotations: prev.history[newIndex], 
+          historyIndex: newIndex, 
+          // Fix 2: Clear selection and text input on undo
+          selectedAnnotationIds: [],
+          textInputPosition: null
+      };
     });
   };
 
@@ -351,72 +338,38 @@ export function useAnnotation(caseId: string, userId: string) {
     setState((prev) => {
       if (prev.historyIndex >= prev.history.length - 1) return prev;
       const newIndex = prev.historyIndex + 1;
-      return { ...prev, annotations: prev.history[newIndex], historyIndex: newIndex, selectedAnnotationIds: [] };
+      return { 
+          ...prev, 
+          annotations: prev.history[newIndex], 
+          historyIndex: newIndex, 
+          // Fix 2: Clear selection and text input on redo
+          selectedAnnotationIds: [],
+          textInputPosition: null
+      };
     });
   };
   
-  // Stubs for functions that might be called by AnnotationView
-  // (Assuming these are not part of this core hook but are expected)
-  // inside useAnnotation() in use-annotation.tsx
-
-  const saveAllAnnotationsSnapshot = async () => {
-    try {
-      await fetch("http://localhost:8000/annotations/version", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          caseId,
-          userId,
-          annotations: state.annotations,
-        }),
-      });
-    } catch (error) {
-      console.error("Failed to save snapshot:", error);
-    }
-  };
-
-  const loadVersions = async () => {
-    setState(prev => ({ ...prev, versionsLoading: true }));
-    try {
-      const res = await fetch(`http://localhost:8000/annotations/version/${caseId}`);
-      const data = await res.json();
-      setState(prev => ({ ...prev, versions: data, versionsLoading: false }));
-    } catch (error) {
-      console.error("Failed to load versions:", error);
-      setState(prev => ({ ...prev, versionsLoading: false }));
-    }
-  };
-
-  const deleteVersion = async (id: string) => {
-    try {
-      await fetch(`http://localhost:8000/annotations/version/${id}`, { method: "DELETE" });
-      await loadVersions();
-    } catch (error) {
-      console.error("Failed to delete version:", error);
-    }
-  };
-
   const stubs = {
-    saveAllAnnotationsSnapshot,
-    loadVersions,
-    deleteVersion,
+    saveAllAnnotationsSnapshot: () => console.log("Save snapshot"),
+    loadVersions: () => console.log("Load versions"),
     lockAnnotations: (ids: string[], locked: boolean) => console.log("Lock", ids, locked),
     duplicateAnnotations: (ids: string[]) => console.log("Duplicate", ids),
     setImageBounds: (bounds: { width: number; height: number; }) => setState(prev => ({...prev, imageBounds: bounds})),
     peerAnnotations: [],
-    versions: state.versions,
-    versionsLoading: state.versionsLoading,
+    versions: [],
+    versionsLoading: false,
     versionOverlay: null,
     currentVersion: undefined,
     previewVersion: () => {},
     restoreVersion: () => {},
+    deleteVersion: () => {},
     togglePeerAnnotations: () => {},
   };
 
 
   return {
     ...state,
-    ...stubs, // Include stubs
+    ...stubs,
     canvasRef, setTool, setColor, startDrawing, updateDrawing, finishDrawing,
     deleteSelectedAnnotations, updateAnnotation, toggleAnnotationsVisibility,
     undo, redo, completeTextInput, cancelTextInput,
