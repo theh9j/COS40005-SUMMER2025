@@ -78,10 +78,12 @@ export default function AnnotationView() {
     return () => window.removeEventListener("keydown", handleKeyboard);
   }, [annotation]);
 
-  // Auto-show properties when selecting
+  // Fix 3: Auto-show/hide properties when selecting/deselecting
   useEffect(() => {
     if (annotation.selectedAnnotationIds.length > 0) {
       setShowProperties(true);
+    } else {
+      setShowProperties(false); // This hides the panel when deselecting
     }
   }, [annotation.selectedAnnotationIds]);
 
@@ -235,12 +237,12 @@ export default function AnnotationView() {
               selectedAnnotations={annotation.annotations.filter((a) =>
                 annotation.selectedAnnotationIds.includes(a.id)
               )}
-              onClose={() => setShowProperties(false)}
+              onClose={() => setShowProperties(false)} // This 'x' button still works
               onUpdateAnnotation={annotation.updateAnnotation}
               onDeleteAnnotations={annotation.deleteSelectedAnnotations}
               onLockAnnotations={annotation.lockAnnotations}
               onDuplicateAnnotations={annotation.duplicateAnnotations}
-              onToggleVisibility={annotation.toggleAnnotationsVisibility}
+              onToggleVisibility={annotation.toggleAnnotationsVisibility} // Added prop
             />
           )}
 
@@ -297,3 +299,4 @@ export default function AnnotationView() {
     </div>
   );
 }
+
