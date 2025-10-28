@@ -15,6 +15,12 @@ import {
   CheckCircle, MessageCircle, Flame, LogOut, Upload, Calendar, AlertCircle
 } from "lucide-react";
 
+// discussion 
+import DiscussionThread from "@/components/discussion/DiscussionThread";
+
+// icon Assignments
+import { BookOpen } from "lucide-react";
+
 type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "progress" | "settings";
 
 type StudentStats = {
@@ -145,6 +151,7 @@ export default function StudentDashboard() {
     { id: "collaboration", label: "Collaboration", icon: Users },
     { id: "progress", label: "Progress", icon: ChartLine },
     { id: "settings", label: "Settings", icon: Settings },
+    { id: "assignments", label: "Assignments", icon: BookOpen },
   ] as const;
 
   const handleLogout = () => {
@@ -266,7 +273,13 @@ export default function StudentDashboard() {
                   key={item.id}
                   variant={isActive ? "default" : "ghost"}
                   className={`w-full justify-start ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-secondary text-foreground"}`}
-                  onClick={() => setActiveView(item.id)}
+                  onClick={() => {
+                    if (item.id === "assignments") {
+                      setLocation("/assignments");
+                   } else {
+                      setActiveView(item.id);
+                   }
+                }}
                   data-testid={`nav-${item.id}`}
                 >
                   <Icon className="h-4 w-4 mr-3" />
@@ -396,6 +409,13 @@ export default function StudentDashboard() {
             </div>
           )}
 
+          {activeView === "collaboration" && (
+            <div className="p-6" data-testid="view-collaboration">
+              <h2 className="text-2xl font-bold mb-4">Collaboration</h2>
+               <DiscussionThread imageId={mockCases[0]?.id ?? "case-1"} />
+           </div>
+          )}
+          
           {activeView === "cases" && (
             <div className="p-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
