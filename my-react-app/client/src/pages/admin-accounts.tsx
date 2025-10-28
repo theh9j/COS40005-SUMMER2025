@@ -1,4 +1,3 @@
-// src/pages/admin-accounts.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,14 +9,14 @@ import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import {
   Search,
   ShieldCheck,
-  ShieldOff,      // ✅ NEW: separate revoke icon
+  ShieldOff,
   UserCog,
   UserX,
   RefreshCw,
   CheckCircle2,
   XCircle,
   UserPlus2,
-  LogOut,        // ✅ NEW: admin logout icon
+  LogOut,
 } from "lucide-react";
 
 type Role = "student" | "instructor" | "admin";
@@ -36,7 +35,7 @@ const ROLE_OPTIONS: Role[] = ["student", "instructor", "admin"];
 const API_URL = "http://127.0.0.1:8000/api/admin";
 
 export default function AdminAccounts() {
-  const { user, isLoading, logout } = useAuth(); // ✅ include logout
+  const { user, isLoading, logout } = useAuth();
   useHeartbeat(user?.user_id);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -85,7 +84,6 @@ export default function AdminAccounts() {
     };
   }, [toast]);
 
-  // ✅ Filters for search and role
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return users.filter((u) => {
@@ -96,12 +94,10 @@ export default function AdminAccounts() {
     });
   }, [users, query, roleFilter, onlyPendingInstructor]);
 
-  // ✅ Optimistic UI updater
   const setUserPartial = (id: string, patch: Partial<AdminUser>) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
   };
 
-  // ✅ Verify or revoke instructor
   const verifyInstructor = async (id: string, next: boolean) => {
     try {
       setUserPartial(id, { instructorVerified: next });
@@ -122,7 +118,6 @@ export default function AdminAccounts() {
     }
   };
 
-  // ✅ Change user role
   const changeRole = async (id: string, role: Role) => {
     const prev = users.find((u) => u.id === id)?.role;
     try {
@@ -141,7 +136,6 @@ export default function AdminAccounts() {
     }
   };
 
-  // ✅ Activate or deactivate account
   const setActive = async (id: string, next: boolean) => {
     try {
       setUserPartial(id, { active: next });
@@ -162,7 +156,6 @@ export default function AdminAccounts() {
     }
   };
 
-  // ✅ Refresh manually
   const refresh = async () => {
     setRefreshing(true);
     try {
@@ -178,7 +171,6 @@ export default function AdminAccounts() {
     }
   };
 
-  // ✅ Render
   if (isLoading || loading) return <div className="p-6">Loading...</div>;
   if (!user || user.role !== "admin") return null;
 
@@ -191,12 +183,10 @@ export default function AdminAccounts() {
             <h1 className="text-xl font-semibold">Admin · Account Management</h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* ✅ Admin Logout */}
             <Button variant="secondary" size="sm" onClick={logout} title="Log out">
               <LogOut className="h-4 w-4 mr-1" />
               Logout
             </Button>
-
             <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing} title="Refresh list">
               <RefreshCw className="h-4 w-4 mr-1" />
               Refresh
@@ -211,12 +201,7 @@ export default function AdminAccounts() {
             <div className="grid gap-3 md:grid-cols-3">
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search name or email…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="w-full"
-                />
+                <Input placeholder="Search name or email…" value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               <div>
                 <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
@@ -266,9 +251,17 @@ export default function AdminAccounts() {
                       {u.firstName} {u.lastName}
                     </td>
                     <td className="py-3 px-4 text-muted-foreground">{u.id}</td>
+
+                    {/* Disable role edit for admin */}
                     <td className="py-3 px-4">
-                      <Select value={u.role} onValueChange={(v) => changeRole(u.id, v as Role)}>
-                        <SelectTrigger className="h-8 w-40">
+                      <Select
+                        value={u.role}
+                        onValueChange={(v) => changeRole(u.id, v as Role)}
+                        disabled={u.role === "admin"}
+                      >
+                        <SelectTrigger
+                          className={`h-8 w-40 ${u.role === "admin" ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -280,6 +273,7 @@ export default function AdminAccounts() {
                         </SelectContent>
                       </Select>
                     </td>
+
                     <td className="py-3 px-4">
                       {u.role === "instructor" ? (
                         <div className="flex items-center gap-2">
@@ -292,8 +286,6 @@ export default function AdminAccounts() {
                               <XCircle className="h-4 w-4" /> Pending
                             </span>
                           )}
-
-                          {/* ✅ Different icon + red hover for revoke */}
                           {u.instructorVerified ? (
                             <Button
                               variant="secondary"
@@ -321,19 +313,33 @@ export default function AdminAccounts() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
+
                     <td className="py-3 px-4">
                       <span className={u.active ? "text-green-700" : "text-red-700"}>
                         {u.active ? "Active" : "Suspended"}
                       </span>
                     </td>
+
+                    {/* Disable deactivate/reactivate for admin */}
                     <td className="py-3 px-4">
                       <div className="flex justify-end gap-2">
                         {u.active ? (
-                          <Button variant="secondary" size="sm" onClick={() => setActive(u.id, false)}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setActive(u.id, false)}
+                            disabled={u.role === "admin"}
+                            className={u.role === "admin" ? "opacity-50 cursor-not-allowed" : ""}
+                          >
                             <UserX className="h-4 w-4 mr-1" /> Deactivate
                           </Button>
                         ) : (
-                          <Button size="sm" onClick={() => setActive(u.id, true)}>
+                          <Button
+                            size="sm"
+                            onClick={() => setActive(u.id, true)}
+                            disabled={u.role === "admin"}
+                            className={u.role === "admin" ? "opacity-50 cursor-not-allowed" : ""}
+                          >
                             <UserPlus2 className="h-4 w-4 mr-1" /> Reactivate
                           </Button>
                         )}
