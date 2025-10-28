@@ -13,7 +13,6 @@ import FeedbackPanel from "@/components/feedback-panel";
 import InlineTextEditor from "@/components/inline-text-editor";
 import AnnotationPropertiesPanel from "@/components/annotation-properties-panel";
 import { ArrowLeft, Save } from "lucide-react";
-import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 // Collaborative imports
 import { useVersions } from "@/hooks/use-versions";
@@ -288,7 +287,6 @@ export default function AnnotationView() {
                   }
                 />
 
-                <DiscussionThread imageId={caseId} />
                 <ChatPanel />
                 <FeedbackPanel />
               </div>
