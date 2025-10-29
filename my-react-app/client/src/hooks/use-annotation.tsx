@@ -45,7 +45,7 @@ interface UseAnnotationState {
 }
 
 // Fix: Correct API Base path based on backend routes (annotations.py)
-const API_BASE = "/api/version"; // Matches backend annotations.py router prefix
+const API_BASE = "http://localhost:8000/annotations"; // Matches backend annotations.py router prefix
 
 const isPointInShape = (px: number, py: number, ann: Annotation): boolean => {
     const coords = ann.coordinates;
@@ -509,44 +509,91 @@ export function useAnnotation(caseId: string, userId: string) {
 
   // --- API Functions ---
   const saveAllAnnotationsSnapshot = async () => {
-    if (!userId) { console.error("Cannot save: userId missing."); return; }
+    if (!userId || !caseId) {
+      console.error("Cannot save snapshot: userId or caseId missing.");
+      return;
+    }
     try {
-      const response = await fetch(`${API_BASE}/`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caseId, userId, data: { annotations: state.annotations } }),
+      const response = await fetch(`${API_BASE}/version`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caseId,
+          userId,
+          annotations: state.annotations,
+        }),
       });
-       if (!response.ok) { throw new Error(`HTTP ${response.status}`); }
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      console.log(result.message);
       await loadVersions();
-      console.log("Snapshot saved.");
-    } catch (error) { console.error("Save snapshot failed:", error); }
+    } catch (error) {
+      console.error("Failed to save snapshot:", error);
+    }
   };
 
- const loadVersions = useCallback(async () => {
+  const loadVersions = useCallback(async () => {
     if (!caseId || !userId) {
-      setState(prev => ({ ...prev, versions: [], versionsLoading: false })); return;
+      setState(prev => ({ ...prev, versions: [], versionsLoading: false }));
+      return;
     }
+
     setState(prev => ({ ...prev, versionsLoading: true }));
-    let versionsData: any[] = [];
+
     try {
-      const res = await fetch(`${API_BASE}/${caseId}/${userId}`);
-      if (!res.ok) { if (res.status !== 404) throw new Error(`HTTP ${res.status}`); }
-      else {
-         const data = await res.json();
-         if (Array.isArray(data)) versionsData = data;
-         else console.error("Loaded versions not an array:", data);
+      const res = await fetch(`${API_BASE}/version/${caseId}/${userId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        // Sort by version number descending (latest first)
+        const sorted = [...data].sort((a, b) => b.version - a.version);
+        setState(prev => ({
+          ...prev,
+          versions: sorted,
+          versionsLoading: false,
+        }));
+      } else {
+        console.error("Unexpected version data:", data);
+        setState(prev => ({ ...prev, versions: [], versionsLoading: false }));
       }
-    } catch (error) { console.error("Load versions failed:", error); }
-    finally { setState(prev => ({ ...prev, versions: versionsData, versionsLoading: false })); }
+    } catch (error) {
+      console.error("Failed to load versions:", error);
+      setState(prev => ({ ...prev, versions: [], versionsLoading: false }));
+    }
   }, [caseId, userId]);
 
-  const deleteVersion = async (id: string) => {
-    if (!id) { console.error("Cannot delete: ID missing."); return; }
+  const deleteVersion = async (versionId: string) => {
+    if (!versionId) {
+      console.error("Cannot delete: ID missing.");
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
-        if (!response.ok) { throw new Error(`HTTP ${response.status}`); }
+      const res = await fetch(`${API_BASE}/version/${versionId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      console.log("Version deleted.");
       await loadVersions();
-      console.log(`Version ${id} deleted.`);
-    } catch (error) { console.error("Delete version failed:", error); }
+    } catch (error) {
+      console.error("Failed to delete version:", error);
+    }
+  };
+
+  const restoreVersion = async (versionData: any) => {
+    if (!versionData?.annotations) {
+      console.error("Invalid version data for restore.");
+      return;
+    }
+    setState(prev => ({
+      ...prev,
+      annotations: versionData.annotations,
+      history: [...prev.history, versionData.annotations],
+      historyIndex: prev.history.length,
+    }));
+    console.log(`Restored version v${versionData.version}`);
   };
 
   const setImageBounds = (bounds: { width: number; height: number; }) => {
@@ -563,7 +610,7 @@ export function useAnnotation(caseId: string, userId: string) {
     deleteSelectedAnnotations, updateAnnotation, toggleAnnotationsVisibility,
     lockAnnotations, duplicateAnnotations, undo, redo,
     completeTextInput, cancelTextInput, saveAllAnnotationsSnapshot,
-    loadVersions, deleteVersion, setImageBounds,
+    loadVersions, deleteVersion, setImageBounds, restoreVersion,
     // Calculated values
     canUndo: state.historyIndex > 0,
     canRedo: state.historyIndex < (state.history?.length ?? 1) - 1, // Safe check for history length
