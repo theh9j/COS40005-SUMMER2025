@@ -6,12 +6,19 @@ export interface Reply {
   timestamp: string;
 }
 
+export type Tag = 'student' | 'teacher';
+
+export interface Author {
+  name: string;
+  avatarUrl: string;
+}
+
 export interface Thread {
-  id: number;
-  imageId: string;
-  author?: string;
-  role: "Student" | "Instructor" | "Admin";
+  id: string;
+  author: Author;
+  title: string;
   content: string;
-  timestamp: string;
-  replies: Reply[];
+  timestamp: string; 
+  tags: Tag[];
+  replyCount: number;
 }
