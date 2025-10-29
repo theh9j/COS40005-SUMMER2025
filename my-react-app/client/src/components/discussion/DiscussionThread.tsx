@@ -3,18 +3,16 @@ import "./discussion.css";
 import ThreadItem from "./ThreadItem";
 import ReplyBox from "./ReplyBox";
 import type { Thread } from "./types";
+import { useAuth } from "@/hooks/use-auth";
 
 interface DiscussionThreadProps {
   imageId: string;
-  currentUser?: { name: string; role: "Student" | "Instructor" | "Admin" };
 }
 
 const MOCK_MODE = true;
 
-const DiscussionThread: React.FC<DiscussionThreadProps> = ({
-  imageId,
-  currentUser = { name: "Do Duy Long", role: "Student" },
-}) => {
+const DiscussionThread: React.FC<DiscussionThreadProps> = ({ imageId }) => {
+  const { user } = useAuth();
   const [threads, setThreads] = useState<Thread[]>([]);
 
   useEffect(() => {
@@ -42,12 +40,21 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
     }
   }, [imageId]);
 
+  const authorName = user
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email
+    : "Anonymous";
+
+  const authorRole =
+    user?.role === "instructor" ? "Instructor" : "Student";
+
   const addNewThread = (text: string) => {
+    if (!user) return; 
+
     const newThread: Thread = {
       id: Date.now(),
       imageId,
-      author: currentUser.name,
-      role: currentUser.role,
+      author: authorName,
+      role: authorRole,
       content: text,
       timestamp: new Date().toLocaleString(),
       replies: [],
@@ -56,6 +63,8 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   };
 
   const addReply = (threadId: number, text: string) => {
+    if (!user) return; 
+
     setThreads((prev) =>
       prev.map((t) =>
         t.id === threadId
@@ -65,8 +74,8 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
                 ...t.replies,
                 {
                   id: Date.now(),
-                  author: currentUser.name,
-                  role: currentUser.role,
+                  author: authorName,
+                  role: authorRole,
                   content: text,
                   timestamp: new Date().toLocaleString(),
                 },
