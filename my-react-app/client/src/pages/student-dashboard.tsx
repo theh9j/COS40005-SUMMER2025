@@ -246,9 +246,17 @@ export default function StudentDashboard() {
                   className="w-8 h-8 rounded-full border-2 border-primary"
                 />
               </button>
-              <span className="text-sm font-medium" data-testid="text-username">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowProfileMenu((v) => !v);
+                }}
+                className="text-sm font-medium hover:underline focus:outline-none"
+                aria-haspopup="menu"
+                aria-expanded={showProfileMenu}
+              >
                 {user.firstName} {user.lastName}
-              </span>
+              </button>
 
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
