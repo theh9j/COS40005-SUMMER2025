@@ -1,38 +1,30 @@
 import * as React from 'react';
 import { useState, useMemo } from 'react';
-import ThreadItem from './ThreadItem'; // <-- Changed to default import
-import { Thread, Tag } from './types';
+import ThreadItem from './ThreadItem';
+import ReplyBox from './ReplyBox';
+import { Thread, Tag, Reply } from './types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Search } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth'; // Import useAuth to get current user
+import { Plus, Search, Tag as TagIcon, X } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { formatTimestamp } from './ThreadItem';
 
 const DiscussionThread: React.FC = () => {
-  const { user } = useAuth(); // Get authenticated user
+  const { user } = useAuth();
 
-  // State for all threads
   const [threads, setThreads] = useState<Thread[]>([]);
-  // State for the new post modal
-  const [showNewPostModal, setShowNewPostModal] = useState(false);
+  const [isCreatingPost, setIsCreatingPost] = useState(false);
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostMessage, setNewPostMessage] = useState('');
   const [newPostTags, setNewPostTags] = useState<Tag[]>([]);
-  // State for search and filtering
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<Tag | 'all'>('all');
+
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
   const handleCreatePost = () => {
     if (!newPostTitle || !newPostMessage || !user) return;
@@ -47,15 +39,14 @@ const DiscussionThread: React.FC = () => {
       content: newPostMessage,
       timestamp: new Date().toISOString(),
       tags: newPostTags,
-      replyCount: 0,
+      replies: [],
     };
 
-    setThreads([newThread, ...threads]); // Add new thread to the top
-    // Reset form
+    setThreads([newThread, ...threads]);
     setNewPostTitle('');
     setNewPostMessage('');
     setNewPostTags([]);
-    setShowNewPostModal(false); // Close the modal
+    setIsCreatingPost(false);
   };
 
   const handleTagToggle = (tag: Tag) => {
@@ -66,14 +57,11 @@ const DiscussionThread: React.FC = () => {
     );
   };
 
-  // Memoized filtering logic
   const filteredThreads = useMemo(() => {
     return threads.filter((thread) => {
-      // Filter by tag
       const tagMatch =
         selectedTag === 'all' || thread.tags.includes(selectedTag);
 
-      // Filter by search term
       const searchMatch =
         searchTerm.trim() === '' ||
         thread.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -84,134 +72,253 @@ const DiscussionThread: React.FC = () => {
     });
   }, [threads, searchTerm, selectedTag]);
 
+  const selectedThread = useMemo(() => {
+    if (!selectedThreadId) return null;
+    return threads.find((t) => t.id === selectedThreadId);
+  }, [threads, selectedThreadId]);
+
+  const handlePostReply = (replyContent: string) => {
+    if (!selectedThreadId || !user) return;
+
+    const newReply: Reply = {
+      id: crypto.randomUUID(),
+      author: {
+        name: user.firstName ? `${user.firstName} ${user.lastName}` : 'Anonymous User',
+        avatarUrl: `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`,
+      },
+      content: replyContent,
+      timestamp: new Date().toISOString(),
+    };
+
+    setThreads((prevThreads) =>
+      prevThreads.map((thread) =>
+        thread.id === selectedThreadId
+          ? { ...thread, replies: [...thread.replies, newReply] }
+          : thread
+      )
+    );
+  };
+  
+  const getInitials = (name: string) => {
+    if (!name) return '??';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('');
+  };
+
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h1 className="text-2xl font-bold">Discussions</h1>
-        <div className="flex flex-col sm:flex-row gap-2">
-          {/* New Post Dialog Trigger */}
-          <Dialog open={showNewPostModal} onOpenChange={setShowNewPostModal}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" /> New Post
-              </Button>
-            </DialogTrigger>
-            {/* New Post Dialog Content */}
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Create New Post</DialogTitle>
-                <DialogDescription>
-                  Start a new discussion. Fill in the details below.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="title" className="text-right">
-                    Title
-                  </Label>
+    <div className="flex flex-row gap-6 p-4 md:p-6 h-[85vh]">
+      <div 
+        className={`${
+          selectedThread ? 'w-1/2' : 'w-full'
+        } flex flex-col gap-6 transition-all duration-300 h-full`}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="w-full">
+            {!isCreatingPost ? (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="title"
-                    value={newPostTitle}
-                    onChange={(e) => setNewPostTitle(e.target.value)}
-                    className="col-span-3"
-                    placeholder="Your post title..."
+                    type="search"
+                    placeholder="Search posts..."
+                    className="pl-8"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <div className="grid grid-cols-4 items-start gap-4">
-                  <Label htmlFor="message" className="text-right pt-2">
-                    Message
-                  </Label>
-                  <Textarea
-                    id="message"
-                    value={newPostMessage}
-                    onChange={(e) => setNewPostMessage(e.target.value)}
-                    className="col-span-3"
-                    placeholder="Type your message..."
-                    rows={5}
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label className="text-right">Tags</Label>
-                  <div className="col-span-3 flex gap-4">
+                <Button onClick={() => setIsCreatingPost(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> New Post
+                </Button>
+              </div>
+            ) : (
+              <div className="p-4 border rounded-lg shadow-sm">
+                <div className="grid gap-4">
+                  <div>
+                    <Label htmlFor="title" className="mb-2 block font-medium">
+                      Title
+                    </Label>
+                    <Input
+                      id="title"
+                      value={newPostTitle}
+                      onChange={(e) => setNewPostTitle(e.target.value)}
+                      placeholder="Your post title..."
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="message" className="mb-2 block font-medium">
+                      Message
+                    </Label>
+                    <Textarea
+                      id="message"
+                      value={newPostMessage}
+                      onChange={(e) => setNewPostMessage(e.target.value)}
+                      placeholder="Type your message..."
+                      rows={5}
+                    />
+                  </div>
+                  
+                  <div>
                     <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="tag-student"
-                        checked={newPostTags.includes('student')}
-                        onCheckedChange={() => handleTagToggle('student')}
-                      />
-                      <Label htmlFor="tag-student">Student</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="tag-teacher"
-                        checked={newPostTags.includes('teacher')}
-                        onCheckedChange={() => handleTagToggle('teacher')}
-                      />
-                      <Label htmlFor="tag-teacher">Teacher</Label>
+                      <TagIcon className="h-4 w-4 text-muted-foreground" />
+                      <Button
+                        variant={newPostTags.includes('student') ? 'default' : 'outline'}
+                        onClick={() => handleTagToggle('student')}
+                        size="sm"
+                        className={`rounded-full ${
+                          newPostTags.includes('student')
+                            ? 'border border-transparent'
+                            : ''
+                        }`}
+                      >
+                        Student
+                      </Button>
+                      <Button
+                        variant={newPostTags.includes('teacher') ? 'default' : 'outline'}
+                        onClick={() => handleTagToggle('teacher')}
+                        size="sm"
+                        className={`rounded-full ${
+                          newPostTags.includes('teacher')
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'
+                            : ''
+                        }`}
+                      >
+                        Teacher
+                      </Button>
                     </div>
                   </div>
+                  
+                </div>
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button variant="outline" onClick={() => setIsCreatingPost(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreatePost} disabled={!newPostTitle || !newPostMessage}>
+                    Submit Post
+                  </Button>
                 </div>
               </div>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline">Cancel</Button>
-                </DialogClose>
-                <Button onClick={handleCreatePost} disabled={!newPostTitle || !newPostMessage}>
-                  Submit Post
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search posts..."
-              className="pl-8"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            )}
           </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            variant={selectedTag === 'all' ? 'default' : 'outline'}
+            onClick={() => setSelectedTag('all')}
+          >
+            All Posts
+          </Button>
+          <Button
+            variant={selectedTag === 'student' ? 'default' : 'outline'}
+            onClick={() => setSelectedTag('student')}
+          >
+            Student
+          </Button>
+          <Button
+            variant={selectedTag === 'teacher' ? 'default' : 'outline'}
+            onClick={() => setSelectedTag('teacher')}
+          >
+            Teacher
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-4 overflow-y-auto flex-1">
+          {filteredThreads.length > 0 ? (
+            filteredThreads.map((thread) => (
+              <ThreadItem 
+                key={thread.id} 
+                thread={thread}
+                onSelectThread={setSelectedThreadId}
+                isSelected={thread.id === selectedThreadId} 
+              />
+            ))
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              No posts found.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Filter Buttons */}
-      <div className="flex gap-2">
-        <Button
-          variant={selectedTag === 'all' ? 'default' : 'outline'}
-          onClick={() => setSelectedTag('all')}
-        >
-          All Posts
-        </Button>
-        <Button
-          variant={selectedTag === 'student' ? 'default' : 'outline'}
-          onClick={() => setSelectedTag('student')}
-        >
-          Student
-        </Button>
-        <Button
-          variant={selectedTag === 'teacher' ? 'default' : 'outline'}
-          onClick={() => setSelectedTag('teacher')}
-        >
-          Teacher
-        </Button>
-      </div>
-
-      {/* Post List */}
-      <div className="flex flex-col gap-4">
-        {filteredThreads.length > 0 ? (
-          filteredThreads.map((thread) => (
-            <ThreadItem key={thread.id} thread={thread} />
-          ))
-        ) : (
-          <div className="text-center text-muted-foreground py-8">
-            No posts found.
+      {selectedThread && (
+        <div className="w-1/2 border rounded-lg bg-blue-50 dark:bg-card flex flex-col h-full overflow-hidden">
+          <div className="p-6 pb-4">
+            <div className="flex justify-between items-start">
+              <h2 className="text-4xl font-bold">{selectedThread.title}</h2>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setSelectedThreadId(null)}
+                className="text-muted-foreground -mt-2 -mr-2"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex gap-2 mt-2 pb-4 border-b">
+              {selectedThread.tags.map((tag) => (
+                <Badge
+                  key={tag}
+                  variant={tag === 'teacher' ? 'default' : 'secondary'}
+                  className={
+                    tag === 'teacher'
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : ''
+                  }
+                >
+                  {tag}
+                </Badge>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+          
+          <div className="flex-1 overflow-y-auto px-6">
+            <div className="py-6 space-y-4">
+              <div key={selectedThread.id} className="flex gap-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={selectedThread.author.avatarUrl} alt={selectedThread.author.name} />
+                  <AvatarFallback>
+                    {getInitials(selectedThread.author.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-semibold text-base">{selectedThread.author.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatTimestamp(selectedThread.timestamp)}
+                    </span>
+                  </div>
+                  <p className="text-sm mt-1 whitespace-pre-wrap">{selectedThread.content}</p>
+                </div>
+              </div>
+
+              {selectedThread.replies.map((reply) => (
+                <div key={reply.id} className="flex gap-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={reply.author.avatarUrl} alt={reply.author.name} />
+                    <AvatarFallback>
+                      {getInitials(reply.author.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-semibold text-base">{reply.author.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatTimestamp(reply.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-sm mt-1">{reply.content}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </div>
+          
+          <ReplyBox onSubmit={handlePostReply} />
+        </div>
+      )}
     </div>
   );
 };

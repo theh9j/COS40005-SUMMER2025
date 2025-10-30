@@ -7,18 +7,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Clock } from 'lucide-react';
 import { Thread } from './types';
 
 interface ThreadItemProps {
   thread: Thread;
+  onSelectThread: (id: string) => void;
+  isSelected: boolean;
 }
 
-// Helper function to format the timestamp
-const formatTimestamp = (isoString: string) => {
+export const formatTimestamp = (isoString: string) => {
   const date = new Date(isoString);
   return date.toLocaleString('en-US', {
     month: 'short',
@@ -29,7 +28,6 @@ const formatTimestamp = (isoString: string) => {
   });
 };
 
-// Helper function to get initials from a name
 const getInitials = (name: string) => {
   if (!name) return '??';
   return name
@@ -38,33 +36,21 @@ const getInitials = (name: string) => {
     .join('');
 };
 
-const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
-  // Truncate content for the card view
+const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onSelectThread, isSelected }) => {
   const truncatedContent =
     thread.content.length > 150
       ? `${thread.content.substring(0, 150)}...`
       : thread.content;
 
   return (
-    <Card className="w-full transition-all hover:shadow-md">
-      <CardHeader className="flex flex-row items-center gap-4 space-y-0 pb-4">
-        <Avatar>
-          <AvatarImage src={thread.author.avatarUrl} alt={thread.author.name} />
-          <AvatarFallback>{getInitials(thread.author.name)}</AvatarFallback>
-        </Avatar>
-        <div className="flex flex-col">
-          <span className="font-semibold">{thread.author.name}</span>
-          <span className="text-sm text-muted-foreground">
-            {formatTimestamp(thread.timestamp)}
-          </span>
-        </div>
-      </CardHeader>
-      <CardContent className="pb-4">
-        <CardTitle className="mb-2 text-lg">{thread.title}</CardTitle>
-        <CardDescription>{truncatedContent}</CardDescription>
-      </CardContent>
-      <CardFooter className="flex justify-between">
-        <div className="flex gap-2">
+    <Card 
+      className={`w-full transition-all hover:shadow-md cursor-pointer ${
+        isSelected ? 'border-primary shadow-md' : ''
+      }`}
+      onClick={() => onSelectThread(thread.id)}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex gap-2 mb-2">
           {thread.tags.map((tag) => (
             <Badge
               key={tag}
@@ -79,10 +65,23 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
             </Badge>
           ))}
         </div>
-        <Button variant="ghost" size="sm" className="gap-1.5">
-          <MessageSquare className="h-4 w-4" />
-          {thread.replyCount}
-        </Button>
+        <CardTitle className="text-xl">{thread.title}</CardTitle>
+      </CardHeader>
+      <CardContent className="py-2">
+        <CardDescription>
+          <span className="font-semibold text-primary">{thread.author.name}</span>
+          : {truncatedContent}
+        </CardDescription>
+      </CardContent>
+      <CardFooter className="pt-2 pb-4 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center space-x-1">
+          <MessageSquare size={14} />
+          <span>{thread.replies.length + 1} replies</span>
+        </div>
+        <div className="flex items-center space-x-1">
+          <Clock size={14} />
+          <span>{formatTimestamp(thread.timestamp)}</span>
+        </div>
       </CardFooter>
     </Card>
   );

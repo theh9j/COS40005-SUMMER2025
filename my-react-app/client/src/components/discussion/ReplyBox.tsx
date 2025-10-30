@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
 
 interface ReplyBoxProps {
   onSubmit: (text: string) => void;
@@ -8,8 +9,7 @@ interface ReplyBoxProps {
 
 const ReplyBox: React.FC<ReplyBoxProps> = ({
   onSubmit,
-  placeholder = "Write a comment…",
-  submitLabel = "Post",
+  placeholder = "Send a message",
 }) => {
   const [value, setValue] = useState("");
 
@@ -21,24 +21,20 @@ const ReplyBox: React.FC<ReplyBoxProps> = ({
   };
 
   return (
-    <div>
-      <textarea
-        className="textarea"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-        placeholder={placeholder}
-      />
-      <div style={{ marginTop: 8 }}>
-        <button className="btn" onClick={submit}>{submitLabel}</button>
-        <span style={{ marginLeft: 8, color: "#6b7280", fontSize: 12 }}>
-          Press ⌘/Ctrl + Enter to submit
-        </span>
+    <div className="w-full p-4 border-t">
+      <div className="relative">
+        <Textarea
+          className="w-full min-h-[80px]"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder={placeholder}
+        />
       </div>
     </div>
   );
