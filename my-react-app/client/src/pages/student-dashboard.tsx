@@ -262,8 +262,9 @@ export default function StudentDashboard() {
       </header>
 
       <div className="flex">
-        {/* Sticky Sidebar */}
-        <aside className="w-64 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-auto">
+        <aside
+          className="group/sidebar w-16 hover:w-64 transition-all duration-300 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-hidden hover:overflow-auto"
+        >
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -276,14 +277,16 @@ export default function StudentDashboard() {
                   onClick={() => {
                     if (item.id === "assignments") {
                       setLocation("/assignments");
-                   } else {
+                    } else {
                       setActiveView(item.id);
-                   }
-                }}
+                    }
+                  }}
                   data-testid={`nav-${item.id}`}
                 >
                   <Icon className="h-4 w-4 mr-3" />
-                  {item.label}
+                  <span className="ml-3 opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+                    {item.label}
+                  </span>
                 </Button>
               );
             })}
@@ -340,7 +343,7 @@ export default function StudentDashboard() {
                         const daysUntilDue = Math.ceil((assignment.dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                         const isUrgent = daysUntilDue <= 2;
                         return (
-                          <div key={assignment.id} className={`p-3 rounded-lg border ${ isUrgent? 'border-destructive/30 bg-destructive/10': 'border-border bg-muted'}`}>
+                          <div key={assignment.id} className={`p-3 rounded-lg border ${isUrgent ? 'border-destructive/30 bg-destructive/10' : 'border-border bg-muted'}`}>
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <p className="font-medium text-sm">{assignment.title}</p>
@@ -412,10 +415,10 @@ export default function StudentDashboard() {
           {activeView === "collaboration" && (
             <div className="p-6" data-testid="view-collaboration">
               <h2 className="text-2xl font-bold mb-4">Collaboration</h2>
-               <DiscussionThread imageId={mockCases[0]?.id ?? "case-1"} />
-           </div>
+              <DiscussionThread imageId={mockCases[0]?.id ?? "case-1"} />
+            </div>
           )}
-          
+
           {activeView === "cases" && (
             <div className="p-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
