@@ -140,7 +140,19 @@ export default function InstructorDashboard() {
                   className="w-8 h-8 rounded-full border-2 border-primary"
                 />
               </button>
-              <span className="text-sm font-medium">Dr. {user.lastName}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowProfileMenu((v) => !v);
+                }}
+                className="text-sm font-medium hover:underline focus:outline-none"
+                aria-haspopup="menu"
+                aria-expanded={showProfileMenu}
+              >
+                Dr. {user.lastName}
+              </button>
+
+
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <ProfileMenu />
@@ -152,8 +164,9 @@ export default function InstructorDashboard() {
       </header>
 
       <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-auto">
+        <aside
+          className="group/sidebar w-16 hover:w-64 transition-all duration-300 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-hidden hover:overflow-auto"
+        >
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -162,15 +175,17 @@ export default function InstructorDashboard() {
                 <Button
                   key={item.id}
                   variant={isActive ? "default" : "ghost"}
-                  className={`w-full justify-start ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-secondary text-foreground"
-                  }`}
+                  className={`w-full justify-start ${isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-secondary text-foreground"
+                    }`}
                   onClick={() => setActiveView(item.id as InstructorView)}
                 >
                   <Icon className="h-4 w-4 mr-3" />
-                  {item.label}
+                  <span className="ml-3 opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+                    {item.label}
+                  </span>
+
                 </Button>
               );
             })}
@@ -261,7 +276,7 @@ export default function InstructorDashboard() {
                 </CardContent>
               </Card>
 
-            </div>           
+            </div>
           )}
           {/* ———————————————————————————— */}
 
