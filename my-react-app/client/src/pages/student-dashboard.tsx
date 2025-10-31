@@ -414,7 +414,7 @@ export default function StudentDashboard() {
 
           {activeView === "collaboration" && (
             <div className="p-6" data-testid="view-collaboration">
-              <DiscussionThread imageId={mockCases[0]?.id ?? "case-1"} />
+              <DiscussionThread/>
             </div>
           )}
 

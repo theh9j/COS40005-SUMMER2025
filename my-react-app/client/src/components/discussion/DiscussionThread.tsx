@@ -163,28 +163,28 @@ const DiscussionThread: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <TagIcon className="h-4 w-4 text-muted-foreground" />
                       <Button
-                        variant={newPostTags.includes('student') ? 'default' : 'outline'}
-                        onClick={() => handleTagToggle('student')}
+                        variant={newPostTags.includes('TestTag1') ? 'default' : 'outline'}
+                        onClick={() => handleTagToggle('TestTag1')}
                         size="sm"
                         className={`rounded-full ${
-                          newPostTags.includes('student')
+                          newPostTags.includes('TestTag1')
                             ? 'border border-transparent'
                             : ''
                         }`}
                       >
-                        Student
+                        TestTag1
                       </Button>
                       <Button
-                        variant={newPostTags.includes('teacher') ? 'default' : 'outline'}
-                        onClick={() => handleTagToggle('teacher')}
+                        variant={newPostTags.includes('TestTag2') ? 'default' : 'outline'}
+                        onClick={() => handleTagToggle('TestTag2')}
                         size="sm"
                         className={`rounded-full ${
-                          newPostTags.includes('teacher')
+                          newPostTags.includes('TestTag2')
                             ? 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'
                             : ''
                         }`}
                       >
-                        Teacher
+                        TestTag2
                       </Button>
                     </div>
                   </div>
@@ -211,16 +211,16 @@ const DiscussionThread: React.FC = () => {
             All Posts
           </Button>
           <Button
-            variant={selectedTag === 'student' ? 'default' : 'outline'}
-            onClick={() => setSelectedTag('student')}
+            variant={selectedTag === 'TestTag1' ? 'default' : 'outline'}
+            onClick={() => setSelectedTag('TestTag1')}
           >
-            Student
+            TestTag1
           </Button>
           <Button
-            variant={selectedTag === 'teacher' ? 'default' : 'outline'}
-            onClick={() => setSelectedTag('teacher')}
+            variant={selectedTag === 'TestTag2' ? 'default' : 'outline'}
+            onClick={() => setSelectedTag('TestTag2')}
           >
-            Teacher
+            TestTag2
           </Button>
         </div>
 
@@ -260,9 +260,9 @@ const DiscussionThread: React.FC = () => {
               {selectedThread.tags.map((tag) => (
                 <Badge
                   key={tag}
-                  variant={tag === 'teacher' ? 'default' : 'secondary'}
+                  variant={tag === 'TestTag2' ? 'default' : 'secondary'}
                   className={
-                    tag === 'teacher'
+                    tag === 'TestTag2'
                       ? 'bg-blue-600 hover:bg-blue-700 text-white'
                       : ''
                   }

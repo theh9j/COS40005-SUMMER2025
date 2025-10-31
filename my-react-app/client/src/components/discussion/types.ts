@@ -1,4 +1,4 @@
-export type Tag = 'student' | 'teacher';
+export type Tag = 'TestTag1' | 'TestTag2';
 
 export interface Reply {
   id: string;
