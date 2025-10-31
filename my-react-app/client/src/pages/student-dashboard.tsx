@@ -273,7 +273,7 @@ export default function StudentDashboard() {
                 <Button
                   key={item.id}
                   variant={isActive ? "default" : "ghost"}
-                  className={`w-full justify-start ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-secondary text-foreground"}`}
+                  className={`w-full justify-start ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-secondary hover:text-black text-foreground"}`}
                   onClick={() => {
                     if (item.id === "assignments") {
                       setLocation("/assignments");
