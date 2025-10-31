@@ -54,12 +54,7 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onSelectThread, isSelec
           {thread.tags.map((tag) => (
             <Badge
               key={tag}
-              variant={tag === 'TestTag2' ? 'default' : 'secondary'}
-              className={
-                tag === 'TestTag2'
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                  : ''
-              }
+              variant="secondary"
             >
               {tag}
             </Badge>

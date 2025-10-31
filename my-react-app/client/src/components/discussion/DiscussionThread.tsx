@@ -260,12 +260,7 @@ const DiscussionThread: React.FC = () => {
               {selectedThread.tags.map((tag) => (
                 <Badge
                   key={tag}
-                  variant={tag === 'TestTag2' ? 'default' : 'secondary'}
-                  className={
-                    tag === 'TestTag2'
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : ''
-                  }
+                  variant="secondary"
                 >
                   {tag}
                 </Badge>
@@ -285,6 +280,7 @@ const DiscussionThread: React.FC = () => {
                 <div className="flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="font-semibold text-base">{selectedThread.author.name}</span>
+                    <Badge variant="outline" className="h-5 px-2 py-0.5 text-xs">OP</Badge>
                     <span className="text-xs text-muted-foreground">
                       {formatTimestamp(selectedThread.timestamp)}
                     </span>
@@ -304,6 +300,9 @@ const DiscussionThread: React.FC = () => {
                   <div className="flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold text-base">{reply.author.name}</span>
+                      {reply.author.name === selectedThread.author.name && (
+                        <Badge variant="outline" className="h-5 px-2 py-0.5 text-xs">OP</Badge>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {formatTimestamp(reply.timestamp)}
                       </span>
