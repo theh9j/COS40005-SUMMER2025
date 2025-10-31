@@ -148,7 +148,7 @@ export default function StudentDashboard() {
     { id: "overview", label: "Overview", icon: Gauge },
     { id: "cases", label: "Case Library", icon: FolderOpen },
     { id: "annotations", label: "My Annotations", icon: Edit },
-    { id: "collaboration", label: "Collaboration", icon: Users },
+    { id: "collaboration", label: "Forums", icon: Users },
     { id: "progress", label: "Progress", icon: ChartLine },
     { id: "settings", label: "Settings", icon: Settings },
     { id: "assignments", label: "Assignments", icon: BookOpen },
