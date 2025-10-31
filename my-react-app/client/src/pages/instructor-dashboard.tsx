@@ -177,7 +177,7 @@ export default function InstructorDashboard() {
                   variant={isActive ? "default" : "ghost"}
                   className={`w-full justify-start ${isActive
                     ? "bg-primary text-primary-foreground"
-                    : "hover:bg-secondary text-foreground"
+                    : "hover:bg-secondary hover:text-black text-foreground"
                     }`}
                   onClick={() => setActiveView(item.id as InstructorView)}
                 >
