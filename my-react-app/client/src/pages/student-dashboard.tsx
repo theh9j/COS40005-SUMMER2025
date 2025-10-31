@@ -246,17 +246,9 @@ export default function StudentDashboard() {
                   className="w-8 h-8 rounded-full border-2 border-primary"
                 />
               </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowProfileMenu((v) => !v);
-                }}
-                className="text-sm font-medium hover:underline focus:outline-none"
-                aria-haspopup="menu"
-                aria-expanded={showProfileMenu}
-              >
+              <span className="text-sm font-medium" data-testid="text-username">
                 {user.firstName} {user.lastName}
-              </button>
+              </span>
 
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
@@ -422,14 +414,8 @@ export default function StudentDashboard() {
 
           {activeView === "collaboration" && (
             <div className="p-6" data-testid="view-collaboration">
-<<<<<<< HEAD
-               <DiscussionThread imageId={mockCases[0]?.id ?? "case-1"} />
-           </div>
-=======
-              <h2 className="text-2xl font-bold mb-4">Collaboration</h2>
               <DiscussionThread imageId={mockCases[0]?.id ?? "case-1"} />
             </div>
->>>>>>> 13a0ca1015159d14e3861c584e54b27507d9b64a
           )}
 
           {activeView === "cases" && (
