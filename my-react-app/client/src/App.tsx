@@ -14,8 +14,6 @@ import AdminAccounts from "@/pages/admin-accounts";
 import AIPlayground from "@/pages/ai-playground";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import Home from "@/pages/home";
-import AssignmentsPage from "@/pages/assignments";
-import AssignmentSubmitPage from "@/pages/assignment-submit";
 
 interface RouteProps {
   component: React.ComponentType<any>;
@@ -80,8 +78,6 @@ function Router() {
       <ProtectedRoute path="/student" component={StudentDashboard} />
       <ProtectedRoute path="/instructor" component={InstructorDashboard} />
       <ProtectedRoute path="/annotation/:caseId" component={AnnotationView} />
-      <ProtectedRoute path="/assignments" component={AssignmentsPage} />
-      <ProtectedRoute path="/assignments/:assignmentId/submit" component={AssignmentSubmitPage} />
 
       <Route component={NotFound} />
     </Switch>
