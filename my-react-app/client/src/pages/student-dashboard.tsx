@@ -19,7 +19,41 @@ import {
 import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 // icon Assignments
-import { BookOpen } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Link } from "wouter";
+
+
+// === Homework metadata 
+type HomeworkMeta = { dueAt: string; closed: boolean };
+const homeworkByCase: Record<string, HomeworkMeta> = {
+  "case-1": { dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false },
+  "case-2": { dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false },
+  "case-3": { dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true  },
+};
+
+// === Trạng thái bài nộp của riêng học sinh 
+type MySubmissionStatus = { score?: number; status: "grading" | "graded" | "none" };
+const mySubmissionByCase: Record<string, MySubmissionStatus> = {
+  "case-1": { status: "grading" },          // đã nộp, đang chấm
+  "case-2": { status: "none" },             // chưa nộp
+  "case-3": { status: "graded", score: 9 }, // đã chấm
+};
+
+const daysLeft = (iso?: string) => {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - Date.now();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+};
+
+// === Danh sách "My Annotations" 
+const myAnnotations = mockCases
+  .filter(c => (mySubmissionByCase[c.id]?.status ?? "none") !== "none")
+  .map(c => ({
+    caseId: c.id,
+    caseTitle: c.title,
+    updatedAgo: "today", 
+  }));
+
 
 type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "progress" | "settings";
 
@@ -151,7 +185,6 @@ export default function StudentDashboard() {
     { id: "collaboration", label: "Forums", icon: Users },
     { id: "progress", label: "Progress", icon: ChartLine },
     { id: "settings", label: "Settings", icon: Settings },
-    { id: "assignments", label: "Assignments", icon: BookOpen },
   ] as const;
 
   const handleLogout = () => {
@@ -275,9 +308,7 @@ export default function StudentDashboard() {
                   variant={isActive ? "default" : "ghost"}
                   className={`w-full justify-start ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-secondary hover:text-black text-foreground"}`}
                   onClick={() => {
-                    if (item.id === "assignments") {
-                      setLocation("/assignments");
-                    } else {
+                     {
                       setActiveView(item.id);
                     }
                   }}
@@ -417,6 +448,70 @@ export default function StudentDashboard() {
               <DiscussionThread/>
             </div>
           )}
+          
+          {activeView === "annotations" && (
+            <div className="p-6" data-testid="view-annotations">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">My Annotations</h2>
+                <Link href="/student">
+                  <Button variant="outline" size="sm">Back to Overview</Button>
+                </Link>
+              </div>
+
+              {myAnnotations.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  You don’t have any annotations yet. Open a case in <b>Case Library</b> to start.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {myAnnotations.map((annot) => {
+                    const hw = homeworkByCase[annot.caseId];
+                    const my = mySubmissionByCase[annot.caseId];
+
+                    return (
+                      <div key={annot.caseId} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-sm font-semibold">{annot.caseTitle}</h4>
+                            <p className="text-xs text-muted-foreground">Last edited {annot.updatedAgo}</p>
+                          </div>
+
+                          {/* Status badge theo yêu cầu */}
+                          <div className="flex items-center gap-2">
+                            {hw && <Badge>Homework</Badge>}
+                            {hw?.closed ? (
+                              my?.status === "graded" ? (
+                                <Badge variant="default">Score: {my?.score}/10</Badge>
+                              ) : (
+                                <Badge variant="secondary">Grading</Badge>
+                              )
+                            ) : (
+                              hw && (
+                                <Badge variant="outline">
+                                  Due in {Math.max(0, daysLeft(hw?.dueAt) ?? 0)} days
+                                </Badge>
+                              )
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                          {hw?.closed ? (
+                            <Button size="sm" variant="outline" disabled>Closed</Button>
+                          ) : (
+                            <Link href={`/annotation/${annot.caseId}`}>
+                              <Button size="sm">Open</Button>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
 
           {activeView === "cases" && (
             <div className="p-6" data-testid="view-cases">
@@ -428,9 +523,50 @@ export default function StudentDashboard() {
                 </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mockCases.map((case_) => (
-                  <CaseCard key={case_.id} case={case_} onClick={() => setLocation(`/annotation/${case_.id}`)} />
-                ))}
+                {mockCases.map((case_) => {
+                  const hw = homeworkByCase[case_.id];
+                  const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
+
+                  return (
+                    <div key={case_.id} className="space-y-2">
+                      {/* Card gốc */}
+                      <CaseCard
+                        case={case_}
+                        onClick={() => setLocation(`/annotation/${case_.id}`)}
+                      />
+
+                      {/* Meta bar cho Assignment */}
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                          {hw && <Badge>Homework</Badge>}
+                          {hw ? (
+                            hw.closed ? (
+                              <Badge variant="destructive">Closed</Badge>
+                            ) : (
+                              <Badge variant="secondary">Due in {dl} days</Badge>
+                            )
+                          ) : null}
+                        </div>
+
+                        <div>
+                          {hw ? (
+                            hw.closed ? (
+                              <Button size="sm" variant="outline" disabled>Closed</Button>
+                            ) : (
+                              <Link href={`/annotation/${case_.id}`}>
+                                <Button size="sm">Open</Button>
+                              </Link>
+                            )
+                          ) : (
+                            <Link href={`/annotation/${case_.id}`}>
+                              <Button size="sm" variant="ghost">Open</Button>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
