@@ -74,8 +74,12 @@ export default function AnnotationCanvas({
       updateImageBounds();
     });
 
-    if (containerRef.current) resizeObserver.observe(containerRef.current);
-    if (imageRef.current) resizeObserver.observe(imageRef.current);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    if (imageRef.current) {
+      resizeObserver.observe(imageRef.current);
+    }
 
     window.addEventListener('resize', updateImageBounds);
 
@@ -94,6 +98,7 @@ export default function AnnotationCanvas({
     ctx.fillStyle = ann.color + alpha;
 
     const coords = ann.coordinates as any;
+
     const imgX = imageBounds.x;
     const imgY = imageBounds.y;
 
@@ -108,8 +113,11 @@ export default function AnnotationCanvas({
     } else if (ann.type === "triangle" && coords.points && Array.isArray(coords.points)) {
       ctx.beginPath();
       coords.points.forEach((point: { x: number; y: number }, index: number) => {
-        if (index === 0) ctx.moveTo(imgX + point.x, imgY + point.y);
-        else ctx.lineTo(imgX + point.x, imgY + point.y);
+        if (index === 0) {
+          ctx.moveTo(imgX + point.x, imgY + point.y);
+        } else {
+          ctx.lineTo(imgX + point.x, imgY + point.y);
+        }
       });
       ctx.closePath();
       ctx.stroke();
@@ -117,8 +125,11 @@ export default function AnnotationCanvas({
     } else if (ann.type === "polygon" && coords.points && Array.isArray(coords.points)) {
       ctx.beginPath();
       coords.points.forEach((point: { x: number; y: number }, index: number) => {
-        if (index === 0) ctx.moveTo(imgX + point.x, imgY + point.y);
-        else ctx.lineTo(imgX + point.x, imgY + point.y);
+        if (index === 0) {
+          ctx.moveTo(imgX + point.x, imgY + point.y);
+        } else {
+          ctx.lineTo(imgX + point.x, imgY + point.y);
+        }
       });
       ctx.closePath();
       ctx.stroke();
@@ -126,8 +137,11 @@ export default function AnnotationCanvas({
     } else if (ann.type === "freehand" && coords.points && Array.isArray(coords.points)) {
       ctx.beginPath();
       coords.points.forEach((point: { x: number; y: number }, index: number) => {
-        if (index === 0) ctx.moveTo(imgX + point.x, imgY + point.y);
-        else ctx.lineTo(imgX + point.x, imgY + point.y);
+        if (index === 0) {
+          ctx.moveTo(imgX + point.x, imgY + point.y);
+        } else {
+          ctx.lineTo(imgX + point.x, imgY + point.y);
+        }
       });
       ctx.stroke();
     } else if (ann.type === "text") {
@@ -265,6 +279,7 @@ export default function AnnotationCanvas({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -276,10 +291,13 @@ export default function AnnotationCanvas({
       drawAnnotation(ctx, versionOverlay, 0.3);
       ctx.restore();
     }
+
     if (peerAnnotations) {
       peerAnnotations.forEach((peerData) => {
         if (peerData.visible) {
-          peerData.annotations.forEach((ann) => drawAnnotation(ctx, ann, 0.5));
+          peerData.annotations.forEach((ann) => {
+            drawAnnotation(ctx, ann, 0.5);
+          });
         }
       });
     }
@@ -330,6 +348,10 @@ export default function AnnotationCanvas({
     updateDrawing({ ...e, clientX: e.clientX - imageBounds.x, clientY: e.clientY - imageBounds.y } as React.MouseEvent<HTMLCanvasElement>);
   };
 
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    finishDrawing();
+  };
+
   return (
     <div
       ref={containerRef}
@@ -372,6 +394,7 @@ export default function AnnotationCanvas({
           <span className="text-xs" data-testid="online-user">Dr. Smith</span>
         </div>
       </div>
+
       {textInputPosition && (
         <InlineTextEditor
           x={imageBounds.x + textInputPosition.x}
