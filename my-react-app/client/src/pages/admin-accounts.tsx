@@ -178,10 +178,13 @@ export default function AdminAccounts() {
     <div className="min-h-screen bg-background" data-testid="admin-accounts">
       <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setLocation("/home")}
+            className="flex items-center space-x-3 hover:opacity-80 transition focus:outline-none"
+          >
             <UserCog className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-semibold">Admin · Account Management</h1>
-          </div>
+          </button>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={logout} title="Log out">
               <LogOut className="h-4 w-4 mr-1" />
@@ -194,7 +197,7 @@ export default function AdminAccounts() {
           </div>
         </div>
       </header>
-
+      
       <main className="p-6 space-y-6">
         <Card>
           <CardContent className="p-4">
