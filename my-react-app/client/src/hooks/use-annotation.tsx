@@ -59,10 +59,10 @@ const isPointInShape = (px: number, py: number, ann: Annotation): boolean => {
             if (typeof coords.x !== 'number' || typeof coords.y !== 'number' || typeof coords.width !== 'number' || typeof coords.height !== 'number') return false;
             return (px >= coords.x && px <= coords.x + coords.width && py >= coords.y && py <= coords.y + coords.height);
         case 'circle':
-             // Ensure radius exists
-            if (typeof coords.x !== 'number' || typeof coords.y !== 'number' || typeof coords.radius !== 'number') return false;
-            const distance = Math.sqrt((px - coords.x) ** 2 + (py - coords.y) ** 2);
-            return distance <= coords.radius;
+            // Ellipse check
+            if (typeof coords.x !== 'number' || typeof coords.y !== 'number' || typeof coords.radiusX !== 'number' || typeof coords.radiusY !== 'number') return false;
+            const p = ((px - coords.x) ** 2) / (coords.radiusX ** 2) + ((py - coords.y) ** 2) / (coords.radiusY ** 2);
+            return p <= 1;
         case 'triangle':
         case 'polygon': {
             let inside = false;
@@ -144,8 +144,6 @@ export function useAnnotation(caseId: string, userId: string) {
   };
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Prevent drawing if locked (global or specific annotation?)
-    // Assuming global lock for now based on state name
     if (state.isLocked) return;
 
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -156,7 +154,6 @@ export function useAnnotation(caseId: string, userId: string) {
     if (state.tool === 'select') {
       const clickedAnnotation = [...state.annotations].reverse().find(ann => isPointInShape(x, y, ann));
       if (clickedAnnotation) {
-        // Handle multi-select with Shift key
         if (e.shiftKey) {
           setState(prev => ({
             ...prev,
@@ -165,12 +162,9 @@ export function useAnnotation(caseId: string, userId: string) {
               : [...prev.selectedAnnotationIds, clickedAnnotation.id]
           }));
         } else {
-           // Only select if not already selected
           if (!state.selectedAnnotationIds.includes(clickedAnnotation.id)) {
             setState(prev => ({ ...prev, selectedAnnotationIds: [clickedAnnotation.id] }));
           }
-          // Allow dragging selected annotation? Check if it's locked here.
-          // if (clickedAnnotation.locked) { /* Prevent drag start */ }
         }
       } else {
         setState(prev => ({ ...prev, selectedAnnotationIds: [] }));
@@ -182,31 +176,24 @@ export function useAnnotation(caseId: string, userId: string) {
 
     const newAnnotation: Partial<Annotation> = {
       id: uuidv4(), caseId, userId, type: state.tool, color: state.color, visible: true, locked: false,
-      coordinates: { start: { x, y } } // Store start point
+      coordinates: { start: { x, y } }
     };
 
-    if (state.tool === 'text') {
-      // Initialize with start point, actual x,y,w,h set during updateDrawing
+    if (state.tool === 'text' || state.tool === 'circle') {
       newAnnotation.coordinates = { ...newAnnotation.coordinates, x:x, y:y, width: 0, height: 0, text: '' };
-    } else if (state.tool === 'freehand') {
-        newAnnotation.coordinates.points = [{ x, y }];
-    } else if (state.tool === 'polygon') {
-         // Initialize polygon with the first point
+    } else if (state.tool === 'freehand' || state.tool === 'polygon') {
         newAnnotation.coordinates.points = [{ x, y }];
     }
-
 
     setState((prev) => ({
         ...prev,
         isDrawing: true,
         currentAnnotation: newAnnotation,
-         // Add temp annotation for immediate feedback (except for polygon)
         annotations: state.tool !== 'polygon' ? [...prev.annotations, newAnnotation as Annotation] : prev.annotations
     }));
   };
 
   const updateDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Prevent drawing if locked
     if (!state.isDrawing || !state.tool || state.isLocked) return;
 
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -218,7 +205,6 @@ export function useAnnotation(caseId: string, userId: string) {
         if (!prev.currentAnnotation) return prev;
 
         const currentId = prev.currentAnnotation.id;
-        // Ensure start coordinates exist
         const start = prev.currentAnnotation.coordinates?.start || { x: 0, y: 0 };
         const newCoords = { ...prev.currentAnnotation.coordinates };
 
@@ -231,21 +217,22 @@ export function useAnnotation(caseId: string, userId: string) {
                 newCoords.height = Math.abs(y - start.y);
                 break;
             case "circle":
-                const dx = x - start.x;
-                const dy = y - start.y;
-                newCoords.x = start.x; // Center remains at start point
-                newCoords.y = start.y;
-                newCoords.radius = Math.sqrt(dx * dx + dy * dy);
+                const width = Math.abs(x - start.x);
+                const height = Math.abs(y - start.y);
+                newCoords.x = start.x + (x - start.x) / 2;
+                newCoords.y = start.y + (y - start.y) / 2;
+                newCoords.radiusX = width / 2;
+                newCoords.radiusY = height / 2;
                 break;
             case "triangle":
                 const bboxX = Math.min(start.x, x);
                 const bboxY = Math.min(start.y, y);
-                const width = Math.abs(x - start.x);
-                const height = Math.abs(y - start.y);
+                const triWidth = Math.abs(x - start.x);
+                const triHeight = Math.abs(y - start.y);
                 newCoords.points = [
-                    { x: bboxX + width / 2, y: bboxY },
-                    { x: bboxX, y: bboxY + height },
-                    { x: bboxX + width, y: bboxY + height },
+                    { x: bboxX + triWidth / 2, y: bboxY },
+                    { x: bboxX, y: bboxY + triHeight },
+                    { x: bboxX + triWidth, y: bboxY + triHeight },
                 ];
                 break;
             case "freehand":
@@ -255,12 +242,11 @@ export function useAnnotation(caseId: string, userId: string) {
                 }
                 break;
             case "polygon":
-                 break; // Polygon points added on click
+                 break;
         }
 
         const updatedAnnotation = { ...prev.currentAnnotation, coordinates: newCoords };
 
-        // Update the temporary annotation in the main list
         return {
             ...prev,
             currentAnnotation: updatedAnnotation,
@@ -270,21 +256,18 @@ export function useAnnotation(caseId: string, userId: string) {
   };
 
   const finishDrawing = () => {
-     // Prevent finishing if locked
     if (!state.isDrawing || !state.currentAnnotation || state.isLocked) return;
 
     const ann = state.currentAnnotation;
     const coords = ann.coordinates;
 
-    // Check validity
     let isValid = true;
     if ((ann.type === 'rectangle' || ann.type === 'text') && (!coords?.width || !coords?.height || coords.width < 5 || coords.height < 5 )) isValid = false;
-    else if (ann.type === 'circle' && (!coords?.radius || coords.radius < 3)) isValid = false;
+    else if (ann.type === 'circle' && (!coords?.radiusX || !coords?.radiusY || coords.radiusX < 3 || coords.radiusY < 3)) isValid = false;
     else if (ann.type === 'freehand' && (!coords?.points || coords.points.length < 2)) isValid = false;
     else if (ann.type === 'triangle' && (!coords?.points || coords.points.length < 3)) isValid = false;
 
     if (!isValid) {
-        // Remove invalid temp annotation
         setState(prev => ({
             ...prev, isDrawing: false, currentAnnotation: null,
             annotations: prev.annotations.filter(a => a.id !== ann.id)
@@ -292,26 +275,48 @@ export function useAnnotation(caseId: string, userId: string) {
         return;
     }
 
-    if (state.tool === 'text') {
-        // Finalize text box position, open editor
-        setState(prev => ({
-            ...prev,
-            textInputPosition: {
-                x: ann.coordinates.x, y: ann.coordinates.y,
-                width: ann.coordinates.width, height: ann.coordinates.height,
-                annotationId: ann.id!,
-            },
-            isDrawing: false,
-            currentAnnotation: null,
-            selectedAnnotationIds: []
-        }));
-        return; // History update happens in completeTextInput
+    if (state.tool !== 'freehand' && state.tool !== 'select' && state.tool !== 'polygon') {
+      let textX, textY, textWidth, textHeight;
+      if (ann.type === 'rectangle' || ann.type === 'text') {
+        textX = ann.coordinates.x;
+        textY = ann.coordinates.y;
+        textWidth = ann.coordinates.width;
+        textHeight = ann.coordinates.height;
+      } else if (ann.type === 'circle') {
+        textX = ann.coordinates.x - ann.coordinates.radiusX;
+        textY = ann.coordinates.y - ann.coordinates.radiusY;
+        textWidth = ann.coordinates.radiusX * 2;
+        textHeight = ann.coordinates.radiusY * 2;
+      } else if (ann.type === 'triangle') {
+        const xs = ann.coordinates.points.map((p: any) => p.x);
+        const ys = ann.coordinates.points.map((p: any) => p.y);
+        const minX = Math.min(...xs);
+        const minY = Math.min(...ys);
+        textX = minX;
+        textY = minY;
+        textWidth = Math.max(...xs) - minX;
+        textHeight = Math.max(...ys) - minY;
+      } else {
+        textX = 0; textY = 0; textWidth = 200; textHeight = 40;
+      }
+
+      setState(prev => ({
+          ...prev,
+          textInputPosition: {
+              x: textX, y: textY,
+              width: textWidth, height: textHeight,
+              annotationId: ann.id!,
+          },
+          isDrawing: false,
+          currentAnnotation: null,
+          selectedAnnotationIds: []
+      }));
+      return;
     }
 
-     // Finalize other shapes
     const completedAnnotation = {
         ...state.currentAnnotation,
-        coordinates: { ...state.currentAnnotation.coordinates, start: undefined }, // Remove temp start point
+        coordinates: { ...state.currentAnnotation.coordinates, start: undefined },
         createdAt: new Date().toISOString()
     } as Annotation;
 
@@ -326,21 +331,25 @@ export function useAnnotation(caseId: string, userId: string) {
     const { annotationId } = state.textInputPosition;
     let finalizedAnnotation: Annotation | undefined;
 
-    // Update the temporary text annotation
     const newAnnotations = state.annotations.map(ann => {
         if (ann.id === annotationId) {
-            finalizedAnnotation = {
-                ...ann,
-                coordinates: { ...ann.coordinates, text: text, start: undefined },
-                createdAt: new Date().toISOString()
+            const updates: Partial<Annotation> = {
+                createdAt: new Date().toISOString(),
             };
+            if(ann.type === 'text') {
+              updates.coordinates = { ...ann.coordinates, text: text, start: undefined };
+            } else {
+              updates.label = text;
+              updates.coordinates = { ...ann.coordinates, start: undefined };
+            }
+            finalizedAnnotation = { ...ann, ...updates };
             return finalizedAnnotation;
         }
         return ann;
     });
 
     if (finalizedAnnotation) {
-        updateAnnotationsAndHistory(newAnnotations, 'update'); // Save completed text box to history
+        updateAnnotationsAndHistory(newAnnotations, 'update');
     } else {
          console.error("Could not find annotation for text input:", annotationId);
          const cleanedAnnotations = state.annotations.filter(ann => ann.id !== annotationId);
@@ -352,49 +361,51 @@ export function useAnnotation(caseId: string, userId: string) {
   const cancelTextInput = () => {
     if (!state.textInputPosition) return;
     const { annotationId } = state.textInputPosition;
-    // Remove the temporary annotation
-    const newAnnotations = state.annotations.filter(ann => ann.id !== annotationId);
-    setState(prev => ({
-        ...prev,
-        annotations: newAnnotations,
-        textInputPosition: null,
-        selectedAnnotationIds: []
-    }));
-     // No history update needed
+    const annotation = state.annotations.find(ann => ann.id === annotationId);
+
+    // If it's not a text tool, the shape is already drawn, so we just close the input
+    if(annotation && annotation.type !== 'text') {
+       const finalAnnotations = state.annotations.map(a => a.id === annotationId ? { ...a, coordinates: {...a.coordinates, start: undefined}, createdAt: new Date().toISOString() } as Annotation : a);
+       updateAnnotationsAndHistory(finalAnnotations, 'drawing');
+       setState(prev => ({ ...prev, textInputPosition: null, selectedAnnotationIds: [] }));
+    } else { // if it is a text tool, we cancel the annotation itself
+      const newAnnotations = state.annotations.filter(ann => ann.id !== annotationId);
+      setState(prev => ({
+          ...prev,
+          annotations: newAnnotations,
+          textInputPosition: null,
+          selectedAnnotationIds: []
+      }));
+    }
   };
 
   const deleteSelectedAnnotations = () => {
      if (state.selectedAnnotationIds.length === 0) return;
 
-     // Fix: Filter out locked annotations *before* deleting
      const deletableIds = state.selectedAnnotationIds.filter(id => {
          const ann = state.annotations.find(a => a.id === id);
-         return ann && !ann.locked; // Only allow deleting if found and not locked
+         return ann && !ann.locked;
      });
 
      if (deletableIds.length === 0) {
          console.log("No unlocked annotations selected for deletion.");
-         return; // Nothing to delete
+         return;
      }
 
-    // Filter out annotations that are NOT selected and deletable
     const newAnnotations = state.annotations.filter(a => !deletableIds.includes(a.id));
 
-    // Update history only if something was actually deleted
     if (newAnnotations.length < state.annotations.length) {
        updateAnnotationsAndHistory(newAnnotations, 'delete');
     }
 
-    // Clear selection after delete attempt
     setState(prev => ({ ...prev, selectedAnnotationIds: [] }));
   };
 
   const updateAnnotation = (id: string, updates: Partial<Annotation>) => {
-     // Find the annotation first to check if it's locked
      const annotationToUpdate = state.annotations.find(ann => ann.id === id);
      if (annotationToUpdate?.locked) {
          console.log(`Annotation ${id} is locked. Cannot update.`);
-         return; // Prevent updating locked annotations
+         return;
      }
 
     const newAnnotations = state.annotations.map(ann =>
@@ -409,7 +420,6 @@ export function useAnnotation(caseId: string, userId: string) {
   const toggleAnnotationsVisibility = (ids: string[], visible: boolean) => {
     let changed = false;
     const newAnnotations = state.annotations.map(ann => {
-        // Fix: Prevent hiding/showing locked annotations
         if (ids.includes(ann.id) && !ann.locked && ann.visible !== visible) {
             changed = true;
             return { ...ann, visible, updatedAt: new Date().toISOString() };
@@ -423,7 +433,6 @@ export function useAnnotation(caseId: string, userId: string) {
 
   const lockAnnotations = (ids: string[], locked: boolean) => {
      let changed = false;
-     // Note: Locking itself should always be allowed
     const newAnnotations = state.annotations.map(ann => {
       if (ids.includes(ann.id) && ann.locked !== locked) {
           changed = true;
@@ -440,13 +449,11 @@ export function useAnnotation(caseId: string, userId: string) {
     const newAnnotationsToAdd: Annotation[] = [];
     ids.forEach(id => {
       const original = state.annotations.find(a => a.id === id);
-       // Fix: Prevent duplicating locked annotations
       if (original && !original.locked) {
         const newId = uuidv4();
         const newCoords = JSON.parse(JSON.stringify(original.coordinates));
         const offset = 10;
 
-        // Offset coordinates
         if (typeof newCoords.x === 'number' && typeof newCoords.y === 'number') {
             newCoords.x += offset;
             newCoords.y += offset;
@@ -457,7 +464,7 @@ export function useAnnotation(caseId: string, userId: string) {
         newAnnotationsToAdd.push({
           ...original,
           id: newId,
-          locked: false, // Duplicates start unlocked
+          locked: false,
           coordinates: newCoords,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -507,7 +514,6 @@ export function useAnnotation(caseId: string, userId: string) {
     });
   };
 
-  // --- API Functions ---
   const saveAllAnnotationsSnapshot = async () => {
     if (!userId || !caseId) {
       console.error("Cannot save snapshot: userId or caseId missing.");
@@ -547,7 +553,6 @@ export function useAnnotation(caseId: string, userId: string) {
       const data = await res.json();
 
       if (Array.isArray(data)) {
-        // Sort by version number descending (latest first)
         const sorted = [...data].sort((a, b) => b.version - a.version);
         setState(prev => ({
           ...prev,
@@ -600,20 +605,16 @@ export function useAnnotation(caseId: string, userId: string) {
     setState(prev => ({...prev, imageBounds: bounds}));
   };
 
-  // Fetch initial versions
   useEffect(() => { loadVersions(); }, [loadVersions]);
 
   return {
-    ...state, // Spread all state properties
-    // Functions
+    ...state,
     canvasRef, setTool, setColor, startDrawing, updateDrawing, finishDrawing,
     deleteSelectedAnnotations, updateAnnotation, toggleAnnotationsVisibility,
     lockAnnotations, duplicateAnnotations, undo, redo,
     completeTextInput, cancelTextInput, saveAllAnnotationsSnapshot,
     loadVersions, deleteVersion, setImageBounds, restoreVersion,
-    // Calculated values
     canUndo: state.historyIndex > 0,
-    canRedo: state.historyIndex < (state.history?.length ?? 1) - 1, // Safe check for history length
+    canRedo: state.historyIndex < (state.history?.length ?? 1) - 1,
   };
 }
-
