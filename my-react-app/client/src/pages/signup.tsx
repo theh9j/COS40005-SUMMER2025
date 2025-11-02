@@ -102,7 +102,10 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen medical-gradient flex flex-col" data-testid="signup-screen">
+    <div
+      className="min-h-screen medical-gradient flex flex-col"
+      data-testid="signup-screen"
+    >
       {/* --- Navbar --- */}
       <header className="bg-card border-b border-border h-16 px-6 flex items-center justify-start sticky top-0 z-40">
         <button
@@ -120,12 +123,143 @@ export default function Signup() {
           <CardContent className="p-8">
             <div className="text-center mb-8">
               <UserPlus className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-card-foreground">Create Account</h1>
-              <p className="text-muted-foreground mt-2">Join the learning community</p>
+              <h1 className="text-2xl font-bold text-card-foreground">
+                Create Account
+              </h1>
+              <p className="text-muted-foreground mt-2">
+                Join the learning community
+              </p>
             </div>
 
-            {/* form remains unchanged */}
-            {/* existing signup form code here */}
+            {/* --- Signup Form --- */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input
+                    id="firstName"
+                    value={formData.firstName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, firstName: e.target.value })
+                    }
+                    disabled={isSubmitting}
+                  />
+                  {errors.firstName && (
+                    <p className="text-sm text-destructive">
+                      {errors.firstName}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    value={formData.lastName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lastName: e.target.value })
+                    }
+                    disabled={isSubmitting}
+                  />
+                  {errors.lastName && (
+                    <p className="text-sm text-destructive">
+                      {errors.lastName}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                  disabled={isSubmitting}
+                />
+                {errors.email && (
+                  <p className="text-sm text-destructive">{errors.email}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="role">Role</Label>
+                <Select
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, role: value })
+                  }
+                  value={formData.role}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="student">Student</SelectItem>
+                    <SelectItem value="instructor">Instructor</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.role && (
+                  <p className="text-sm text-destructive">{errors.role}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  disabled={isSubmitting}
+                />
+                {errors.password && (
+                  <p className="text-sm text-destructive">
+                    {errors.password}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      confirmPassword: e.target.value,
+                    })
+                  }
+                  disabled={isSubmitting}
+                />
+                {errors.confirmPassword && (
+                  <p className="text-sm text-destructive">
+                    {errors.confirmPassword}
+                  </p>
+                )}
+              </div>
+
+              {errors.form && (
+                <p className="text-sm text-destructive">{errors.form}</p>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isSubmitting || isLoading}
+              >
+                {isSubmitting || isLoading
+                  ? "Creating account..."
+                  : "Sign Up"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
