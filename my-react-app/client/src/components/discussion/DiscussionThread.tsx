@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Tag as TagIcon, X } from 'lucide-react';
+import { Plus, Search, Tag as TagIcon, X, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,6 +21,7 @@ const DiscussionThread: React.FC = () => {
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostMessage, setNewPostMessage] = useState('');
   const [newPostTags, setNewPostTags] = useState<Tag[]>([]);
+  const [newPostImagePreview, setNewPostImagePreview] = useState<string | null>(null); // New state for image preview
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<Tag | 'all'>('all');
 
@@ -40,13 +41,30 @@ const DiscussionThread: React.FC = () => {
       timestamp: new Date().toISOString(),
       tags: newPostTags,
       replies: [],
+      imageUrl: newPostImagePreview, // Add image URL to new thread object
     };
 
     setThreads([newThread, ...threads]);
     setNewPostTitle('');
     setNewPostMessage('');
     setNewPostTags([]);
+    setNewPostImagePreview(null); // Reset image preview
     setIsCreatingPost(false);
+  };
+  
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewPostImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setNewPostImagePreview(null);
   };
 
   const handleTagToggle = (tag: Tag) => {
@@ -134,18 +152,69 @@ const DiscussionThread: React.FC = () => {
               </div>
             ) : (
               <div className="p-4 border rounded-lg shadow-sm">
-                <div className="grid gap-4">
-                  <div>
-                    <Label htmlFor="title" className="mb-2 block font-medium">
-                      Title
-                    </Label>
-                    <Input
-                      id="title"
-                      value={newPostTitle}
-                      onChange={(e) => setNewPostTitle(e.target.value)}
-                      placeholder="Your post title..."
-                    />
+                <div className="flex flex-col gap-4">
+                  
+                  {/* Title and Image Row */}
+                  <div className="flex flex-row justify-between items-start gap-6">
+                    {/* Title (Left, flexible) */}
+                    <div className="flex-1">
+                      <Label htmlFor="title" className="mb-2 block font-medium">
+                        Title
+                      </Label>
+                      <Input
+                        id="title"
+                        value={newPostTitle}
+                        onChange={(e) => setNewPostTitle(e.target.value)}
+                        placeholder="Your post title..."
+                      />
+                    </div>
+
+                    {/* Image Upload (Right, fixed width) */}
+                    <div className="flex-shrink-0">
+                      <Label htmlFor="image-upload" className="mb-2 block font-medium">
+                        Post Image
+                      </Label>
+                      {newPostImagePreview ? (
+                        <div className="relative group h-20 w-20">
+                          <img 
+                            src={newPostImagePreview} 
+                            alt="Preview" 
+                            className="h-20 w-20 object-cover rounded-md border"
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={handleRemoveImage}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="image-upload"
+                          className="flex flex-col items-center justify-center h-20 w-20 border-2 border-dashed rounded-lg cursor-pointer bg-card hover:bg-muted"
+                        >
+                          <div className="flex flex-col items-center justify-center p-1 text-center">
+                            <ImageIcon className="w-5 h-5 mb-1 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground">
+                              Upload
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">PNG, JPG</p>
+                          </div>
+                          <Input 
+                            id="image-upload" 
+                            type="file" 
+                            className="hidden" 
+                            accept="image/png, image/jpeg, image/gif"
+                            onChange={handleImageUpload}
+                          />
+                        </label>
+                      )}
+                    </div>
                   </div>
+                  
+                  {/* Message (Full Width) */}
                   <div>
                     <Label htmlFor="message" className="mb-2 block font-medium">
                       Message
@@ -155,11 +224,15 @@ const DiscussionThread: React.FC = () => {
                       value={newPostMessage}
                       onChange={(e) => setNewPostMessage(e.target.value)}
                       placeholder="Type your message..."
-                      rows={5}
+                      rows={8}
                     />
                   </div>
-                  
+
+                  {/* Tags (Full Width) */}
                   <div>
+                    <Label className="mb-2 block font-medium">
+                      Tags
+                    </Label>
                     <div className="flex items-center gap-2">
                       <TagIcon className="h-4 w-4 text-muted-foreground" />
                       <Button
@@ -188,10 +261,12 @@ const DiscussionThread: React.FC = () => {
                       </Button>
                     </div>
                   </div>
-                  
                 </div>
                 <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="outline" onClick={() => setIsCreatingPost(false)}>
+                  <Button variant="outline" onClick={() => {
+                    setIsCreatingPost(false);
+                    setNewPostImagePreview(null); // Also reset image on cancel
+                  }}>
                     Cancel
                   </Button>
                   <Button onClick={handleCreatePost} disabled={!newPostTitle || !newPostMessage}>
@@ -286,6 +361,14 @@ const DiscussionThread: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-sm mt-1 whitespace-pre-wrap">{selectedThread.content}</p>
+                  {/* Display Image if it exists */}
+                  {selectedThread.imageUrl && (
+                    <img 
+                      src={selectedThread.imageUrl} 
+                      alt="Post attachment"
+                      className="mt-4 w-full max-w-lg rounded-lg border"
+                    />
+                  )}
                 </div>
               </div>
 

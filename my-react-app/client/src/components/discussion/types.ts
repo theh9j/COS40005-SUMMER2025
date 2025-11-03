@@ -15,10 +15,14 @@ export interface Author {
 
 export interface Thread {
   id: string;
-  author: Author;
+  author: {
+    name: string;
+    avatarUrl: string;
+  };
   title: string;
   content: string;
   timestamp: string;
   tags: Tag[];
   replies: Reply[];
+  imageUrl?: string | null;
 }
