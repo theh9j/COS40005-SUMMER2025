@@ -28,7 +28,7 @@ type HomeworkMeta = { dueAt: string; closed: boolean };
 const homeworkByCase: Record<string, HomeworkMeta> = {
   "case-1": { dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false },
   "case-2": { dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false },
-  "case-3": { dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true  },
+  "case-3": { dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true },
 };
 
 // === Trạng thái bài nộp của riêng học sinh 
@@ -51,7 +51,7 @@ const myAnnotations = mockCases
   .map(c => ({
     caseId: c.id,
     caseTitle: c.title,
-    updatedAgo: "today", 
+    updatedAgo: "today",
   }));
 
 
@@ -304,10 +304,13 @@ export default function StudentDashboard() {
               return (
                 <Button
                   key={item.id}
-                  variant={isActive ? "default" : "ghost"}
-                  className={`w-full justify-start ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-secondary hover:text-black text-foreground"}`}
+                  variant="ghost"
+                  className={`w-full justify-start hover:bg-transparent ${isActive
+                      ? "text-primary hover:text-primary"
+                      : "text-foreground hover:text-foreground"
+                    }`}
                   onClick={() => {
-                     {
+                    {
                       setActiveView(item.id);
                     }
                   }}
@@ -444,10 +447,10 @@ export default function StudentDashboard() {
 
           {activeView === "collaboration" && (
             <div className="p-6" data-testid="view-collaboration">
-              <DiscussionThread/>
+              <DiscussionThread />
             </div>
           )}
-          
+
           {activeView === "annotations" && (
             <div className="p-6" data-testid="view-annotations">
               <div className="flex items-center justify-between mb-6">
