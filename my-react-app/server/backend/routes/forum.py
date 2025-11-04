@@ -22,7 +22,7 @@ async def create_thread(
     image: UploadFile | None = None
 ):
     try:
-        user_folder = Path(f"uploads/{authorId}")
+        user_folder = Path(f"/uploads/{authorId}")
         user_folder.mkdir(parents=True, exist_ok=True)
 
         image_path = None
@@ -32,6 +32,7 @@ async def create_thread(
             with open(image_path, "wb") as f:
                 shutil.copyfileobj(image.file, f)
             image_path = str(image_path)
+            image_path = f"server/backend" / image_path
 
         thread = {
             "title": title,
