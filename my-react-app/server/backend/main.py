@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from db.connection import db, users_collection, approvals_collection
+from db.connection import users_collection, approvals_collection
 import random
 from pathlib import Path
 from core.security import hash_password
-from routes import auth, admin, online, annotations, user, ws_routes
+from fastapi.staticfiles import StaticFiles
+from routes import auth, admin, online, annotations, user, ws_routes, forum
 
 app = FastAPI()
 
@@ -22,6 +23,9 @@ app.include_router(online.router)
 app.include_router(user.router)
 app.include_router(annotations.router)
 app.include_router(ws_routes.router)
+app.include_router(forum.router)
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.on_event("startup")
 async def startup_event():

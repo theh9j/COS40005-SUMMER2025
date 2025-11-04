@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import ThreadItem from './ThreadItem';
 import ReplyBox from './ReplyBox';
 import { Thread, Tag, Reply } from './types';
@@ -27,28 +27,32 @@ const DiscussionThread: React.FC = () => {
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
     if (!newPostTitle || !newPostMessage || !user) return;
 
-    const newThread: Thread = {
-      id: crypto.randomUUID(),
-      author: {
-        name: user.firstName ? `${user.firstName} ${user.lastName}` : 'Anonymous User',
-        avatarUrl: `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`,
-      },
-      title: newPostTitle,
-      content: newPostMessage,
-      timestamp: new Date().toISOString(),
-      tags: newPostTags,
-      replies: [],
-      imageUrl: newPostImagePreview, // Add image URL to new thread object
-    };
+    const formData = new FormData();
+    formData.append("title", newPostTitle);
+    formData.append("content", newPostMessage);
+    formData.append("authorId", user?.user_id ?? "");
+    formData.append("authorName", `${user.firstName} ${user.lastName}`);
+    formData.append("avatarUrl", `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`);
+    formData.append("tags", JSON.stringify(newPostTags));
+    if (newPostImagePreview) {
+      const blob = await fetch(newPostImagePreview).then((r) => r.blob());
+      formData.append("image", new File([blob], "upload.png", { type: blob.type }));
+    }
 
-    setThreads([newThread, ...threads]);
+    const res = await fetch("http://127.0.0.1:8000/api/forum/create", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+    setThreads([data, ...threads]);
     setNewPostTitle('');
     setNewPostMessage('');
     setNewPostTags([]);
-    setNewPostImagePreview(null); // Reset image preview
+    setNewPostImagePreview(null);
     setIsCreatingPost(false);
   };
   
@@ -75,6 +79,26 @@ const DiscussionThread: React.FC = () => {
     );
   };
 
+  useEffect(() => {
+    async function loadThreads() {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/forum/threads");
+        const data = await res.json();
+
+        // Defensive: ensure each thread has an id
+        const formatted = Array.isArray(data)
+          ? data.map((t) => ({ ...t, id: t.id ?? t._id }))
+          : [];
+
+        setThreads(formatted);
+      } catch (err) {
+        console.error("Failed to load threads:", err);
+        setThreads([]);
+      }
+    }
+    loadThreads();
+  }, []);
+
   const filteredThreads = useMemo(() => {
     return threads.filter((thread) => {
       const tagMatch =
@@ -95,18 +119,21 @@ const DiscussionThread: React.FC = () => {
     return threads.find((t) => t.id === selectedThreadId);
   }, [threads, selectedThreadId]);
 
-  const handlePostReply = (replyContent: string) => {
+  const handlePostReply = async (replyContent: string) => {
     if (!selectedThreadId || !user) return;
 
-    const newReply: Reply = {
-      id: crypto.randomUUID(),
-      author: {
-        name: user.firstName ? `${user.firstName} ${user.lastName}` : 'Anonymous User',
-        avatarUrl: `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`,
-      },
-      content: replyContent,
-      timestamp: new Date().toISOString(),
-    };
+    const formData = new FormData();
+    formData.append("authorId", user?.user_id ?? "");
+    formData.append("authorName", `${user.firstName} ${user.lastName}`);
+    formData.append("avatarUrl", `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`);
+    formData.append("content", replyContent);
+
+    const res = await fetch(`http://127.0.0.1:8000/api/forum/thread/${selectedThreadId}/reply`, {
+      method: "POST",
+      body: formData,
+    });
+
+    const newReply = await res.json();
 
     setThreads((prevThreads) =>
       prevThreads.map((thread) =>

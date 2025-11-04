@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
 class User(BaseModel):
     firstName: str
@@ -36,3 +36,28 @@ class AnnotationVersion(BaseModel):
     userId: str
     annotations: List[Dict[str, Any]]
     createdAt: datetime = datetime.now()
+
+class ForumAuthor(BaseModel):
+    name: str
+    avatarUrl: Optional[str] = None
+
+class ForumReply(BaseModel):
+    id: str
+    author: ForumAuthor
+    role: Optional[Literal["student", "instructor", "admin"]] = None
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+class ForumThread(BaseModel):
+    id: Optional[str] = Field(default=None, alias="_id")
+    author: ForumAuthor
+    title: str
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+    tags: List[str] = []
+    replies: List[ForumReply] = []
+    imageUrl: Optional[str] = None
+
+    class Config:
+        allow_population_by_field_name = True
+        orm_mode = True
