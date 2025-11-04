@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import ThreadItem from './ThreadItem';
 import ReplyBox from './ReplyBox';
 import { Thread, Tag, Reply } from './types';
@@ -21,34 +21,30 @@ const DiscussionThread: React.FC = () => {
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostMessage, setNewPostMessage] = useState('');
   const [newPostTags, setNewPostTags] = useState<Tag[]>([]);
-  const [newPostImagePreview, setNewPostImagePreview] = useState<string | null>(null); // New state for image preview
+  const [newPostImagePreview, setNewPostImagePreview] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<Tag | 'all'>('all');
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
-  const handleCreatePost = async () => {
+  const handleCreatePost = () => {
     if (!newPostTitle || !newPostMessage || !user) return;
 
-    const formData = new FormData();
-    formData.append("title", newPostTitle);
-    formData.append("content", newPostMessage);
-    formData.append("authorId", user?.user_id ?? "");
-    formData.append("authorName", `${user.firstName} ${user.lastName}`);
-    formData.append("avatarUrl", `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`);
-    formData.append("tags", JSON.stringify(newPostTags));
-    if (newPostImagePreview) {
-      const blob = await fetch(newPostImagePreview).then((r) => r.blob());
-      formData.append("image", new File([blob], "upload.png", { type: blob.type }));
-    }
+    const newThread: Thread = {
+      id: crypto.randomUUID(),
+      author: {
+        name: user.firstName ? `${user.firstName} ${user.lastName}` : 'Anonymous User',
+        avatarUrl: `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`,
+      },
+      title: newPostTitle,
+      content: newPostMessage,
+      timestamp: new Date().toISOString(),
+      tags: newPostTags,
+      replies: [],
+      imageUrl: newPostImagePreview,
+    };
 
-    const res = await fetch("http://127.0.0.1:8000/api/forum/create", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await res.json();
-    setThreads([data, ...threads]);
+    setThreads([newThread, ...threads]);
     setNewPostTitle('');
     setNewPostMessage('');
     setNewPostTags([]);
@@ -79,36 +75,21 @@ const DiscussionThread: React.FC = () => {
     );
   };
 
-  useEffect(() => {
-    async function loadThreads() {
-      try {
-        const res = await fetch("http://127.0.0.1:8000/api/forum/threads");
-        const data = await res.json();
-
-        // Defensive: ensure each thread has an id
-        const formatted = Array.isArray(data)
-          ? data.map((t) => ({ ...t, id: t.id ?? t._id }))
-          : [];
-
-        setThreads(formatted);
-      } catch (err) {
-        console.error("Failed to load threads:", err);
-        setThreads([]);
-      }
-    }
-    loadThreads();
-  }, []);
-
   const filteredThreads = useMemo(() => {
     return threads.filter((thread) => {
+      const tags = thread.tags || [];
+      const title = thread.title || '';
+      const content = thread.content || '';
+      const authorName = thread.author?.name || '';
+      
       const tagMatch =
-        selectedTag === 'all' || thread.tags.includes(selectedTag);
+        selectedTag === 'all' || tags.includes(selectedTag as Tag);
 
       const searchMatch =
         searchTerm.trim() === '' ||
-        thread.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        thread.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        thread.author.name.toLowerCase().includes(searchTerm.toLowerCase());
+        title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        authorName.toLowerCase().includes(searchTerm.toLowerCase());
 
       return tagMatch && searchMatch;
     });
@@ -119,26 +100,23 @@ const DiscussionThread: React.FC = () => {
     return threads.find((t) => t.id === selectedThreadId);
   }, [threads, selectedThreadId]);
 
-  const handlePostReply = async (replyContent: string) => {
+  const handlePostReply = (replyContent: string) => {
     if (!selectedThreadId || !user) return;
 
-    const formData = new FormData();
-    formData.append("authorId", user?.user_id ?? "");
-    formData.append("authorName", `${user.firstName} ${user.lastName}`);
-    formData.append("avatarUrl", `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}`);
-    formData.append("content", replyContent);
-
-    const res = await fetch(`http://127.0.0.1:8000/api/forum/thread/${selectedThreadId}/reply`, {
-      method: "POST",
-      body: formData,
-    });
-
-    const newReply = await res.json();
+    const newReply: Reply = {
+      id: crypto.randomUUID(),
+      author: {
+        name: user.firstName ? `${user.firstName} ${user.lastName}` : 'Anonymous User',
+        avatarUrl: `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`,
+      },
+      content: replyContent,
+      timestamp: new Date().toISOString(),
+    };
 
     setThreads((prevThreads) =>
       prevThreads.map((thread) =>
         thread.id === selectedThreadId
-          ? { ...thread, replies: [...thread.replies, newReply] }
+          ? { ...thread, replies: [...(thread.replies || []), newReply] } 
           : thread
       )
     );
@@ -181,9 +159,7 @@ const DiscussionThread: React.FC = () => {
               <div className="p-4 border rounded-lg shadow-sm">
                 <div className="flex flex-col gap-4">
                   
-                  {/* Title and Image Row */}
                   <div className="flex flex-row justify-between items-start gap-6">
-                    {/* Title (Left, flexible) */}
                     <div className="flex-1">
                       <Label htmlFor="title" className="mb-2 block font-medium">
                         Title
@@ -196,10 +172,9 @@ const DiscussionThread: React.FC = () => {
                       />
                     </div>
 
-                    {/* Image Upload (Right, fixed width) */}
                     <div className="flex-shrink-0">
                       <Label htmlFor="image-upload" className="mb-2 block font-medium">
-                        Post Image
+                        Attach Image
                       </Label>
                       {newPostImagePreview ? (
                         <div className="relative group h-20 w-20">
@@ -241,7 +216,6 @@ const DiscussionThread: React.FC = () => {
                     </div>
                   </div>
                   
-                  {/* Message (Full Width) */}
                   <div>
                     <Label htmlFor="message" className="mb-2 block font-medium">
                       Message
@@ -255,7 +229,6 @@ const DiscussionThread: React.FC = () => {
                     />
                   </div>
 
-                  {/* Tags (Full Width) */}
                   <div>
                     <Label className="mb-2 block font-medium">
                       Tags
@@ -292,7 +265,7 @@ const DiscussionThread: React.FC = () => {
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => {
                     setIsCreatingPost(false);
-                    setNewPostImagePreview(null); // Also reset image on cancel
+                    setNewPostImagePreview(null);
                   }}>
                     Cancel
                   </Button>
@@ -330,7 +303,7 @@ const DiscussionThread: React.FC = () => {
           {filteredThreads.length > 0 ? (
             filteredThreads.map((thread) => (
               <ThreadItem 
-                key={thread.id} 
+                key={thread.id || Math.random()}
                 thread={thread}
                 onSelectThread={setSelectedThreadId}
                 isSelected={thread.id === selectedThreadId} 
@@ -359,7 +332,7 @@ const DiscussionThread: React.FC = () => {
               </Button>
             </div>
             <div className="flex gap-2 mt-2 pb-4 border-b">
-              {selectedThread.tags.map((tag) => (
+              {(selectedThread.tags || []).map((tag) => (
                 <Badge
                   key={tag}
                   variant="secondary"
@@ -374,21 +347,20 @@ const DiscussionThread: React.FC = () => {
             <div className="py-6 space-y-4">
               <div key={selectedThread.id} className="flex gap-3">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={selectedThread.author.avatarUrl} alt={selectedThread.author.name} />
+                  <AvatarImage src={selectedThread.author?.avatarUrl} alt={selectedThread.author?.name} />
                   <AvatarFallback>
-                    {getInitials(selectedThread.author.name)}
+                    {getInitials(selectedThread.author?.name)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="font-semibold text-base">{selectedThread.author.name}</span>
+                    <span className="font-semibold text-base">{selectedThread.author?.name || '...'}</span>
                     <Badge variant="outline" className="h-5 px-2 py-0.5 text-xs">OP</Badge>
                     <span className="text-xs text-muted-foreground">
                       {formatTimestamp(selectedThread.timestamp)}
                     </span>
                   </div>
                   <p className="text-sm mt-1 whitespace-pre-wrap">{selectedThread.content}</p>
-                  {/* Display Image if it exists */}
                   {selectedThread.imageUrl && (
                     <img 
                       src={selectedThread.imageUrl} 
@@ -399,18 +371,18 @@ const DiscussionThread: React.FC = () => {
                 </div>
               </div>
 
-              {selectedThread.replies.map((reply) => (
+              {(selectedThread.replies || []).map((reply) => (
                 <div key={reply.id} className="flex gap-3">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={reply.author.avatarUrl} alt={reply.author.name} />
+                    <AvatarImage src={reply.author?.avatarUrl} alt={reply.author?.name} />
                     <AvatarFallback>
-                      {getInitials(reply.author.name)}
+                      {getInitials(reply.author?.name)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-semibold text-base">{reply.author.name}</span>
-                      {reply.author.name === selectedThread.author.name && (
+                      <span className="font-semibold text-base">{reply.author?.name || '...'}</span>
+                      {reply.author?.name === selectedThread.author?.name && (
                         <Badge variant="outline" className="h-5 px-2 py-0.5 text-xs">OP</Badge>
                       )}
                       <span className="text-xs text-muted-foreground">

@@ -18,7 +18,11 @@ interface ThreadItemProps {
 }
 
 export const formatTimestamp = (isoString: string) => {
+  if (!isoString) return '...'; 
   const date = new Date(isoString);
+  if (isNaN(date.getTime())) {
+    return '...';
+  }
   return date.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -37,21 +41,22 @@ const getInitials = (name: string) => {
 };
 
 const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onSelectThread, isSelected }) => {
+  const content = thread.content || '';
   const truncatedContent =
-    thread.content.length > 150
-      ? `${thread.content.substring(0, 150)}...`
-      : thread.content;
+    content.length > 100
+      ? `${content.substring(0, 100)}...`
+      : content;
 
   return (
     <Card 
       className={`w-full transition-all hover:shadow-md cursor-pointer ${
         isSelected ? 'border-primary shadow-md' : ''
       }`}
-      onClick={() => onSelectThread(thread.id)}
+      onClick={() => thread.id && onSelectThread(thread.id)}
     >
       <CardHeader className="pb-2">
         <div className="flex gap-2 mb-2">
-          {thread.tags.map((tag) => (
+          {(thread.tags || []).map((tag) => (
             <Badge
               key={tag}
               variant="secondary"
@@ -60,18 +65,27 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onSelectThread, isSelec
             </Badge>
           ))}
         </div>
-        <CardTitle className="text-xl">{thread.title}</CardTitle>
+        <CardTitle className="text-xl">{thread.title || 'Untitled Post'}</CardTitle>
       </CardHeader>
       <CardContent className="py-2">
+        {thread.imageUrl && (
+          <div className="mt-2 mb-4">
+            <img 
+              src={thread.imageUrl} 
+              alt="Thread attachment" 
+              className="rounded-lg border object-cover h-48 w-full" 
+            />
+          </div>
+        )}
         <CardDescription>
-          <span className="font-semibold text-primary">{thread.author.name}</span>
+          <span className="font-semibold text-primary">{thread.author?.name || 'Anonymous User'}</span>
           : {truncatedContent}
         </CardDescription>
       </CardContent>
       <CardFooter className="pt-2 pb-4 flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center space-x-1">
           <MessageSquare size={14} />
-          <span>{thread.replies.length + 1} replies</span>
+          <span>{(thread.replies || []).length + 1} replies</span>
         </div>
         <div className="flex items-center space-x-1">
           <Clock size={14} />
