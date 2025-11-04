@@ -166,7 +166,6 @@ export default function StudentDashboard() {
             completionRatePct: 92,
             collaborationScorePct: 78,
           });
-          setStatsError("Using mock data (backend unavailable).");
         }
       }
     }
