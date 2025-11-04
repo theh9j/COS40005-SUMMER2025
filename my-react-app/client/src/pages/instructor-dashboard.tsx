@@ -174,10 +174,10 @@ export default function InstructorDashboard() {
               return (
                 <Button
                   key={item.id}
-                  variant={isActive ? "default" : "ghost"}
-                  className={`w-full justify-start ${isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-secondary hover:text-black text-foreground"
+                  variant="ghost"
+                  className={`w-full justify-start hover:bg-transparent ${isActive
+                      ? "text-primary hover:text-primary"
+                      : "text-foreground hover:text-foreground"
                     }`}
                   onClick={() => setActiveView(item.id as InstructorView)}
                 >
@@ -185,7 +185,6 @@ export default function InstructorDashboard() {
                   <span className="ml-3 opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
                     {item.label}
                   </span>
-
                 </Button>
               );
             })}
