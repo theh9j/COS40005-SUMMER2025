@@ -31,7 +31,7 @@ const DiscussionThread: React.FC = () => {
     if (!newPostTitle || !newPostMessage || !user) return;
 
     const formData = new FormData();
-    formData.append("user_id", user.user_id);
+    formData.append("user_id", user.user_id!);
     formData.append("title", newPostTitle);
     formData.append("content", newPostMessage);
     formData.append("tags", newPostTags.join(","));
@@ -131,7 +131,7 @@ const DiscussionThread: React.FC = () => {
 
     const formData = new FormData();
     formData.append("thread_id", selectedThreadId);
-    formData.append("user_id", user.user_id);
+    formData.append("user_id", user.user_id!);
     formData.append("content", replyContent);
 
     try {
@@ -145,7 +145,7 @@ const DiscussionThread: React.FC = () => {
         // Optimistic update (no need to refetch all)
         setThreads((prev) =>
           prev.map((t) =>
-            t.id === selectedThreadId || t._id === selectedThreadId
+            t.id === selectedThreadId || t.id === selectedThreadId
               ? { ...t, replies: [...(t.replies || []), result.reply] }
               : t
           )
