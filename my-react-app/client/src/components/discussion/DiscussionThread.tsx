@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import ThreadItem from './ThreadItem';
 import ReplyBox from './ReplyBox';
 import { Thread, Tag, Reply } from './types';
@@ -27,41 +27,67 @@ const DiscussionThread: React.FC = () => {
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
     if (!newPostTitle || !newPostMessage || !user) return;
 
-    const newThread: Thread = {
-      id: crypto.randomUUID(),
-      author: {
-        name: user.firstName ? `${user.firstName} ${user.lastName}` : 'Anonymous User',
-        avatarUrl: `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`,
-      },
-      title: newPostTitle,
-      content: newPostMessage,
-      timestamp: new Date().toISOString(),
-      tags: newPostTags,
-      replies: [],
-      imageUrl: newPostImagePreview,
-    };
+    const formData = new FormData();
+    formData.append("user_id", user.user_id);
+    formData.append("title", newPostTitle);
+    formData.append("content", newPostMessage);
+    formData.append("tags", newPostTags.join(","));
+    if (newPostImagePreview && newPostImageFile) {
+      formData.append("image", newPostImageFile);
+    }
 
-    setThreads([newThread, ...threads]);
-    setNewPostTitle('');
-    setNewPostMessage('');
+    try {
+      const res = await fetch("http://127.0.0.1:8000/forum/create", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await res.json();
+      if (result.status === "success") {
+        // Option 1: re-fetch from backend
+        const refreshed = await fetch("http://127.0.0.1:8000/forum");
+        const updated = await refreshed.json();
+        setThreads(updated);
+      }
+    } catch (err) {
+      console.error("Error creating thread:", err);
+    }
+
+    // Reset UI
+    setNewPostTitle("");
+    setNewPostMessage("");
     setNewPostTags([]);
     setNewPostImagePreview(null);
     setIsCreatingPost(false);
   };
-  
+
+  const [newPostImageFile, setNewPostImageFile] = useState<File | null>(null);
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      setNewPostImageFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewPostImagePreview(reader.result as string);
-      };
+      reader.onloadend = () => setNewPostImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
+
+  useEffect(() => {
+  const fetchThreads = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/forum");
+      const data = await res.json();
+      setThreads(data);
+    } catch (err) {
+      console.error("Failed to fetch threads:", err);
+    }
+  };
+
+  fetchThreads();
+}, []);
 
   const handleRemoveImage = () => {
     setNewPostImagePreview(null);
@@ -100,27 +126,36 @@ const DiscussionThread: React.FC = () => {
     return threads.find((t) => t.id === selectedThreadId);
   }, [threads, selectedThreadId]);
 
-  const handlePostReply = (replyContent: string) => {
+  const handlePostReply = async (replyContent: string) => {
     if (!selectedThreadId || !user) return;
 
-    const newReply: Reply = {
-      id: crypto.randomUUID(),
-      author: {
-        name: user.firstName ? `${user.firstName} ${user.lastName}` : 'Anonymous User',
-        avatarUrl: `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=random`,
-      },
-      content: replyContent,
-      timestamp: new Date().toISOString(),
-    };
+    const formData = new FormData();
+    formData.append("thread_id", selectedThreadId);
+    formData.append("user_id", user.user_id);
+    formData.append("content", replyContent);
 
-    setThreads((prevThreads) =>
-      prevThreads.map((thread) =>
-        thread.id === selectedThreadId
-          ? { ...thread, replies: [...(thread.replies || []), newReply] } 
-          : thread
-      )
-    );
+    try {
+      const res = await fetch("http://127.0.0.1:8000/forum/reply", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await res.json();
+
+      if (result.status === "success") {
+        // Optimistic update (no need to refetch all)
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === selectedThreadId || t._id === selectedThreadId
+              ? { ...t, replies: [...(t.replies || []), result.reply] }
+              : t
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Error posting reply:", err);
+    }
   };
+
   
   const getInitials = (name: string) => {
     if (!name) return '??';
