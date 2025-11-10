@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useMemo, useEffect } from 'react';
 import ThreadItem from './ThreadItem';
 import ReplyBox from './ReplyBox';
-import { Thread, Tag, Reply } from './types';
+import { Thread, Reply } from './types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,12 +20,18 @@ const DiscussionThread: React.FC = () => {
   const [isCreatingPost, setIsCreatingPost] = useState(false);
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostMessage, setNewPostMessage] = useState('');
-  const [newPostTags, setNewPostTags] = useState<Tag[]>([]);
+  const [newPostTags, setNewPostTags] = useState<string[]>([]);
   const [newPostImagePreview, setNewPostImagePreview] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTag, setSelectedTag] = useState<Tag | 'all'>('all');
+  const [selectedTag, setSelectedTag] = useState<string | 'all'>('all');
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+
+  const [availableTags, setAvailableTags] = useState<string[]>(['TestTag1', 'TestTag2']);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newCustomTag, setNewCustomTag] = useState('');
+  
+  const [newPostImageFile, setNewPostImageFile] = useState<File | null>(null);
 
   const handleCreatePost = async () => {
     if (!newPostTitle || !newPostMessage || !user) return;
@@ -46,7 +52,6 @@ const DiscussionThread: React.FC = () => {
       });
       const result = await res.json();
       if (result.status === "success") {
-        // Option 1: re-fetch from backend
         const refreshed = await fetch("http://127.0.0.1:8000/forum");
         const updated = await refreshed.json();
         setThreads(updated);
@@ -55,15 +60,14 @@ const DiscussionThread: React.FC = () => {
       console.error("Error creating thread:", err);
     }
 
-    // Reset UI
     setNewPostTitle("");
     setNewPostMessage("");
     setNewPostTags([]);
     setNewPostImagePreview(null);
     setIsCreatingPost(false);
+    setIsAddingTag(false);
+    setNewCustomTag('');
   };
-
-  const [newPostImageFile, setNewPostImageFile] = useState<File | null>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -93,12 +97,37 @@ const DiscussionThread: React.FC = () => {
     setNewPostImagePreview(null);
   };
 
-  const handleTagToggle = (tag: Tag) => {
+  const handleTagToggle = (tag: string) => {
     setNewPostTags((prevTags) =>
       prevTags.includes(tag)
         ? prevTags.filter((t) => t !== tag)
         : [...prevTags, tag]
     );
+  };
+  
+  const handleAddNewTag = (tagValue: string) => {
+    const trimmedTag = tagValue.trim();
+    if (trimmedTag) {
+      if (!availableTags.includes(trimmedTag)) {
+        setAvailableTags((prev) => [...prev, trimmedTag]);
+      }
+      if (!newPostTags.includes(trimmedTag)) {
+        setNewPostTags((prev) => [...prev, trimmedTag]);
+      }
+      setNewCustomTag('');
+    }
+  };
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleAddNewTag(newCustomTag);
+    }
+  };
+
+  const handleTagInputBlur = () => {
+    setIsAddingTag(false);
+    setNewCustomTag('');
   };
 
   const filteredThreads = useMemo(() => {
@@ -109,7 +138,7 @@ const DiscussionThread: React.FC = () => {
       const authorName = thread.author?.name || '';
       
       const tagMatch =
-        selectedTag === 'all' || tags.includes(selectedTag as Tag);
+        selectedTag === 'all' || (tags as string[]).includes(selectedTag);
 
       const searchMatch =
         searchTerm.trim() === '' ||
@@ -142,10 +171,9 @@ const DiscussionThread: React.FC = () => {
       const result = await res.json();
 
       if (result.status === "success") {
-        // Optimistic update (no need to refetch all)
         setThreads((prev) =>
           prev.map((t) =>
-            t.id === selectedThreadId || t.id === selectedThreadId
+            t.id === selectedThreadId
               ? { ...t, replies: [...(t.replies || []), result.reply] }
               : t
           )
@@ -268,39 +296,58 @@ const DiscussionThread: React.FC = () => {
                     <Label className="mb-2 block font-medium">
                       Tags
                     </Label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <TagIcon className="h-4 w-4 text-muted-foreground" />
-                      <Button
-                        variant={newPostTags.includes('TestTag1') ? 'default' : 'outline'}
-                        onClick={() => handleTagToggle('TestTag1')}
-                        size="sm"
-                        className={`rounded-full ${
-                          newPostTags.includes('TestTag1')
-                            ? 'border border-transparent'
-                            : ''
-                        }`}
-                      >
-                        TestTag1
-                      </Button>
-                      <Button
-                        variant={newPostTags.includes('TestTag2') ? 'default' : 'outline'}
-                        onClick={() => handleTagToggle('TestTag2')}
-                        size="sm"
-                        className={`rounded-full ${
-                          newPostTags.includes('TestTag2')
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'
-                            : ''
-                        }`}
-                      >
-                        TestTag2
-                      </Button>
+                      
+                      {availableTags.map((tag) => (
+                        <Button
+                          key={tag}
+                          variant={newPostTags.includes(tag) ? 'default' : 'outline'}
+                          onClick={() => handleTagToggle(tag)}
+                          size="sm"
+                          className={`rounded-full ${
+                            newPostTags.includes(tag) && tag === 'TestTag2'
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'
+                              : newPostTags.includes(tag)
+                              ? 'border border-transparent'
+                              : ''
+                          }`}
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+                      
+                      {!isAddingTag ? (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="rounded-full h-8 w-8"
+                          onClick={() => setIsAddingTag(true)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Input
+                          type="text"
+                          placeholder="New tag..."
+                          className="h-8 text-sm w-24"
+                          value={newCustomTag}
+                          onChange={(e) => setNewCustomTag(e.target.value)}
+                          onKeyDown={handleTagInputKeyDown}
+                          onBlur={handleTagInputBlur}
+                          autoFocus
+                        />
+                      )}
                     </div>
                   </div>
+
                 </div>
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => {
                     setIsCreatingPost(false);
                     setNewPostImagePreview(null);
+                    setIsAddingTag(false);
+                    setNewCustomTag('');
                   }}>
                     Cancel
                   </Button>
@@ -313,25 +360,22 @@ const DiscussionThread: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant={selectedTag === 'all' ? 'default' : 'outline'}
             onClick={() => setSelectedTag('all')}
           >
             All Posts
           </Button>
-          <Button
-            variant={selectedTag === 'TestTag1' ? 'default' : 'outline'}
-            onClick={() => setSelectedTag('TestTag1')}
-          >
-            TestTag1
-          </Button>
-          <Button
-            variant={selectedTag === 'TestTag2' ? 'default' : 'outline'}
-            onClick={() => setSelectedTag('TestTag2')}
-          >
-            TestTag2
-          </Button>
+          {availableTags.map((tag) => (
+            <Button
+              key={tag}
+              variant={selectedTag === tag ? 'default' : 'outline'}
+              onClick={() => setSelectedTag(tag)}
+            >
+              {tag}
+            </Button>
+          ))}
         </div>
 
         <div className="flex flex-col gap-4 overflow-y-auto flex-1">
