@@ -15,9 +15,6 @@ router = APIRouter(prefix="/forum", tags=["Forum"])
 
 BASE_UPLOAD_DIR = Path("uploads")
 
-
-# ---------- Helpers ----------
-
 def serialize_doc(doc):
     """Convert MongoDB _id to string and handle nested replies."""
     if not doc:
