@@ -107,7 +107,7 @@ const DiscussionThread: React.FC = () => {
   
   const handleAddNewTag = (tagValue: string) => {
     const trimmedTag = tagValue.trim();
-    if (trimmedTag) {
+    if (trimmedTag && trimmedTag.length <= 10) {
       if (!availableTags.includes(trimmedTag)) {
         setAvailableTags((prev) => [...prev, trimmedTag]);
       }
@@ -321,7 +321,7 @@ const DiscussionThread: React.FC = () => {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="rounded-full h-8 w-8"
+                          className="rounded-full h-9 w-9"
                           onClick={() => setIsAddingTag(true)}
                         >
                           <Plus className="h-4 w-4" />
@@ -329,13 +329,14 @@ const DiscussionThread: React.FC = () => {
                       ) : (
                         <Input
                           type="text"
-                          placeholder="New tag..."
-                          className="h-8 text-sm w-24"
+                          placeholder="Tag..."
+                          className="h-9 text-sm w-24"
                           value={newCustomTag}
                           onChange={(e) => setNewCustomTag(e.target.value)}
                           onKeyDown={handleTagInputKeyDown}
                           onBlur={handleTagInputBlur}
                           autoFocus
+                          maxLength={9}
                         />
                       )}
                     </div>
@@ -364,6 +365,8 @@ const DiscussionThread: React.FC = () => {
           <Button
             variant={selectedTag === 'all' ? 'default' : 'outline'}
             onClick={() => setSelectedTag('all')}
+            size="sm"
+            className="rounded-full"
           >
             All Posts
           </Button>
@@ -372,6 +375,8 @@ const DiscussionThread: React.FC = () => {
               key={tag}
               variant={selectedTag === tag ? 'default' : 'outline'}
               onClick={() => setSelectedTag(tag)}
+              size="sm"
+              className="rounded-full"
             >
               {tag}
             </Button>
