@@ -52,9 +52,9 @@ const DiscussionThread: React.FC = () => {
       });
       const result = await res.json();
       if (result.status === "success") {
-        const refreshed = await fetch("http://127.0.0.1:8000/forum");
-        const updated = await refreshed.json();
-        setThreads(updated);
+        if (result.thread) {
+          setThreads((prev) => [result.thread, ...prev]);
+        }
       }
     } catch (err) {
       console.error("Error creating thread:", err);
