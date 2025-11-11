@@ -444,7 +444,7 @@ const DiscussionThread: React.FC = () => {
                     <img 
                       src={selectedThread.imageUrl} 
                       alt="Post attachment"
-                      className="mt-4 w-full max-w-lg rounded-lg border"
+                      className="mt-4 w-16/h max-w-lg rounded-lg border"
                     />
                   )}
                 </div>
