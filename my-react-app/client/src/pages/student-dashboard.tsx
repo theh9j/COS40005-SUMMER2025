@@ -306,8 +306,8 @@ export default function StudentDashboard() {
                   key={item.id}
                   variant="ghost"
                   className={`w-full justify-start hover:bg-transparent ${isActive
-                      ? "text-primary hover:text-primary"
-                      : "text-foreground hover:text-foreground"
+                    ? "text-primary hover:text-primary"
+                    : "text-foreground hover:text-foreground"
                     }`}
                   onClick={() => {
                     {
@@ -345,7 +345,7 @@ export default function StudentDashboard() {
                 <StatCard label="Cases Completed" value={stats.casesCompleted} icon={CheckCircle} valueClass="text-primary" testId="stat-cases-completed" />
                 <StatCard label="Active Annotations" value={stats.activeAnnotations} icon={Edit} valueClass="text-accent" testId="stat-active-annotations" />
                 <StatCard label="Feedback Received" value={stats.feedbackReceived} icon={MessageCircle} valueClass="text-yellow-500" testId="stat-feedback-received" />
-                <StatCard label="Study Streak (days)" value={stats.studyStreakDays} icon={Flame} valueClass="text-orange-500" testId="stat-study-streak" />
+                <StatCard label="Average Score" value={`${Math.round(stats.annotationAccuracyPct)}%`} icon={ChartLine} valueClass="text-accent" testId="stat-average-score" />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
