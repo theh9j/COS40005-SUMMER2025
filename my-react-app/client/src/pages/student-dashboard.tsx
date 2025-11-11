@@ -268,7 +268,7 @@ export default function StudentDashboard() {
                   e.stopPropagation();
                   setShowProfileMenu((v) => !v);
                 }}
-                className="focus:outline-none"
+                className="flex items-center space-x-2 focus:outline-none hover:opacity-80 transition"
                 aria-haspopup="menu"
                 aria-expanded={showProfileMenu}
               >
@@ -277,10 +277,10 @@ export default function StudentDashboard() {
                   alt="Student Avatar"
                   className="w-8 h-8 rounded-full border-2 border-primary"
                 />
+                <span className="text-sm font-medium" data-testid="text-username">
+                  {user.firstName} {user.lastName}
+                </span>
               </button>
-              <span className="text-sm font-medium" data-testid="text-username">
-                {user.firstName} {user.lastName}
-              </span>
 
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
@@ -288,7 +288,6 @@ export default function StudentDashboard() {
                 </div>
               )}
             </div>
-
           </div>
         </div>
       </header>
