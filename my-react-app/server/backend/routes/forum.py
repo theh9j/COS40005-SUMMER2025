@@ -87,10 +87,8 @@ async def create_thread(
     )
 
     thread.id = str(result.inserted_id)
-    return JSONResponse(status_code=200, content={"status": "success", "thread": thread.model_dump()})
+    return JSONResponse(status_code=200, content={"status": "success", "thread": jsonable_encoder(thread)})
 
-
-from fastapi.encoders import jsonable_encoder
 
 @router.post("/reply")
 async def add_reply(
