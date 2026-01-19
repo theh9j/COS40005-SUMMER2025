@@ -553,7 +553,12 @@ export function useAnnotation(caseId: string, userId: string) {
       const data = await res.json();
 
       if (Array.isArray(data)) {
-        const sorted = [...data].sort((a, b) => b.version - a.version);
+        const sorted = [...data]
+          .map((v) => ({
+            ...v,
+            id: v._id, // Map _id to id for component compatibility
+          }))
+          .sort((a, b) => b.version - a.version);
         setState(prev => ({
           ...prev,
           versions: sorted,
@@ -579,8 +584,11 @@ export function useAnnotation(caseId: string, userId: string) {
       const res = await fetch(`${API_BASE}/version/${versionId}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      console.log("Version deleted.");
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || `HTTP ${res.status}`);
+      }
+      console.log("Version deleted successfully.");
       await loadVersions();
     } catch (error) {
       console.error("Failed to delete version:", error);
