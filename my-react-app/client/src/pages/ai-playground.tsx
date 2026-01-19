@@ -54,6 +54,49 @@ async function mockInfer({
   return { text, tokensOut: Math.max(8, Math.round(echo.length / 4)) };
 }
 
+// Real AI inference
+async function realInfer({
+  prompt,
+  provider = "openai",
+  model = "gpt-4o-mini",
+  temperature = 0.7,
+  maxTokens = 512,
+}: {
+  prompt: string;
+  provider?: Provider;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<{ text: string; tokensOut: number }> {
+  const response = await fetch("/api/ai/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${localStorage.getItem("session_token")}`
+    },
+    body: JSON.stringify({
+      provider,
+      model,
+      temperature,
+      maxTokens,
+      messages: [
+        { role: "system", content: "You are a helpful AI assistant for medical education." },
+        { role: "user", content: prompt }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return {
+    text: data.content,
+    tokensOut: data.tokensUsed || Math.round(data.content.length / 4)
+  };
+}
+
 // ——————————————————————————————————————————————————————
 // Page
 // ——————————————————————————————————————————————————————
@@ -125,8 +168,14 @@ export default function AIPlayground() {
     // If streaming, use ReadableStream to append chunks to setResponse(prev => prev + chunk)
     // ——————————————————————————————
 
-    // Mock result
-    const { text, tokensOut } = await mockInfer({ prompt, latency: 900 });
+    // Real AI result
+    const { text, tokensOut } = await realInfer({ 
+      prompt, 
+      provider, 
+      model, 
+      temperature, 
+      maxTokens 
+    });
     // Simulate streaming
     for (const chunk of text.split(" ")) {
       await new Promise((r) => setTimeout(r, 12));

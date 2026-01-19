@@ -5,3 +5,5 @@ passlib[bcrypt]
 python-jose[cryptography]
 python-decouple
 uvicorn[standard]
+httpx
+aiofiles

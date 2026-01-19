@@ -12,7 +12,9 @@ import ChatPanel from "@/components/chat-panel";
 import FeedbackPanel from "@/components/feedback-panel";
 import InlineTextEditor from "@/components/inline-text-editor";
 import AnnotationPropertiesPanel from "@/components/annotation-properties-panel";
-import { ArrowLeft, Save } from "lucide-react";
+import AIChatAssistant from "@/components/ai-chat-assistant";
+import AIAnnotationSuggestions from "@/components/ai-annotation-suggestions";
+import { ArrowLeft, Save, Bot, Eye } from "lucide-react";
 
 // Collaborative imports
 import { useVersions } from "@/hooks/use-versions";
@@ -93,6 +95,9 @@ const onSubmit = async () => {
   const [showHistory, setShowHistory] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [showAIVision, setShowAIVision] = useState(false);
+  const [aiChatMinimized, setAIChatMinimized] = useState(false);
   const [compare, setCompare] = useState<{ peer?: any; alpha?: number }>({});
 
   // Redirect if not logged in
@@ -229,6 +234,24 @@ const onSubmit = async () => {
               </span>
             </div>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAIVision(!showAIVision)}
+              className={showAIVision ? "bg-purple-50 border-purple-200" : ""}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              AI Vision
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAIChat(!showAIChat)}
+              className={showAIChat ? "bg-primary/10" : ""}
+            >
+              <Bot className="h-4 w-4 mr-2" />
+              AI Assistant
+            </Button>
+            <Button
               className="bg-primary text-primary-foreground hover:opacity-90"
               onClick={handleSaveVersion}
               data-testid="button-save"
@@ -297,8 +320,54 @@ const onSubmit = async () => {
             />
           )}
 
+          {/* AI Vision Assistant Panel */}
+          {showAIVision && (
+            <aside className="w-80 bg-card border-l border-border">
+              <AIAnnotationSuggestions
+                imageUrl={case_.imageUrl}
+                context={{
+                  caseId: caseId,
+                  caseTitle: case_.title,
+                  caseDescription: case_.description,
+                  imageUrl: case_.imageUrl,
+                  annotations: annotation.annotations,
+                  homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
+                  userRole: user.role as "student" | "instructor",
+                  userId: user.user_id || ""
+                }}
+                onSuggestionClick={(suggestion) => {
+                  console.log("Suggestion clicked:", suggestion);
+                  // TODO: Focus annotation canvas on suggested region
+                }}
+                className="h-full"
+              />
+            </aside>
+          )}
+
+          {/* AI Chat Assistant Panel */}
+          {showAIChat && (
+            <aside className="w-96 bg-card border-l border-border">
+              <AIChatAssistant
+                context={{
+                  caseId: caseId,
+                  caseTitle: case_.title,
+                  caseDescription: case_.description,
+                  imageUrl: case_.imageUrl,
+                  annotations: annotation.annotations,
+                  homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
+                  userRole: user.role as "student" | "instructor",
+                  userId: user.user_id || ""
+                }}
+                isMinimized={aiChatMinimized}
+                onMinimize={() => setAIChatMinimized(!aiChatMinimized)}
+                onClose={() => setShowAIChat(false)}
+                className="h-full"
+              />
+            </aside>
+          )}
+
           {/* Default collaborative sidebar */}
-          {!showHistory && !showComparison && !showProperties && (
+          {!showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && (
             <aside className="w-80 bg-card border-l border-border flex flex-col">
               <div className="p-3 border-b">
                 <h4 className="font-semibold">Collaboration</h4>
@@ -440,7 +509,69 @@ const onSubmit = async () => {
               </div>
             </aside>
           )}
+
+          {/* AI Chat Assistant Panel */}
+          {showAIChat && (
+            <aside className="w-96 bg-card border-l border-border">
+              <AIChatAssistant
+                context={{
+                  caseId: caseId,
+                  caseTitle: case_.title,
+                  caseDescription: case_.description,
+                  imageUrl: case_.imageUrl,
+                  annotations: annotation.annotations,
+                  homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
+                  userRole: user.role as "student" | "instructor",
+                  userId: user.user_id || ""
+                }}
+                isMinimized={aiChatMinimized}
+                onMinimize={() => setAIChatMinimized(!aiChatMinimized)}
+                onClose={() => setShowAIChat(false)}
+                className="h-full"
+              />
+            </aside>
+          )}
+          {/* AI Chat Assistant Panel */}
+          {showAIChat && (
+            <aside className="w-96 bg-card border-l border-border">
+              <AIChatAssistant
+                context={{
+                  caseId: caseId,
+                  caseTitle: case_.title,
+                  caseDescription: case_.description,
+                  imageUrl: case_.imageUrl,
+                  annotations: annotation.annotations,
+                  homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
+                  userRole: user.role as "student" | "instructor",
+                  userId: user.user_id || ""
+                }}
+                isMinimized={aiChatMinimized}
+                onMinimize={() => setAIChatMinimized(!aiChatMinimized)}
+                onClose={() => setShowAIChat(false)}
+                className="h-full"
+              />
+            </aside>
+          )}
         </main>
+
+        {/* Floating AI Chat (when minimized) */}
+        {showAIChat && aiChatMinimized && (
+          <AIChatAssistant
+            context={{
+              caseId: caseId,
+              caseTitle: case_.title,
+              caseDescription: case_.description,
+              imageUrl: case_.imageUrl,
+              annotations: annotation.annotations,
+              homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
+              userRole: user.role as "student" | "instructor",
+              userId: user.user_id || ""
+            }}
+            isMinimized={true}
+            onMinimize={() => setAIChatMinimized(false)}
+            onClose={() => setShowAIChat(false)}
+          />
+        )}
       </div>
     </div>
   );

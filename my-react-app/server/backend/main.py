@@ -6,7 +6,7 @@ from pathlib import Path
 from core.security import hash_password
 from fastapi.staticfiles import StaticFiles
 from routes import auth, admin, online, annotations, user, ws_routes, forum
-from routes import homeworks, submissions
+from routes import homeworks, submissions, ai
 
 app = FastAPI()
 
@@ -27,6 +27,7 @@ app.include_router(ws_routes.router)
 app.include_router(forum.router)
 app.include_router(homeworks.router)
 app.include_router(submissions.router)
+app.include_router(ai.router)
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 

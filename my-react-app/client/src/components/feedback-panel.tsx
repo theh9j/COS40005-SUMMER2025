@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { mockFeedback } from "@/lib/mock-data";
 import { Lightbulb, Bot, Send, User } from "lucide-react";
+import { aiService } from "@/lib/ai-service";
 
 export default function FeedbackPanel() {
   // --- AI Chat Logic ---
@@ -11,6 +12,7 @@ export default function FeedbackPanel() {
   const [messages, setMessages] = useState([
     { role: "ai", content: "Hi! I can help explain the feedback or history above." }
   ]);
+  const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -19,21 +21,46 @@ export default function FeedbackPanel() {
     }
   }, [messages]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
     
     // Add user message
-    const newMessages = [...messages, { role: "user", content: input }];
+    const userMessage = { role: "user", content: input };
+    const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput("");
+    setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev, 
-        { role: "ai", content: "I see. Would you like me to highlight that area on the image?" }
-      ]);
-    }, 1000);
+    try {
+      // Use AI service for real response
+      const response = await aiService.chat([
+        {
+          id: Date.now().toString(),
+          role: "user",
+          content: input,
+          timestamp: Date.now()
+        }
+      ], {
+        caseId: "current-case",
+        caseTitle: "Medical Case Analysis",
+        annotations: [],
+        userRole: "student",
+        userId: "current-user"
+      });
+
+      setMessages(prev => [...prev, { 
+        role: "ai", 
+        content: response.content 
+      }]);
+    } catch (error) {
+      console.error("AI response error:", error);
+      setMessages(prev => [...prev, { 
+        role: "ai", 
+        content: "Sorry, I'm having trouble responding right now. Please try again." 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -141,11 +168,12 @@ export default function FeedbackPanel() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about feedback..."
-            className="flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+            disabled={isLoading}
+            className="flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 disabled:opacity-50"
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim()}
+            disabled={!input.trim() || isLoading}
             className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             <Send className="h-4 w-4" />
