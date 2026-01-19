@@ -60,7 +60,6 @@ async def get_annotation_versions(case_id: str, user_id: str):
     return versions
 
 
-# --- Delete a version and renumber subsequent ones ---
 @router.delete("/version/{version_id}")
 async def delete_annotation_version(version_id: str):
     doc = await versions_collection.find_one({"_id": ObjectId(version_id)})
