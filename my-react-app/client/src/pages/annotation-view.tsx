@@ -76,6 +76,9 @@ export default function AnnotationView() {
   const [showAIVision, setShowAIVision] = useState(false);
   const [aiChatMinimized, setAIChatMinimized] = useState(false);
   const [compare, setCompare] = useState<{ peer?: any; alpha?: number }>({});
+  
+  // Sidebar tab state: "annotate" | "collaborate" | "ai-assistant" | "homework"
+  const [activeSidebarTab, setActiveSidebarTab] = useState<"annotate" | "collaborate" | "ai-assistant" | "homework">("collaborate");
 
   // Redirect if not logged in
   useEffect(() => {
@@ -201,15 +204,7 @@ export default function AnnotationView() {
             </h1>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="hidden md:flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500/80 dark:bg-green-400/80 rounded-full pulse-dot" />
-              <span className="text-sm text-muted-foreground">
-                {presence?.users?.length
-                  ? `Online: ${presence.users.map((u) => u.name).join(", ")}`
-                  : "Online: You"}
-              </span>
-            </div>
+          <div className="flex items-center space-x-3">
             <Button
               variant="outline"
               size="sm"
@@ -219,15 +214,14 @@ export default function AnnotationView() {
               <Eye className="h-4 w-4 mr-2" />
               AI Vision
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAIChat(!showAIChat)}
-              className={showAIChat ? "bg-primary/10" : ""}
-            >
-              <Bot className="h-4 w-4 mr-2" />
-              AI Assistant
-            </Button>
+            <div className="flex items-center space-x-2 pl-3 border-l border-border">
+              <div className="w-2 h-2 bg-green-500/80 dark:bg-green-400/80 rounded-full pulse-dot" />
+              <span className="text-sm text-muted-foreground">
+                {presence?.users?.length
+                  ? `${presence.users.map((u) => u.name).join(", ")}`
+                  : "You"}
+              </span>
+            </div>
             <Button
               className="bg-primary text-primary-foreground hover:opacity-90"
               onClick={handleSaveVersion}
@@ -240,21 +234,21 @@ export default function AnnotationView() {
         </div>
       </header>
 
-      {/* Main layout */}
-      <div className="flex h-screen">
-        {/* Toolbar */}
-        <AnnotationToolbar
-          annotation={annotation}
-          onToggleHistory={() => setShowHistory(!showHistory)}
-          onToggleComparison={() => setShowComparison(!showComparison)}
-          showHistory={showHistory}
-          showComparison={showComparison}
-        />
+      {/* Annotation Toolbar (Horizontal at top) */}
+      <AnnotationToolbar
+        annotation={annotation}
+        onToggleHistory={() => setShowHistory(!showHistory)}
+        onToggleComparison={() => setShowComparison(!showComparison)}
+        showHistory={showHistory}
+        showComparison={showComparison}
+      />
 
-        {/* Core content area */}
-        <main className="flex-1 flex">
+      {/* Main layout */}
+      <div className="flex h-[calc(100vh-8rem)]">
+        {/* Canvas area */}
+        <main className="flex-1 flex overflow-hidden">
           {/* Canvas */}
-          <div className="flex-1 p-4">
+          <div className="flex-1 p-4 overflow-auto">
             <AnnotationCanvas
               imageUrl={case_.imageUrl}
               annotation={annotation}
@@ -288,18 +282,18 @@ export default function AnnotationView() {
               selectedAnnotations={annotation.annotations.filter((a) =>
                 annotation.selectedAnnotationIds.includes(a.id)
               )}
-              onClose={() => setShowProperties(false)} // This 'x' button still works
+              onClose={() => setShowProperties(false)}
               onUpdateAnnotation={annotation.updateAnnotation}
               onDeleteAnnotations={annotation.deleteSelectedAnnotations}
               onLockAnnotations={annotation.lockAnnotations}
               onDuplicateAnnotations={annotation.duplicateAnnotations}
-              onToggleVisibility={annotation.toggleAnnotationsVisibility} // Added prop
+              onToggleVisibility={annotation.toggleAnnotationsVisibility}
             />
           )}
 
           {/* AI Vision Assistant Panel */}
           {showAIVision && (
-            <aside className="w-80 bg-card border-l border-border">
+            <aside className="w-80 bg-card border-l border-border overflow-y-auto">
               <AIAnnotationSuggestions
                 imageUrl={case_.imageUrl}
                 context={{
@@ -314,7 +308,6 @@ export default function AnnotationView() {
                 }}
                 onSuggestionClick={(suggestion) => {
                   console.log("Suggestion clicked:", suggestion);
-                  // TODO: Focus annotation canvas on suggested region
                 }}
                 className="h-full"
               />
@@ -323,7 +316,7 @@ export default function AnnotationView() {
 
           {/* AI Chat Assistant Panel */}
           {showAIChat && (
-            <aside className="w-96 bg-card border-l border-border">
+            <aside className="w-96 bg-card border-l border-border overflow-y-auto">
               <AIChatAssistant
                 context={{
                   caseId: caseId,
@@ -343,119 +336,175 @@ export default function AnnotationView() {
             </aside>
           )}
 
-          {/* Default collaborative sidebar */}
+          {/* Default collaborative sidebar with 2x2 tab grid */}
           {!showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && (
-            <aside className="w-80 bg-card border-l border-border flex flex-col">
-              <div className="p-3 border-b">
-                <h4 className="font-semibold">Collaboration</h4>
-                <PresenceBar presence={presence} />
+            <aside className="w-96 bg-card border-l border-border flex flex-col overflow-hidden">
+              {/* 2x2 Tab Grid */}
+              <div className="border-b border-border p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant={activeSidebarTab === "annotate" ? "default" : "secondary"}
+                    className="text-sm h-9"
+                    onClick={() => setActiveSidebarTab("annotate")}
+                  >
+                    <span className="w-4 h-4 mr-1">📝</span>
+                    Annotate
+                  </Button>
+                  <Button
+                    variant={activeSidebarTab === "collaborate" ? "default" : "secondary"}
+                    className="text-sm h-9"
+                    onClick={() => setActiveSidebarTab("collaborate")}
+                  >
+                    <span className="w-4 h-4 mr-1">👥</span>
+                    Collaborate
+                  </Button>
+                  <Button
+                    variant={activeSidebarTab === "ai-assistant" ? "default" : "secondary"}
+                    className="text-sm h-9"
+                    onClick={() => setActiveSidebarTab("ai-assistant")}
+                  >
+                    <span className="w-4 h-4 mr-1">🤖</span>
+                    AI Assistant
+                  </Button>
+                  <Button
+                    variant={activeSidebarTab === "homework" ? "default" : "secondary"}
+                    className="text-sm h-9"
+                    onClick={() => setActiveSidebarTab("homework")}
+                  >
+                    <span className="w-4 h-4 mr-1">📋</span>
+                    Homework
+                  </Button>
+                </div>
               </div>
 
-              {/* Homework Submission Panel */}
-              {hw && (
-                <div className="p-3 border-b">
-                  <SubmissionPanel
-                    status={submission?.status || "none"}
-                    dueDate={hw.dueAt}
-                    score={submission?.score}
-                    notes={submission?.notes}
-                    files={submission?.files}
-                    closed={hw.closed}
-                    loading={subLoading}
-                    error={subError}
-                    onSubmit={async (notes, files) => {
-                      await submitHomework({
-                        notes,
-                        files,
-                        answers: [],
-                      });
-                    }}
-                    onUploadFile={uploadFile}
+              {/* Tab Content - Annotate */}
+              {activeSidebarTab === "annotate" && (
+                <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                  <div className="border rounded-lg p-3 bg-muted/50">
+                    <h4 className="font-semibold text-sm mb-2">Current Annotations</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {annotation.annotations.length} annotation{annotation.annotations.length !== 1 ? 's' : ''} created
+                    </p>
+                  </div>
+                  {annotation.selectedAnnotationIds.length > 0 && (
+                    <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950">
+                      <h4 className="font-semibold text-sm mb-2">Properties</h4>
+                      <div className="text-xs text-muted-foreground">
+                        {annotation.selectedAnnotationIds.length} selected
+                      </div>
+                    </div>
+                  )}
+                  <CompareToggle
+                    peers={peers}
+                    onChange={(peer, alpha) =>
+                      handleCompareChange(peer, alpha)
+                    }
                   />
                 </div>
               )}
-              
-              <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                {/* --- This button has been removed --- */}
-                {/* <Button
-                  variant="outline"
-                  className="w-full justify-center"
-                  onClick={handleSaveVersion}
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Version
-                </Button> 
-                */}
 
-                <VersionList
-                  title="My versions"
-                  items={mine}
-                  onSelect={(v) =>
-                    console.log("Load my version:", v.data || v)
-                  }
-                />
-                <VersionList
-                  title="Peers' versions"
-                  items={peers}
-                  onSelect={(v) =>
-                    console.log("Load peer version:", v.data || v)
-                  }
-                />
+              {/* Tab Content - Collaborate */}
+              {activeSidebarTab === "collaborate" && (
+                <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                  <VersionList
+                    title="My versions"
+                    items={mine}
+                    onSelect={(v) =>
+                      console.log("Load my version:", v.data || v)
+                    }
+                  />
+                  <VersionList
+                    title="Peers' versions"
+                    items={peers}
+                    onSelect={(v) =>
+                      console.log("Load peer version:", v.data || v)
+                    }
+                  />
 
-                <CompareToggle
-                  peers={peers}
-                  onChange={(peer, alpha) =>
-                    handleCompareChange(peer, alpha)
-                  }
-                />
+                  <ChatPanel />
+                </div>
+              )}
 
-                <ChatPanel />
-                <FeedbackPanel />
-              </div>
+              {/* Tab Content - AI Assistant */}
+              {activeSidebarTab === "ai-assistant" && (
+                <div className="flex-1 overflow-y-auto flex flex-col">
+                  <AIChatAssistant
+                    context={{
+                      caseId: caseId,
+                      caseTitle: case_.title,
+                      caseDescription: case_.description,
+                      imageUrl: case_.imageUrl,
+                      annotations: annotation.annotations,
+                      homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
+                      userRole: user.role as "student" | "instructor",
+                      userId: user.user_id || ""
+                    }}
+                    isMinimized={false}
+                    onMinimize={() => {}}
+                    onClose={() => setActiveSidebarTab("collaborate")}
+                    className="h-full"
+                  />
+                </div>
+              )}
+
+              {/* Tab Content - Homework */}
+              {activeSidebarTab === "homework" && (
+                <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                  {hw ? (
+                    <>
+                      <SubmissionPanel
+                        status={submission?.status || "none"}
+                        dueDate={hw.dueAt}
+                        score={submission?.score}
+                        notes={submission?.notes}
+                        files={submission?.files}
+                        closed={hw.closed}
+                        loading={subLoading}
+                        error={subError}
+                        onSubmit={async (notes, files) => {
+                          await submitHomework({
+                            notes,
+                            files,
+                            answers: [],
+                          });
+                        }}
+                        onUploadFile={uploadFile}
+                      />
+                      {submission?.status === "graded" && (
+                        <FeedbackPanel />
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">
+                        No homework assignment for this case.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </aside>
           )}
 
-          {/* AI Chat Assistant Panel */}
-          {showAIChat && (
-            <aside className="w-96 bg-card border-l border-border">
-              <AIChatAssistant
-                context={{
-                  caseId: caseId,
-                  caseTitle: case_.title,
-                  caseDescription: case_.description,
-                  imageUrl: case_.imageUrl,
-                  annotations: annotation.annotations,
-                  homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
-                  userRole: user.role as "student" | "instructor",
-                  userId: user.user_id || ""
-                }}
-                isMinimized={aiChatMinimized}
-                onMinimize={() => setAIChatMinimized(!aiChatMinimized)}
-                onClose={() => setShowAIChat(false)}
-                className="h-full"
-              />
-            </aside>
+          {/* Floating AI Chat (when minimized) */}
+          {showAIChat && aiChatMinimized && (
+            <AIChatAssistant
+              context={{
+                caseId: caseId,
+                caseTitle: case_.title,
+                caseDescription: case_.description,
+                imageUrl: case_.imageUrl,
+                annotations: annotation.annotations,
+                homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
+                userRole: user.role as "student" | "instructor",
+                userId: user.user_id || ""
+              }}
+              isMinimized={true}
+              onMinimize={() => setAIChatMinimized(false)}
+              onClose={() => setShowAIChat(false)}
+            />
           )}
         </main>
-
-        {/* Floating AI Chat (when minimized) */}
-        {showAIChat && aiChatMinimized && (
-          <AIChatAssistant
-            context={{
-              caseId: caseId,
-              caseTitle: case_.title,
-              caseDescription: case_.description,
-              imageUrl: case_.imageUrl,
-              annotations: annotation.annotations,
-              homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
-              userRole: user.role as "student" | "instructor",
-              userId: user.user_id || ""
-            }}
-            isMinimized={true}
-            onMinimize={() => setAIChatMinimized(false)}
-            onClose={() => setShowAIChat(false)}
-          />
-        )}
       </div>
     </div>
   );

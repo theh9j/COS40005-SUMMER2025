@@ -14,6 +14,7 @@ import {
   Redo,
   Clock,
   Users,
+  Eraser,
 } from "lucide-react";
 
 interface AnnotationToolbarProps {
@@ -26,11 +27,12 @@ interface AnnotationToolbarProps {
 
 const tools: { id: AnnotationTool; icon: any; label: string }[] = [
   { id: "select", icon: MousePointer, label: "Select" },
+  { id: "freehand", icon: Pen, label: "Pen" },
   { id: "rectangle", icon: Square, label: "Rectangle" },
   { id: "circle", icon: Circle, label: "Circle" },
   { id: "triangle", icon: Triangle, label: "Triangle" },
-  { id: "freehand", icon: Pen, label: "Freehand" },
   { id: "text", icon: Type, label: "Text" },
+  { id: "eraser", icon: Eraser, label: "Eraser" },
 ];
 
 
@@ -41,14 +43,14 @@ export default function AnnotationToolbar({
   showHistory = false,
   showComparison = false,
 }: AnnotationToolbarProps) {
-  const { tool, color, setTool, setColor, undo, redo, canUndo, canRedo } = annotation;
+  const { tool, color, strokeWidth, setTool, setColor, setStrokeWidth, undo, redo, canUndo, canRedo } = annotation;
   const [hexInput, setHexInput] = useState(color);
 
   return (
-    <aside className="w-20 bg-card border-r border-border flex flex-col items-center py-4" data-testid="annotation-toolbar">
-      {/* Top Group: Tools & Color */}
-      <div className="flex flex-col items-center space-y-4">
-        <div className="flex flex-col items-center space-y-2">
+    <div className="w-full bg-card border-b border-border px-4 py-3 flex items-center justify-between gap-4" data-testid="annotation-toolbar">
+      {/* Left Group: Tools */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 border-r border-border pr-4">
           {tools.map((toolItem) => {
             const Icon = toolItem.icon;
             const isActive = tool === toolItem.id;
@@ -58,7 +60,7 @@ export default function AnnotationToolbar({
                 key={toolItem.id}
                 variant={isActive ? "default" : "secondary"}
                 size="sm"
-                className={`annotation-tool w-12 h-12 ${
+                className={`annotation-tool px-3 h-9 ${
                   isActive 
                     ? "bg-primary text-primary-foreground" 
                     : "bg-secondary text-secondary-foreground hover:bg-muted"
@@ -67,16 +69,36 @@ export default function AnnotationToolbar({
                 title={toolItem.label}
                 data-testid={`tool-${toolItem.id}`}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-4 w-4" />
               </Button>
             );
           })}
         </div>
-        
-        <div className="border-t border-border pt-4 space-y-2 flex flex-col items-center">
+
+        {/* Width Customization */}
+        <div className="flex items-center gap-2 border-r border-border pr-4">
+          <label htmlFor="stroke-width" className="text-xs font-medium text-muted-foreground">
+            Width:
+          </label>
+          <input
+            id="stroke-width"
+            type="range"
+            min="1"
+            max="20"
+            value={strokeWidth}
+            onChange={(e) => setStrokeWidth(Number(e.target.value))}
+            className="w-24 h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+            data-testid="stroke-width-slider"
+            title={`Stroke width: ${strokeWidth}px`}
+          />
+          <span className="text-xs text-muted-foreground w-6 text-right">{strokeWidth}px</span>
+        </div>
+
+        {/* Color Picker */}
+        <div className="flex items-center gap-2 border-r border-border pr-4">
           <label 
             htmlFor="color-picker" 
-            className="w-12 h-12 rounded border-2 cursor-pointer flex items-center justify-center"
+            className="w-8 h-8 rounded border-2 cursor-pointer flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: color }}
             title={color}
           >
@@ -93,7 +115,6 @@ export default function AnnotationToolbar({
               data-testid="color-picker"
             />
           </label>
-          {/* Fix 5: Theming for color input */}
           <input
             type="text"
             value={hexInput}
@@ -109,66 +130,66 @@ export default function AnnotationToolbar({
                 setHexInput(color);
               }
             }}
-            className="w-16 px-1 py-1 text-xs text-center border rounded bg-background text-foreground border-input"
+            className="w-20 px-2 py-1 text-xs text-center border rounded bg-background text-foreground border-input"
             placeholder="#000000"
             maxLength={7}
             data-testid="color-hex-input"
           />
         </div>
       </div>
-      
-      {/* Bottom Group: Actions */}
-      <div className="mt-auto flex flex-col items-center space-y-2 pt-4">
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-12 h-12"
-            onClick={undo}
-            disabled={!canUndo}
-            title="Undo"
-            data-testid="button-undo"
-          >
-            <Undo className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-12 h-12"
-            onClick={redo}
-            disabled={!canRedo}
-            title="Redo"
-            data-testid="button-redo"
-          >
-            <Redo className="h-5 w-5" />
-          </Button>
+
+      {/* Right Group: Actions */}
+      <div className="flex items-center gap-1 ml-auto">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="px-3 h-9"
+          onClick={undo}
+          disabled={!canUndo}
+          title="Undo"
+          data-testid="button-undo"
+        >
+          <Undo className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="px-3 h-9"
+          onClick={redo}
+          disabled={!canRedo}
+          title="Redo"
+          data-testid="button-redo"
+        >
+          <Redo className="h-4 w-4" />
+        </Button>
         
-        <div className="w-10 border-t my-2 border-border" />
+        <div className="border-l border-r border-border mx-2 h-6" />
         
         {onToggleHistory && (
           <Button
             variant={showHistory ? "default" : "secondary"}
             size="sm"
-            className="w-12 h-12"
+            className="px-3 h-9"
             onClick={onToggleHistory}
             title="Version History"
             data-testid="button-history"
           >
-            <Clock className="h-5 w-5" />
+            <Clock className="h-4 w-4" />
           </Button>
         )}
         {onToggleComparison && (
           <Button
             variant={showComparison ? "default" : "secondary"}
             size="sm"
-            className="w-12 h-12"
+            className="px-3 h-9"
             onClick={onToggleComparison}
             title="Peer Comparison"
             data-testid="button-comparison"
           >
-            <Users className="h-5 w-5" />
+            <Users className="h-4 w-4" />
           </Button>
         )}
       </div>
-    </aside>
+    </div>
   );
 }

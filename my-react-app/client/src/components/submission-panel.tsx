@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -80,13 +79,13 @@ export default function SubmissionPanel({
   const getStatusColor = () => {
     switch (status) {
       case "graded":
-        return "bg-green-100 border-green-300";
+        return "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-700";
       case "grading":
-        return "bg-yellow-100 border-yellow-300";
+        return "bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-700";
       case "submitted":
-        return "bg-blue-100 border-blue-300";
+        return "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-700";
       default:
-        return "bg-gray-100 border-gray-300";
+        return "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700";
     }
   };
 
@@ -105,104 +104,91 @@ export default function SubmissionPanel({
 
   if (closed && status === "graded") {
     return (
-      <Card className={`border-2 ${getStatusColor()}`}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              Assignment Complete
-            </CardTitle>
-            <Badge variant="default">Score: {score}/10</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="p-3 bg-white rounded border">
-            <p className="text-sm font-medium mb-2">Your Submission:</p>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{notes}</p>
-            {files.length > 0 && (
-              <div className="mt-3">
-                <p className="text-xs font-medium mb-2">Attached Files:</p>
-                <div className="space-y-1">
-                  {files.map((f, i) => (
-                    <div key={i} className="text-xs text-muted-foreground">
-                      • {f.name} ({(f.size / 1024).toFixed(1)} KB)
-                    </div>
-                  ))}
-                </div>
+      <div className="border rounded-lg p-3 bg-card">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold text-sm flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            Assignment Complete
+          </h4>
+          <Badge variant="default">Score: {score}/10</Badge>
+        </div>
+        <div className="p-3 bg-muted/50 rounded border border-border">
+          <p className="text-sm font-medium mb-2">Your Submission:</p>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{notes}</p>
+          {files.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-medium mb-2">Attached Files:</p>
+              <div className="space-y-1">
+                {files.map((f, i) => (
+                  <div key={i} className="text-xs text-muted-foreground">
+                    • {f.name} ({(f.size / 1024).toFixed(1)} KB)
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className={`border-2 ${getStatusColor()}`}>
-      <CardHeader>
+    <div className="border rounded-lg p-3 bg-card space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold text-sm">Homework Submission</h4>
+        <Badge variant={status === "grading" ? "secondary" : status === "graded" ? "default" : "outline"}>
+          {getStatusLabel()}
+        </Badge>
+      </div>
+
+      {/* Due date info */}
+      {dueDate && (
+        <div className="flex items-center gap-2 text-sm">
+          {isOverdue && (
+            <div className="flex items-center gap-1 text-red-600">
+              <AlertCircle className="h-4 w-4" />
+              <span>Past due date</span>
+            </div>
+          )}
+          {isDueSoon && !isOverdue && (
+            <div className="flex items-center gap-1 text-orange-600">
+              <AlertCircle className="h-4 w-4" />
+              <span>Due in {daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>
+            </div>
+          )}
+          {!isOverdue && !isDueSoon && daysLeft !== null && daysLeft > 0 && (
+            <span className="text-muted-foreground">Due in {daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>
+          )}
+        </div>
+      )}
+
+      {/* Notes/Answer textarea */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Your Answer / Notes</label>
+        <Textarea
+          placeholder="Type your submission notes here..."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          disabled={closed || status === "graded" || loading}
+          className="min-h-[100px]"
+        />
+      </div>
+
+      {/* File upload section */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <CardTitle>Homework Submission</CardTitle>
-          <Badge variant={status === "grading" ? "secondary" : status === "graded" ? "default" : "outline"}>
-            {getStatusLabel()}
-          </Badge>
+            <label htmlFor="file-input" className="text-sm font-medium">Attached Files</label>
+            <input
+              id="file-input"
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              disabled={closed || status === "graded" || uploading}
+              className="hidden"
+              aria-label="Select files to upload"
+            />
         </div>
-
-        {/* Due date info */}
-        {dueDate && (
-          <div className="flex items-center gap-2 mt-2 text-sm">
-            {isOverdue && (
-              <div className="flex items-center gap-1 text-red-600">
-                <AlertCircle className="h-4 w-4" />
-                <span>Past due date</span>
-              </div>
-            )}
-            {isDueSoon && !isOverdue && (
-              <div className="flex items-center gap-1 text-orange-600">
-                <AlertCircle className="h-4 w-4" />
-                <span>Due in {daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>
-              </div>
-            )}
-            {!isOverdue && !isDueSoon && daysLeft !== null && daysLeft > 0 && (
-              <span className="text-muted-foreground">Due in {daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>
-            )}
-          </div>
-        )}
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        {/* Notes/Answer textarea */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Your Answer / Notes</label>
-          <Textarea
-            placeholder="Type your submission notes here..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            disabled={closed || status === "graded" || loading}
-            className="min-h-[120px]"
-          />
-        </div>
-
-        {/* File upload section */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-              <label htmlFor="file-input" className="text-sm font-medium">Attached Files</label>
-              <input
-                id="file-input"
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleFileSelect}
-                disabled={closed || status === "graded" || uploading}
-                className="hidden"
-                aria-label="Select files to upload"
-              />
-          </div>
 
           {/* File list */}
           {files.length > 0 && (
@@ -285,11 +271,10 @@ export default function SubmissionPanel({
 
         {/* Submitted state info */}
         {submitted && status !== "graded" && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+          <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-700 rounded text-sm text-blue-700 dark:text-blue-300">
             ✓ Your submission has been saved. {status === "grading" && "It's currently being graded."}
           </div>
         )}
-      </CardContent>
-    </Card>
-  );
-}
+      </div>
+    );
+  }

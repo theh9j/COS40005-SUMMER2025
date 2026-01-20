@@ -9,6 +9,7 @@ export type AnnotationTool =
   | "freehand"
   | "text"
   | "polygon"
+  | "eraser"
   | null;
 
 // Using a more specific type for Annotation
@@ -22,6 +23,7 @@ export interface Annotation {
   label?: string; // Used for text inside shapes
   locked?: boolean;
   visible?: boolean; // Used for hide/show
+  strokeWidth?: number; // Line/stroke width for drawing tools
   createdAt?: string;
   updatedAt?: string;
 }
@@ -34,6 +36,7 @@ interface UseAnnotationState {
   isDrawing: boolean;
   tool: AnnotationTool;
   color: string;
+  strokeWidth: number;
   textInputPosition: { x: number; y: number; width: number; height: number; annotationId: string } | null;
   // Other state properties from your original file
   peerAnnotations: any[];
@@ -107,6 +110,7 @@ export function useAnnotation(caseId: string, userId: string) {
     isDrawing: false,
     tool: "select",
     color: "#ff0000",
+    strokeWidth: 2,
     textInputPosition: null,
     // Defaults for other state properties
     peerAnnotations: [],
@@ -181,9 +185,12 @@ export function useAnnotation(caseId: string, userId: string) {
 
     if (state.tool === 'text' || state.tool === 'circle') {
       newAnnotation.coordinates = { ...newAnnotation.coordinates, x:x, y:y, width: 0, height: 0, text: '' };
-    } else if (state.tool === 'freehand' || state.tool === 'polygon') {
+    } else if (state.tool === 'freehand' || state.tool === 'polygon' || state.tool === 'eraser') {
         newAnnotation.coordinates.points = [{ x, y }];
     }
+    
+    // Store current stroke width with the annotation
+    newAnnotation.strokeWidth = state.strokeWidth;
 
     setState((prev) => ({
         ...prev,
@@ -236,6 +243,7 @@ export function useAnnotation(caseId: string, userId: string) {
                 ];
                 break;
             case "freehand":
+            case "eraser":
                 const lastPoint = newCoords.points?.[newCoords.points.length - 1];
                 if (!lastPoint || Math.sqrt((x - lastPoint.x)**2 + (y - lastPoint.y)**2) > 3) {
                    newCoords.points = [...(newCoords.points || []), { x, y }];
@@ -264,7 +272,7 @@ export function useAnnotation(caseId: string, userId: string) {
     let isValid = true;
     if ((ann.type === 'rectangle' || ann.type === 'text') && (!coords?.width || !coords?.height || coords.width < 5 || coords.height < 5 )) isValid = false;
     else if (ann.type === 'circle' && (!coords?.radiusX || !coords?.radiusY || coords.radiusX < 3 || coords.radiusY < 3)) isValid = false;
-    else if (ann.type === 'freehand' && (!coords?.points || coords.points.length < 2)) isValid = false;
+    else if ((ann.type === 'freehand' || ann.type === 'eraser') && (!coords?.points || coords.points.length < 2)) isValid = false;
     else if (ann.type === 'triangle' && (!coords?.points || coords.points.length < 3)) isValid = false;
 
     if (!isValid) {
@@ -275,7 +283,7 @@ export function useAnnotation(caseId: string, userId: string) {
         return;
     }
 
-    if (state.tool !== 'freehand' && state.tool !== 'select' && state.tool !== 'polygon') {
+    if (state.tool !== 'freehand' && state.tool !== 'select' && state.tool !== 'polygon' && state.tool !== 'eraser') {
       let textX, textY, textWidth, textHeight;
       if (ann.type === 'rectangle' || ann.type === 'text') {
         textX = ann.coordinates.x;
@@ -613,11 +621,15 @@ export function useAnnotation(caseId: string, userId: string) {
     setState(prev => ({...prev, imageBounds: bounds}));
   };
 
+  const setStrokeWidth = (width: number) => {
+    setState(prev => ({...prev, strokeWidth: Math.max(1, Math.min(20, width))}));
+  };
+
   useEffect(() => { loadVersions(); }, [loadVersions]);
 
   return {
     ...state,
-    canvasRef, setTool, setColor, startDrawing, updateDrawing, finishDrawing,
+    canvasRef, setTool, setColor, setStrokeWidth, startDrawing, updateDrawing, finishDrawing,
     deleteSelectedAnnotations, updateAnnotation, toggleAnnotationsVisibility,
     lockAnnotations, duplicateAnnotations, undo, redo,
     completeTextInput, cancelTextInput, saveAllAnnotationsSnapshot,
