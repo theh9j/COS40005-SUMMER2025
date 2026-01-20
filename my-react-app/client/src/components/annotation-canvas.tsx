@@ -38,6 +38,7 @@ export default function AnnotationCanvas({
     completeTextInput,
     cancelTextInput,
     color,
+    strokeWidth,
     setImageBounds: updateAnnotationImageBounds,
   } = annotation;
 
@@ -93,8 +94,12 @@ export default function AnnotationCanvas({
     if (!ann.type || !ann.coordinates || !ann.color) return;
 
     const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
+    
+    // Use annotation's strokeWidth or default to 2
+    const lineWidth = (ann as any).strokeWidth || 2;
+    
     ctx.strokeStyle = ann.color;
-    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.lineWidth = isSelected ? Math.max(3, lineWidth + 1) : lineWidth;
     ctx.fillStyle = ann.color + alpha;
 
     const coords = ann.coordinates as any;
@@ -136,6 +141,8 @@ export default function AnnotationCanvas({
       ctx.fill();
     } else if (ann.type === "freehand" && coords.points && Array.isArray(coords.points)) {
       ctx.beginPath();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       coords.points.forEach((point: { x: number; y: number }, index: number) => {
         if (index === 0) {
           ctx.moveTo(imgX + point.x, imgY + point.y);
@@ -144,6 +151,13 @@ export default function AnnotationCanvas({
         }
       });
       ctx.stroke();
+    } else if (ann.type === "eraser" && coords.points && Array.isArray(coords.points)) {
+      ctx.clearRect(
+        imgX + Math.min(...coords.points.map((p: any) => p.x)) - lineWidth / 2,
+        imgY + Math.min(...coords.points.map((p: any) => p.y)) - lineWidth / 2,
+        Math.max(...coords.points.map((p: any) => p.x)) - Math.min(...coords.points.map((p: any) => p.x)) + lineWidth,
+        Math.max(...coords.points.map((p: any) => p.y)) - Math.min(...coords.points.map((p: any) => p.y)) + lineWidth
+      );
     } else if (ann.type === "text") {
         if (coords.text) {
             ctx.fillStyle = ann.color;
@@ -379,9 +393,9 @@ export default function AnnotationCanvas({
 
 
       <div className="absolute top-4 right-4 flex space-x-2">
-        <div className="flex items-center space-x-1 bg-green-100 px-2 py-1 rounded-full">
-          <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
-          <span className="text-xs" data-testid="online-user">Dr. Smith</span>
+        <div className="flex items-center space-x-1 bg-green-100 dark:bg-green-900 px-2 py-1 rounded-full">
+          <div className="w-2 h-2 bg-green-500 dark:bg-green-400 rounded-full pulse-dot"></div>
+          <span className="text-xs text-green-900 dark:text-green-100" data-testid="online-user">Dr. Smith</span>
         </div>
       </div>
 
