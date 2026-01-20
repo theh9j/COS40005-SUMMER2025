@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { useLocation, useRoute, useMemo } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useAnnotation } from "@/hooks/use-annotation";
+import { useSubmission, SubmissionFile } from "@/hooks/use-submission";
 import { mockCases } from "@/lib/mock-data";
 import AnnotationToolbar from "@/components/annotation-toolbar";
 import AnnotationCanvas from "@/components/annotation-canvas";
@@ -14,6 +15,7 @@ import InlineTextEditor from "@/components/inline-text-editor";
 import AnnotationPropertiesPanel from "@/components/annotation-properties-panel";
 import AIChatAssistant from "@/components/ai-chat-assistant";
 import AIAnnotationSuggestions from "@/components/ai-annotation-suggestions";
+import SubmissionPanel from "@/components/submission-panel";
 import { ArrowLeft, Save, Bot, Eye } from "lucide-react";
 
 // Collaborative imports
@@ -37,52 +39,27 @@ export default function AnnotationView() {
 
   const annotation = useAnnotation(caseId, user?.user_id || "current-user");
 
-   // === Homework metadata (mock) theo case ===
-type HomeworkMeta = { dueAt: string; closed: boolean };
-const homeworkByCase: Record<string, HomeworkMeta> = {
-  "case-1": { dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false },
-  "case-2": { dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false },
-  "case-3": { dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true  },
-};
+  // === Homework metadata (mock) theo case ===
+  type HomeworkMeta = { id: string; dueAt: string; closed: boolean };
+  const homeworkByCase: Record<string, HomeworkMeta> = {
+    "case-1": { id: "hw-1", dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false },
+    "case-2": { id: "hw-2", dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false },
+    "case-3": { id: "hw-3", dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true },
+  };
 
-// === Trạng thái bài nộp của riêng học sinh (mock) ===
-type Uploaded = { name: string; url: string; type: string };
-type MySubmission = { status: "none" | "grading" | "graded"; score?: number; notes?: string; files?: Uploaded[] };
-const mySubmissionByCase: Record<string, MySubmission> = {
-  "case-1": { status: "grading" },
-  "case-2": { status: "none" },
-  "case-3": { status: "graded", score: 9 },
-};
+  const hw = homeworkByCase[caseId];
+  const { submission, loading: subLoading, error: subError, submitHomework, uploadFile, fetchSubmission } = useSubmission(
+    hw?.id || "",
+    caseId,
+    user?.user_id || "current-user"
+  );
 
-const daysLeft = (iso?: string) => {
-  if (!iso) return null;
-  const ms = new Date(iso).getTime() - Date.now();
-  return Math.ceil(ms / (1000 * 60 * 60 * 24));
-};
-
-const hw = homeworkByCase[caseId];
-const initial = (mySubmissionByCase[caseId] ?? { status: "none" }) as MySubmission;
-
-const [files, setFiles] = useState<File[]>([]);
-const [uploaded, setUploaded] = useState<Uploaded[]>(initial.files ?? []);
-const [note, setNote] = useState<string>(initial.notes ?? "");
-const closed = !!hw?.closed;
-
-const onUpload = async () => {
-  const ups: Uploaded[] = Array.from(files).map((f) => ({
-    name: f.name,
-    type: f.type || "application/octet-stream",
-    url: URL.createObjectURL(f), // mock preview; BE sẽ trả URL thật
-  }));
-  setUploaded((prev) => [...prev, ...ups]);
-  setFiles([]);
-};
-
-const onSubmit = async () => {
-  // TODO: POST /api/submissions?caseId=<caseId>  body: { notes: note, files: uploaded }
-  alert("Submitted/Updated (mock). Kết nối backend sau.");
-  mySubmissionByCase[caseId] = { status: "grading", notes: note, files: uploaded };
-};
+  // Load submission on mount
+  useEffect(() => {
+    if (hw?.id && caseId && user?.user_id) {
+      fetchSubmission();
+    }
+  }, [hw?.id, caseId, user?.user_id, fetchSubmission]);
 
   // Heartbeat and presence
   useHeartbeat(user?.user_id);
@@ -373,102 +350,30 @@ const onSubmit = async () => {
                 <h4 className="font-semibold">Collaboration</h4>
                 <PresenceBar presence={presence} />
               </div>
-          {/* Homework Submission (compact) — sits right below Compare */}
-          <Card data-testid="homework-panel">
-            <CardContent className="p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-sm">Homework</h4>
-                <div className="flex items-center gap-2">
-                  {hw && <Badge>HW</Badge>}
-                  {closed ? (
-                    <Badge variant="destructive">Closed</Badge>
-                  ) : hw ? (
-                    <Badge variant="secondary">
-                      Due {Math.max(0, (hw?.dueAt ? Math.ceil((new Date(hw.dueAt).getTime() - Date.now())/86400000) : 0))}d
-                    </Badge>
-                  ) : null}
-                </div>
-              </div>
-          
-              {/* Score / Grading */}
-              <div className="text-xs">
-                {initial.status === "graded" ? (
-                  <Badge variant="default">Score: {initial.score}/10</Badge>
-                ) : initial.status === "grading" ? (
-                  <Badge variant="outline">Grading</Badge>
-                ) : (
-                  <span className="text-muted-foreground">Not submitted</span>
-                )}
-              </div>
-          
-              {/* Upload */}
-              <div className="space-y-2">
-                <label className="block text-xs font-medium">Upload (optional)</label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                  disabled={closed}
-                  className="text-xs"
-                />
-                {files.length > 0 && (
-                  <ul className="text-xs list-disc pl-4">
-                    {files.map((f, i) => <li key={i}>{f.name}</li>)}
-                  </ul>
-                )}
-                {uploaded.length > 0 && (
-                  <details className="text-xs">
-                    <summary className="cursor-pointer">Uploaded ({uploaded.length})</summary>
-                    <ul className="mt-1 list-disc pl-4">
-                      {uploaded.map((u) => (
-                        <li key={u.url}>
-                          <a className="underline" href={u.url} target="_blank" rel="noreferrer">{u.name}</a>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </div>
-          
-              {/* Notes */}
-              <div className="space-y-1">
-                <label className="block text-xs font-medium">Notes</label>
-                <textarea
-                  className="w-full border rounded-md p-2 text-xs min-h-[72px]"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Message to teacher…"
-                  disabled={closed}
-                />
-              </div>
-          
-              {/* Actions */}
-              <div className="flex items-center justify-between gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onUpload}
-                  disabled={files.length === 0 || closed}
-                >
-                  Upload
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={onSubmit}
-                  disabled={closed}
-                >
-                  {initial.status === "none" ? "Submit" : "Update"}
-                </Button>
-              </div>
-          
-              {closed && (
-                <div className="text-[11px] text-muted-foreground">
-                  Homework is closed.
+
+              {/* Homework Submission Panel */}
+              {hw && (
+                <div className="p-3 border-b">
+                  <SubmissionPanel
+                    status={submission?.status || "none"}
+                    dueDate={hw.dueAt}
+                    score={submission?.score}
+                    notes={submission?.notes}
+                    files={submission?.files}
+                    closed={hw.closed}
+                    loading={subLoading}
+                    error={subError}
+                    onSubmit={async (notes, files) => {
+                      await submitHomework({
+                        notes,
+                        files,
+                        answers: [],
+                      });
+                    }}
+                    onUploadFile={uploadFile}
+                  />
                 </div>
               )}
-            </CardContent>
-          </Card>
-
               
               <div className="flex-1 overflow-y-auto p-3 space-y-4">
                 {/* --- This button has been removed --- */}
@@ -510,27 +415,6 @@ const onSubmit = async () => {
             </aside>
           )}
 
-          {/* AI Chat Assistant Panel */}
-          {showAIChat && (
-            <aside className="w-96 bg-card border-l border-border">
-              <AIChatAssistant
-                context={{
-                  caseId: caseId,
-                  caseTitle: case_.title,
-                  caseDescription: case_.description,
-                  imageUrl: case_.imageUrl,
-                  annotations: annotation.annotations,
-                  homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
-                  userRole: user.role as "student" | "instructor",
-                  userId: user.user_id || ""
-                }}
-                isMinimized={aiChatMinimized}
-                onMinimize={() => setAIChatMinimized(!aiChatMinimized)}
-                onClose={() => setShowAIChat(false)}
-                className="h-full"
-              />
-            </aside>
-          )}
           {/* AI Chat Assistant Panel */}
           {showAIChat && (
             <aside className="w-96 bg-card border-l border-border">
