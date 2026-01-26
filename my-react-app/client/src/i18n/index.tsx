@@ -48,6 +48,24 @@ const dict = {
     networkError: "Network error. Please try again.",
     invalidCredentials: "Email or password is incorrect.",
 
+    // Signup page
+    joinCommunity: "Join the learning community",
+    firstNameRequired: "First name is required.",
+    lastNameRequired: "Last name is required.",
+    selectRole: "Please select your role.",
+    student: "Student",
+    instructor: "Instructor",
+    passwordWeak: "Use at least 8 characters with letters and numbers.",
+    confirmPassword: "Confirm Password",
+    confirmPasswordRequired: "Please confirm your password.",
+    passwordsDoNotMatch: "Passwords do not match.",
+    signupSuccessTitle: "Welcome",
+    signupSuccessDesc: "Your account is ready. We’re setting up your dashboard…",
+    signupFailed: "Signup failed",
+    signupFailedDesc: "Unable to create your account. Please try again.",
+    creatingAccount: "Creating account...",
+    role: "Role",
+
     // Auth
     signIn: "Sign In",
     createAccount: "Create account",
@@ -95,6 +113,24 @@ const dict = {
     tooManyAttempts: "Quá nhiều lần thử. Vui lòng chờ và thử lại.",
     networkError: "Lỗi mạng. Vui lòng thử lại.",
     invalidCredentials: "Email hoặc mật khẩu không đúng.",
+
+    // Signup page
+    joinCommunity: "Tham gia cộng đồng học tập",
+    firstNameRequired: "Tên là bắt buộc.",
+    lastNameRequired: "Họ là bắt buộc.",
+    selectRole: "Vui lòng chọn vai trò.",
+    student: "Sinh viên",
+    instructor: "Giảng viên",
+    passwordWeak: "Mật khẩu phải có ít nhất 8 ký tự gồm chữ và số.",
+    confirmPassword: "Xác nhận mật khẩu",
+    confirmPasswordRequired: "Vui lòng xác nhận mật khẩu.",
+    passwordsDoNotMatch: "Mật khẩu không khớp.",
+    signupSuccessTitle: "Chào mừng",
+    signupSuccessDesc: "Tài khoản của bạn đã sẵn sàng. Đang chuyển đến bảng điều khiển…",
+    signupFailed: "Đăng ký thất bại",
+    signupFailedDesc: "Không thể tạo tài khoản. Vui lòng thử lại.",
+    creatingAccount: "Đang tạo tài khoản...",
+    role: "Vai trò",
 
     // Auth
     signIn: "Đăng nhập",
