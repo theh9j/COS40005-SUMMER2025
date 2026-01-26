@@ -66,6 +66,19 @@ const dict = {
     creatingAccount: "Creating account...",
     role: "Role",
 
+    // Home / Navbar
+    dashboard: "Dashboard",
+    cases: "Cases",
+    logout: "Logout",
+    getStarted: "Get started",
+    quickLinks: "Quick links",
+    instructorDashboard: "Instructor Dashboard",
+    studentDashboard: "Student Dashboard",
+    caseLibrary: "Case Library",
+    tipNavbar: "Tip: Use the navbar to jump between your dashboard and cases.",
+    heroTitle: "Learn medical imaging with hands-on annotations",
+    heroDescription: "Collaborate with instructors and peers, annotate real cases, and track your progress — all in one place.",
+
     // Auth
     signIn: "Sign In",
     createAccount: "Create account",
@@ -131,6 +144,19 @@ const dict = {
     signupFailedDesc: "Không thể tạo tài khoản. Vui lòng thử lại.",
     creatingAccount: "Đang tạo tài khoản...",
     role: "Vai trò",
+
+    // Home / Navbar
+    dashboard: "Bảng điều khiển",
+    cases: "Ca bệnh",
+    logout: "Đăng xuất",
+    getStarted: "Bắt đầu",
+    quickLinks: "Liên kết nhanh",
+    instructorDashboard: "Bảng điều khiển giảng viên",
+    studentDashboard: "Bảng điều khiển sinh viên",
+    caseLibrary: "Thư viện ca bệnh",
+    tipNavbar:"Mẹo: Sử dụng thanh điều hướng để chuyển nhanh giữa bảng điều khiển và ca bệnh.",
+    heroTitle: "Học chẩn đoán hình ảnh với chú thích thực hành",
+    heroDescription:"Hợp tác với giảng viên và bạn học, chú thích ca bệnh thực tế và theo dõi tiến trình — tất cả trong một nền tảng.",
 
     // Auth
     signIn: "Đăng nhập",
