@@ -8,12 +8,21 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { ArrowLeft, Save, Palette, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/i18n";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, updateUser } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { locale, setLocale, t } = useI18n();
 
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
@@ -34,31 +43,26 @@ export default function SettingsPage() {
     if (!file) return;
 
     setAvatarFile(file);
-    const previewURL = URL.createObjectURL(file);
-    setAvatarPreview(previewURL);
+    setAvatarPreview(URL.createObjectURL(file));
   };
 
   const handleSave = async () => {
     if (!firstName.trim() || !lastName.trim()) {
       return toast({
         variant: "destructive",
-        title: "Error",
-        description: "First name and last name cannot be empty.",
+        title: t("error"),
+        description: t("firstLastCannotBeEmpty"),
       });
     }
 
     setSaving(true);
     try {
-      let payload: any = { firstName, lastName };
-
-      // If user changed profile picture
       if (avatarFile) {
         const formData = new FormData();
         formData.append("firstName", firstName);
         formData.append("lastName", lastName);
         formData.append("avatar", avatarFile);
 
-        // Backend must accept multipart/form-data
         const res = await fetch(
           `http://127.0.0.1:8000/api/user/update?token=${user?.token}`,
           {
@@ -67,23 +71,23 @@ export default function SettingsPage() {
           }
         );
 
-        if (!res.ok) throw new Error("Failed to update profile picture");
+        if (!res.ok) throw new Error();
 
         const { token: newToken } = await res.json();
         localStorage.setItem("session_token", newToken);
       } else {
-        await updateUser(payload);
+        await updateUser({ firstName, lastName });
       }
 
       toast({
-        title: "Profile Updated",
-        description: "Your information has been saved.",
+        title: t("profileUpdated"),
+        description: t("yourInfoSaved"),
       });
-    } catch (err) {
+    } catch {
       toast({
         variant: "destructive",
-        title: "Update Failed",
-        description: "Unable to save changes. Try again.",
+        title: t("updateFailed"),
+        description: t("unableToSaveTryAgain"),
       });
     } finally {
       setSaving(false);
@@ -96,9 +100,9 @@ export default function SettingsPage() {
         <div className="flex items-center space-x-3">
           <Button variant="ghost" size="sm" onClick={() => setLocation("/student")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            {t("back")}
           </Button>
-          <h1 className="text-xl font-semibold">Settings</h1>
+          <h1 className="text-xl font-semibold">{t("settings")}</h1>
         </div>
       </header>
 
@@ -125,61 +129,89 @@ export default function SettingsPage() {
                   />
                 </label>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Upload a new profile picture
-                </p>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                {t("uploadNewProfilePicture")}
+              </p>
             </div>
 
-            {/* Account Section */}
+            {/* Account Info */}
             <div>
-              <h2 className="text-lg font-semibold mb-1">Account Information</h2>
+              <h2 className="text-lg font-semibold mb-1">
+                {t("accountInformation")}
+              </h2>
               <p className="text-sm text-muted-foreground">
-                Update your personal details below.
+                {t("updateYourPersonalDetails")}
               </p>
             </div>
 
             <div className="space-y-4">
               <div>
-                <Label htmlFor="firstName">First Name</Label>
+                <Label>{t("firstName")}</Label>
                 <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
               </div>
 
               <div>
-                <Label htmlFor="lastName">Last Name</Label>
+                <Label>{t("lastName")}</Label>
                 <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
               </div>
 
               <div>
-                <Label>Email</Label>
+                <Label>{t("email")}</Label>
                 <Input value={user?.email || ""} disabled />
               </div>
             </div>
 
-            {/* Theme Switch */}
+            {/* Theme & Language */}
             <div className="pt-4 border-t space-y-4">
+              {/* Theme */}
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>Theme</Label>
+                  <Label>{t("theme")}</Label>
                   <p className="text-sm text-muted-foreground capitalize">
-                    Current: {theme}
+                    {t("current")}: {theme}
                   </p>
                 </div>
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    setTheme(theme === "dark" ? "light" : "dark")
-                  }
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 >
                   <Palette className="h-4 w-4 mr-2" />
-                  Switch to {theme === "dark" ? "Light" : "Dark"}
+                  {theme === "dark" ? t("switchToLight") : t("switchToDark")}
                 </Button>
+              </div>
+
+              {/* Language */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>{t("language")}</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {locale === "vi" ? t("vietnamese") : t("english")}
+                  </p>
+                </div>
+
+                <div className="w-44">
+                  <Select value={locale} onValueChange={(v) => setLocale(v as "en" | "vi")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">{t("english")}</SelectItem>
+                      <SelectItem value="vi">{t("vietnamese")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
             <Button onClick={handleSave} disabled={saving} className="w-full">
-              {saving ? "Saving..." : <><Save className="h-4 w-4 mr-2" /> Save Changes</>}
+              {saving ? (
+                t("saving")
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {t("saveChanges")}
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
