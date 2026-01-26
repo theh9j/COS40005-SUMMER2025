@@ -34,6 +34,20 @@ const dict = {
     error: "Error",
     firstLastCannotBeEmpty: "First name and last name cannot be empty.",
 
+    // Login page
+    password: "Password",
+    rememberMe: "Remember me",
+    loginSuccessful: "Login successful",
+    loginFailed: "Login failed",
+    welcomeBack: "Welcome back! Redirecting to your dashboard...",
+    invalidEmail: "Enter a valid email address.",
+    emailRequired: "Email is required.",
+    passwordRequired: "Password is required.",
+    offlineError: "You appear to be offline. Check your connection.",
+    tooManyAttempts: "Too many attempts. Please wait and try again.",
+    networkError: "Network error. Please try again.",
+    invalidCredentials: "Email or password is incorrect.",
+
     // Auth
     signIn: "Sign In",
     createAccount: "Create account",
@@ -67,6 +81,20 @@ const dict = {
     unableToSaveTryAgain: "Không thể lưu thay đổi. Vui lòng thử lại.",
     error: "Lỗi",
     firstLastCannotBeEmpty: "Tên và họ không được để trống.",
+
+    // Login page
+    password: "Mật khẩu",
+    rememberMe: "Ghi nhớ đăng nhập",
+    loginSuccessful: "Đăng nhập thành công",
+    loginFailed: "Đăng nhập thất bại",
+    welcomeBack: "Chào mừng quay lại! Đang chuyển đến bảng điều khiển...",
+    invalidEmail: "Vui lòng nhập email hợp lệ.",
+    emailRequired: "Email là bắt buộc.",
+    passwordRequired: "Mật khẩu là bắt buộc.",
+    offlineError: "Bạn đang ngoại tuyến. Vui lòng kiểm tra kết nối.",
+    tooManyAttempts: "Quá nhiều lần thử. Vui lòng chờ và thử lại.",
+    networkError: "Lỗi mạng. Vui lòng thử lại.",
+    invalidCredentials: "Email hoặc mật khẩu không đúng.",
 
     // Auth
     signIn: "Đăng nhập",
