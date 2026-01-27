@@ -152,14 +152,14 @@ export default function AIChatAssistant({
   if (isMinimized) {
     return (
       <Card className={`fixed bottom-4 right-4 w-80 shadow-lg ${className}`}>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-primary" />
-              <CardTitle className="text-sm">AI Assistant</CardTitle>
-              {isStreaming && <Loader2 className="h-3 w-3 animate-spin" />}
+        <CardHeader className="pb-2 min-h-fit">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Bot className="h-4 w-4 text-primary flex-shrink-0" />
+              <CardTitle className="text-sm truncate">AI Assistant</CardTitle>
+              {isStreaming && <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
@@ -182,7 +182,7 @@ export default function AIChatAssistant({
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground line-clamp-2">
             {messages.length > 0 
               ? `${messages.length} messages` 
               : "Click to expand AI assistant"
@@ -194,15 +194,15 @@ export default function AIChatAssistant({
   }
 
   return (
-    <Card className={`flex flex-col h-full ${className}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base">AI Medical Assistant</CardTitle>
-            {isStreaming && <Loader2 className="h-4 w-4 animate-spin" />}
+    <Card className={`flex flex-col h-full min-h-0 ${className}`}>
+      <CardHeader className="pb-3 shrink-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Bot className="h-5 w-5 text-primary flex-shrink-0" />
+            <CardTitle className="text-base truncate">AI Medical Assistant</CardTitle>
+            {isStreaming && <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               variant="ghost"
               size="sm"
@@ -235,25 +235,25 @@ export default function AIChatAssistant({
         </div>
         
         {context && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Badge variant="secondary" className="text-xs">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground overflow-hidden">
+            <Badge variant="secondary" className="text-xs flex-shrink-0">
               {context.userRole}
             </Badge>
             {context.caseTitle && (
-              <span>• {context.caseTitle}</span>
+              <span className="truncate">• {context.caseTitle}</span>
             )}
             {context.annotations.length > 0 && (
-              <span>• {context.annotations.length} annotations</span>
+              <span className="flex-shrink-0">• {context.annotations.length} annotations</span>
             )}
           </div>
         )}
       </CardHeader>
 
-      <Separator />
+      <Separator className="shrink-0" />
 
-      <CardContent className="flex-1 flex flex-col p-0">
+      <CardContent className="flex-1 flex flex-col p-0 min-h-0 overflow-hidden">
         {/* Messages */}
-        <ScrollArea className="flex-1 p-4">
+        <ScrollArea className="flex-1 p-4 overflow-hidden">
           {messages.length === 0 ? (
             <div className="text-center py-8">
               <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -270,11 +270,11 @@ export default function AIChatAssistant({
                       key={index}
                       variant="outline"
                       size="sm"
-                      className="text-xs h-auto py-2 px-3 whitespace-normal text-left"
+                      className="text-xs h-auto py-2 px-3 whitespace-normal text-left w-full justify-start"
                       onClick={() => handleSuggestionClick(suggestion)}
                     >
                       <Lightbulb className="h-3 w-3 mr-2 flex-shrink-0" />
-                      {suggestion}
+                      <span className="text-left">{suggestion}</span>
                     </Button>
                   ))}
                 </div>
@@ -328,25 +328,25 @@ export default function AIChatAssistant({
           <div ref={messagesEndRef} />
         </ScrollArea>
 
-        <Separator />
+        <Separator className="shrink-0" />
 
         {/* Input */}
-        <div className="p-4">
+        <div className="p-4 shrink-0 border-t border-border">
           <div className="flex gap-2">
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about medical concepts, annotations, or get help with your case..."
-              className="min-h-[60px] resize-none"
+              placeholder="Ask about medical concepts, annotations..."
+              className="min-h-[60px] max-h-[120px] resize-none"
               disabled={isLoading}
             />
             <Button
               onClick={() => sendMessage(input)}
               disabled={isLoading || !input.trim()}
               size="sm"
-              className="px-3"
+              className="px-3 self-end flex-shrink-0"
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -357,9 +357,9 @@ export default function AIChatAssistant({
           </div>
           
           {context && (
-            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-              <AlertCircle className="h-3 w-3" />
-              <span>AI has context of your current case and annotations</span>
+            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground overflow-hidden">
+              <AlertCircle className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">AI has context of your case</span>
             </div>
           )}
         </div>

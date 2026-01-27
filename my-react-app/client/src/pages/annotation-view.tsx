@@ -16,7 +16,8 @@ import AnnotationPropertiesPanel from "@/components/annotation-properties-panel"
 import AIChatAssistant from "@/components/ai-chat-assistant";
 import AIAnnotationSuggestions from "@/components/ai-annotation-suggestions";
 import SubmissionPanel from "@/components/submission-panel";
-import { ArrowLeft, Save, Bot, Eye } from "lucide-react";
+import AssignmentRequirements from "@/components/assignment-requirements";
+import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown } from "lucide-react";
 
 // Collaborative imports
 import { useVersions } from "@/hooks/use-versions";
@@ -40,11 +41,11 @@ export default function AnnotationView() {
   const annotation = useAnnotation(caseId, user?.user_id || "current-user");
 
   // === Homework metadata (mock) theo case ===
-  type HomeworkMeta = { id: string; dueAt: string; closed: boolean };
+  type HomeworkMeta = { id: string; dueAt: string; closed: boolean; description: string; points: number };
   const homeworkByCase: Record<string, HomeworkMeta> = {
-    "case-1": { id: "hw-1", dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false },
-    "case-2": { id: "hw-2", dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false },
-    "case-3": { id: "hw-3", dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true },
+    "case-1": { id: "hw-1", dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false, description: "Analyze the medical imaging and create comprehensive annotations identifying key anatomical structures and pathological findings.", points: 100 },
+    "case-2": { id: "hw-2", dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false, description: "Detailed case analysis with peer comparison to learn different annotation approaches.", points: 85 },
+    "case-3": { id: "hw-3", dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true, description: "Final comprehensive annotation exercise with quality and accuracy requirements.", points: 90 },
   };
 
   const hw = homeworkByCase[caseId];
@@ -76,9 +77,63 @@ export default function AnnotationView() {
   const [showAIVision, setShowAIVision] = useState(false);
   const [aiChatMinimized, setAIChatMinimized] = useState(false);
   const [compare, setCompare] = useState<{ peer?: any; alpha?: number }>({});
+  const [showClosedCaseNotification, setShowClosedCaseNotification] = useState(false);
   
   // Sidebar tab state: "annotate" | "collaborate" | "ai-assistant" | "homework"
   const [activeSidebarTab, setActiveSidebarTab] = useState<"annotate" | "collaborate" | "ai-assistant" | "homework">("collaborate");
+  const [showTabDropdown, setShowTabDropdown] = useState(false);
+
+  // Assignment requirements screen - check if already accepted
+  const [showRequirements, setShowRequirements] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const accepted = localStorage.getItem(`assignment_accepted_${caseId}`);
+    return !accepted;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!showRequirements) {
+      localStorage.setItem(`assignment_accepted_${caseId}`, "true");
+    }
+  }, [showRequirements, caseId]);
+
+  const handleAcceptRequirements = () => {
+    setShowRequirements(false);
+    // Show closed case notification if case is closed
+    if (hw?.closed) {
+      setShowClosedCaseNotification(true);
+    }
+  };
+
+  // Timer state - persistent with localStorage
+  const [elapsedSeconds, setElapsedSeconds] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const saved = localStorage.getItem(`timer_${caseId}`);
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(`timer_${caseId}`, elapsedSeconds.toString());
+  }, [elapsedSeconds, caseId]);
+
+  useEffect(() => {
+    if (showRequirements) return;
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [showRequirements]);
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m ${secs}s`;
+  };
 
   // Redirect if not logged in
   useEffect(() => {
@@ -123,14 +178,26 @@ export default function AnnotationView() {
     }
   }, [annotation.selectedAnnotationIds]);
 
+  const handleBack = () => {
+    if (user?.role === "student") setLocation("/student");
+    else setLocation("/instructor");
+  };
+
   if (!user || !case_) {
     return <div>Loading...</div>;
   }
 
-  const handleBack = () => {
-    if (user.role === "student") setLocation("/student");
-    else setLocation("/instructor");
-  };
+  // Show assignment requirements first
+  if (showRequirements) {
+    return (
+      <AssignmentRequirements
+        case={case_}
+        homework={hw}
+        onReturn={handleBack}
+        onAccept={handleAcceptRequirements}
+      />
+    );
+  }
 
   // Save a version (both local + collaborative)
   const handleSaveVersion = async () => {
@@ -152,6 +219,14 @@ export default function AnnotationView() {
   // Compare toggle
   const handleCompareChange = (peer?: any, alpha = 0.4) => {
     setCompare({ peer, alpha });
+    if (peer) {
+      // Get the peer's annotations from the mockPeerAnnotations
+      const peerData = mockPeerAnnotations.find((p: any) => p.user.id === peer.id);
+      if (peerData) {
+        // Update the annotation state with peer annotations
+        // This will be rendered on the canvas with the specified alpha (opacity)
+      }
+    }
     console.log("Compare with peer:", peer, "opacity:", alpha);
   };
 
@@ -205,6 +280,12 @@ export default function AnnotationView() {
           </div>
 
           <div className="flex items-center space-x-3">
+            {/* Timer Display */}
+            <div className="flex items-center space-x-2 px-3 py-1.5 bg-muted rounded-lg">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-mono font-medium">{formatTime(elapsedSeconds)}</span>
+            </div>
+            
             <Button
               variant="outline"
               size="sm"
@@ -239,6 +320,7 @@ export default function AnnotationView() {
         annotation={annotation}
         onToggleHistory={() => setShowHistory(!showHistory)}
         onToggleComparison={() => setShowComparison(!showComparison)}
+        onShowRequirements={() => setShowRequirements(true)}
         showHistory={showHistory}
         showComparison={showComparison}
       />
@@ -253,7 +335,7 @@ export default function AnnotationView() {
               imageUrl={case_.imageUrl}
               annotation={annotation}
               peerAnnotations={annotation.peerAnnotations}
-              versionOverlay={annotation.versionOverlay}
+              peerOpacity={compare.alpha || 0.5}
             />
           </div>
 
@@ -336,44 +418,82 @@ export default function AnnotationView() {
             </aside>
           )}
 
-          {/* Default collaborative sidebar with 2x2 tab grid */}
+          {/* Default collaborative sidebar with dropdown tab selector */}
           {!showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && (
             <aside className="w-96 bg-card border-l border-border flex flex-col overflow-hidden">
-              {/* 2x2 Tab Grid */}
+              {/* Dropdown Tab Selector */}
               <div className="border-b border-border p-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="relative">
                   <Button
-                    variant={activeSidebarTab === "annotate" ? "default" : "secondary"}
-                    className="text-sm h-9"
-                    onClick={() => setActiveSidebarTab("annotate")}
+                    variant="outline"
+                    className="w-full justify-between"
+                    onClick={() => setShowTabDropdown(!showTabDropdown)}
                   >
-                    <span className="w-4 h-4 mr-1">📝</span>
-                    Annotate
+                    <span className="flex items-center gap-2">
+                      {activeSidebarTab === "annotate" && <span className="text-base">📝</span>}
+                      {activeSidebarTab === "collaborate" && <span className="text-base">👥</span>}
+                      {activeSidebarTab === "ai-assistant" && <span className="text-base">🤖</span>}
+                      {activeSidebarTab === "homework" && <span className="text-base">📋</span>}
+                      <span className="capitalize">
+                        {activeSidebarTab === "ai-assistant" ? "AI Assistant" : activeSidebarTab.charAt(0).toUpperCase() + activeSidebarTab.slice(1)}
+                      </span>
+                    </span>
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${showTabDropdown ? "rotate-180" : ""}`} />
                   </Button>
-                  <Button
-                    variant={activeSidebarTab === "collaborate" ? "default" : "secondary"}
-                    className="text-sm h-9"
-                    onClick={() => setActiveSidebarTab("collaborate")}
-                  >
-                    <span className="w-4 h-4 mr-1">👥</span>
-                    Collaborate
-                  </Button>
-                  <Button
-                    variant={activeSidebarTab === "ai-assistant" ? "default" : "secondary"}
-                    className="text-sm h-9"
-                    onClick={() => setActiveSidebarTab("ai-assistant")}
-                  >
-                    <span className="w-4 h-4 mr-1">🤖</span>
-                    AI Assistant
-                  </Button>
-                  <Button
-                    variant={activeSidebarTab === "homework" ? "default" : "secondary"}
-                    className="text-sm h-9"
-                    onClick={() => setActiveSidebarTab("homework")}
-                  >
-                    <span className="w-4 h-4 mr-1">📋</span>
-                    Homework
-                  </Button>
+                  
+                  {/* Dropdown Menu with Smooth Animation */}
+                  {showTabDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                      <button
+                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                          activeSidebarTab === "annotate" ? "bg-primary/10" : ""
+                        }`}
+                        onClick={() => {
+                          setActiveSidebarTab("annotate");
+                          setShowTabDropdown(false);
+                        }}
+                      >
+                        <span className="text-base">📝</span>
+                        <span>Annotate</span>
+                      </button>
+                      <button
+                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                          activeSidebarTab === "collaborate" ? "bg-primary/10" : ""
+                        }`}
+                        onClick={() => {
+                          setActiveSidebarTab("collaborate");
+                          setShowTabDropdown(false);
+                        }}
+                      >
+                        <span className="text-base">👥</span>
+                        <span>Collaborate</span>
+                      </button>
+                      <button
+                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                          activeSidebarTab === "ai-assistant" ? "bg-primary/10" : ""
+                        }`}
+                        onClick={() => {
+                          setActiveSidebarTab("ai-assistant");
+                          setShowTabDropdown(false);
+                        }}
+                      >
+                        <span className="text-base">🤖</span>
+                        <span>AI Assistant</span>
+                      </button>
+                      <button
+                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                          activeSidebarTab === "homework" ? "bg-primary/10" : ""
+                        }`}
+                        onClick={() => {
+                          setActiveSidebarTab("homework");
+                          setShowTabDropdown(false);
+                        }}
+                      >
+                        <span className="text-base">📋</span>
+                        <span>Homework</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -447,9 +567,25 @@ export default function AnnotationView() {
                 </div>
               )}
 
-              {/* Tab Content - Homework */}
+              {/* Tab Content - Assignment Requirements */}
               {activeSidebarTab === "homework" && (
                 <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                  {hw && (
+                    <div className="border rounded-lg p-4 bg-card space-y-4">
+                      <div>
+                        <h3 className="font-semibold text-sm mb-2">Assignment Details</h3>
+                        <p className="text-xs text-muted-foreground mb-3">{hw.description}</p>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-medium">Total Points</span>
+                          <Badge variant="outline" className="text-lg font-bold">{hw.points}</Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <p><strong>Due:</strong> {new Date(hw.dueAt).toLocaleDateString()}</p>
+                          <p><strong>Status:</strong> {hw.closed ? <span className="text-red-600 font-semibold">Closed</span> : <span className="text-green-600 font-semibold">Open</span>}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {hw ? (
                     <>
                       <SubmissionPanel
@@ -484,6 +620,34 @@ export default function AnnotationView() {
                 </div>
               )}
             </aside>
+          )}
+
+          {/* Closed Case Notification Modal */}
+          {showClosedCaseNotification && hw?.closed && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-card border border-border rounded-lg shadow-lg max-w-md w-full p-6 space-y-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h3 className="font-semibold text-base">Assignment Closed</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      This assignment is closed and no longer accepting new submissions. You can still view and edit your existing annotations, but you will not be able to submit new work.
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded p-3">
+                  <p className="text-xs text-orange-900 dark:text-orange-200">
+                    <strong>Note:</strong> The deadline for this assignment has passed. Contact your instructor if you have questions.
+                  </p>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={() => setShowClosedCaseNotification(false)}
+                >
+                  Understand
+                </Button>
+              </div>
+            </div>
           )}
 
           {/* Floating AI Chat (when minimized) */}
