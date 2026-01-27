@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus } from "lucide-react";
+import { useI18n } from "@/i18n";
 
 type Role = "student" | "instructor";
 type Field =
@@ -34,6 +35,7 @@ export default function Signup() {
   const [, setLocation] = useLocation();
   const { signup, isLoading } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,19 +51,20 @@ export default function Signup() {
 
   const validate = () => {
     const e: FieldErrors = {};
-    if (!formData.firstName.trim()) e.firstName = "First name is required.";
-    if (!formData.lastName.trim()) e.lastName = "Last name is required.";
-    if (!formData.email.trim()) e.email = "Email is required.";
+
+    if (!formData.firstName.trim()) e.firstName = t("firstNameRequired");
+    if (!formData.lastName.trim()) e.lastName = t("lastNameRequired");
+    if (!formData.email.trim()) e.email = t("emailRequired");
     else if (!emailRegex.test(formData.email.trim()))
-      e.email = "Enter a valid email address.";
-    if (!formData.role) e.role = "Please select your role.";
-    if (!formData.password) e.password = "Password is required.";
+      e.email = t("invalidEmail");
+    if (!formData.role) e.role = t("selectRole");
+    if (!formData.password) e.password = t("passwordRequired");
     else if (!strongEnough(formData.password))
-      e.password = "Use at least 8 characters with letters and numbers.";
+      e.password = t("passwordWeak");
     if (!formData.confirmPassword)
-      e.confirmPassword = "Please confirm your password.";
+      e.confirmPassword = t("confirmPasswordRequired");
     else if (formData.password !== formData.confirmPassword)
-      e.confirmPassword = "Passwords do not match.";
+      e.confirmPassword = t("passwordsDoNotMatch");
 
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -70,8 +73,9 @@ export default function Signup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+
     setIsSubmitting(true);
-    setErrors((prev) => ({ ...prev, form: undefined }));
+    setErrors({});
 
     try {
       await signup({
@@ -83,17 +87,17 @@ export default function Signup() {
       });
 
       toast({
-        title: `Welcome, ${formData.firstName || "there"}! 🎉`,
-        description: "Your account is ready. We’re setting up your dashboard…",
+        title: `${t("signupSuccessTitle")}, ${formData.firstName || ""}! 🎉`,
+        description: t("signupSuccessDesc"),
       });
 
       setTimeout(() => {
         setLocation(formData.role === "student" ? "/student" : "/instructor");
       }, 100);
-    } catch (error) {
+    } catch {
       toast({
-        title: "Signup failed",
-        description: "Unable to create your account. Please try again.",
+        title: t("signupFailed"),
+        description: t("signupFailedDesc"),
         variant: "destructive",
       });
     } finally {
@@ -102,42 +106,35 @@ export default function Signup() {
   };
 
   return (
-    <div
-      className="min-h-screen medical-gradient flex flex-col"
-      data-testid="signup-screen"
-    >
-      {/* --- Navbar --- */}
-      <header className="bg-card border-b border-border h-16 px-6 flex items-center justify-start sticky top-0 z-40">
+    <div className="min-h-screen medical-gradient flex flex-col">
+      {/* Navbar */}
+      <header className="bg-card border-b border-border h-16 px-6 flex items-center">
         <button
           onClick={() => setLocation("/home")}
-          className="flex items-center space-x-3 focus:outline-none hover:opacity-80 transition"
+          className="flex items-center space-x-3 hover:opacity-80 transition"
         >
           <UserPlus className="h-6 w-6 text-primary" />
-          <span className="font-semibold">Medical Imaging Platform</span>
+          <span className="font-semibold">{t("appName")}</span>
         </button>
       </header>
 
-      {/* --- Main Content --- */}
+      {/* Main */}
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md shadow-2xl">
           <CardContent className="p-8">
             <div className="text-center mb-8">
               <UserPlus className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-card-foreground">
-                Create Account
-              </h1>
+              <h1 className="text-2xl font-bold">{t("createAccount")}</h1>
               <p className="text-muted-foreground mt-2">
-                Join the learning community
+                {t("joinCommunity")}
               </p>
             </div>
 
-            {/* --- Signup Form --- */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="firstName">First Name</Label>
+                  <Label>{t("firstName")}</Label>
                   <Input
-                    id="firstName"
                     value={formData.firstName}
                     onChange={(e) =>
                       setFormData({ ...formData, firstName: e.target.value })
@@ -152,9 +149,8 @@ export default function Signup() {
                 </div>
 
                 <div>
-                  <Label htmlFor="lastName">Last Name</Label>
+                  <Label>{t("lastName")}</Label>
                   <Input
-                    id="lastName"
                     value={formData.lastName}
                     onChange={(e) =>
                       setFormData({ ...formData, lastName: e.target.value })
@@ -170,9 +166,8 @@ export default function Signup() {
               </div>
 
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label>{t("email")}</Label>
                 <Input
-                  id="email"
                   type="email"
                   value={formData.email}
                   onChange={(e) =>
@@ -186,20 +181,20 @@ export default function Signup() {
               </div>
 
               <div>
-                <Label htmlFor="role">Role</Label>
+                <Label>{t("role")}</Label>
                 <Select
+                  value={formData.role}
                   onValueChange={(value) =>
                     setFormData({ ...formData, role: value })
                   }
-                  value={formData.role}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select your role" />
+                    <SelectValue placeholder={t("selectRole")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="student">Student</SelectItem>
-                    <SelectItem value="instructor">Instructor</SelectItem>
+                    <SelectItem value="student">{t("student")}</SelectItem>
+                    <SelectItem value="instructor">{t("instructor")}</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors.role && (
@@ -208,9 +203,8 @@ export default function Signup() {
               </div>
 
               <div>
-                <Label htmlFor="password">Password</Label>
+                <Label>{t("password")}</Label>
                 <Input
-                  id="password"
                   type="password"
                   value={formData.password}
                   onChange={(e) =>
@@ -226,9 +220,8 @@ export default function Signup() {
               </div>
 
               <div>
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label>{t("confirmPassword")}</Label>
                 <Input
-                  id="confirmPassword"
                   type="password"
                   value={formData.confirmPassword}
                   onChange={(e) =>
@@ -246,18 +239,14 @@ export default function Signup() {
                 )}
               </div>
 
-              {errors.form && (
-                <p className="text-sm text-destructive">{errors.form}</p>
-              )}
-
               <Button
                 type="submit"
                 className="w-full"
                 disabled={isSubmitting || isLoading}
               >
                 {isSubmitting || isLoading
-                  ? "Creating account..."
-                  : "Sign Up"}
+                  ? t("creatingAccount")
+                  : t("signUp")}
               </Button>
             </form>
           </CardContent>

@@ -90,7 +90,7 @@ export default function StudentDashboard() {
     fetchOnlineUsers();
   }, []);
 
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
   useHeartbeat(user?.user_id);
 
@@ -130,6 +130,44 @@ export default function StudentDashboard() {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
+
+  const [discussionPrefill, setDiscussionPrefill] = useState<null | { title?: string; message?: string; tags?: string[]; caseId?: string }>(null);
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('openDiscussion')) {
+        const raw = sessionStorage.getItem('discussionPrefill');
+        if (raw) {
+          setDiscussionPrefill(JSON.parse(raw));
+          setActiveView('collaboration');
+          params.delete('openDiscussion');
+          const qs = params.toString();
+          const newPath = window.location.pathname + (qs ? `?${qs}` : '');
+          window.history.replaceState({}, '', newPath);
+        }
+      }
+    } catch (err) {
+      console.error('Error reading discussion prefill', err);
+    }
+  }, [location]);
+
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail;
+        const prefill = detail || JSON.parse(sessionStorage.getItem('discussionPrefill') || 'null');
+        if (prefill) {
+          setDiscussionPrefill(prefill);
+          setActiveView('collaboration');
+        }
+      } catch (e) {
+        console.error('discussion-prefill handler error', e);
+      }
+    };
+
+    window.addEventListener('discussion-prefill', handler as EventListener);
+    return () => window.removeEventListener('discussion-prefill', handler as EventListener);
+  }, []);
 
   // Fetch from your API (fallback to mock if API missing/failed)
   useEffect(() => {
@@ -445,7 +483,7 @@ export default function StudentDashboard() {
 
           {activeView === "collaboration" && (
             <div className="p-6" data-testid="view-collaboration">
-              <DiscussionThread />
+              <DiscussionThread initialPost={discussionPrefill || undefined} />
             </div>
           )}
 
