@@ -13,7 +13,14 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatTimestamp } from './ThreadItem';
 
-const DiscussionThread: React.FC = () => {
+interface InitialPostPrefill {
+  title?: string;
+  message?: string;
+  tags?: string[];
+  caseId?: string;
+}
+
+const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ initialPost }) => {
   const { user } = useAuth();
 
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -32,6 +39,36 @@ const DiscussionThread: React.FC = () => {
   const [newCustomTag, setNewCustomTag] = useState('');
   
   const [newPostImageFile, setNewPostImageFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (initialPost && (initialPost.title || initialPost.message || (initialPost.tags && initialPost.tags.length))) {
+      setNewPostTitle(initialPost.title || '');
+      setNewPostMessage(initialPost.message || '');
+      setNewPostTags(initialPost.tags || []);
+      setIsCreatingPost(true);
+      try {
+        sessionStorage.removeItem('discussionPrefill');
+      } catch (e) {}
+    }
+  }, [initialPost]);
+
+  useEffect(() => {
+    if (initialPost) return;
+    try {
+      const raw = sessionStorage.getItem('discussionPrefill');
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      if (p && (p.title || p.message || (p.tags && p.tags.length))) {
+        setNewPostTitle(p.title || '');
+        setNewPostMessage(p.message || '');
+        setNewPostTags(p.tags || []);
+        setIsCreatingPost(true);
+        sessionStorage.removeItem('discussionPrefill');
+      }
+    } catch (e) {
+      console.error('Failed to read discussion prefill fallback', e);
+    }
+  }, []);
 
   const handleCreatePost = async () => {
     if (!newPostTitle || !newPostMessage || !user) return;

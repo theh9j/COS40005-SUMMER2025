@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useAnnotation } from "@/hooks/use-annotation";
 import { Annotation } from "@shared/schema";
 import InlineTextEditor from "./inline-text-editor";
+import { ZoomIn, ZoomOut } from "lucide-react";
 
 interface AnnotationCanvasProps {
   imageUrl: string;
   annotation: ReturnType<typeof useAnnotation>;
   peerAnnotations?: Map<string, { annotations: Annotation[]; color: string; visible: boolean }>;
   versionOverlay?: Annotation | null;
+  peerOpacity?: number;
 }
 
 interface ImageBounds {
@@ -21,11 +23,14 @@ export default function AnnotationCanvas({
   imageUrl,
   annotation,
   peerAnnotations,
-  versionOverlay
+  versionOverlay,
+  peerOpacity = 0.5
 }: AnnotationCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageBounds, setImageBounds] = useState<ImageBounds>({ x: 0, y: 0, width: 800, height: 600 });
+  const [canvasZoom, setCanvasZoom] = useState(1);
+  const [isMouseOverCanvas, setIsMouseOverCanvas] = useState(false);
 
   const {
     annotations,
@@ -309,9 +314,11 @@ export default function AnnotationCanvas({
     if (peerAnnotations) {
       peerAnnotations.forEach((peerData) => {
         if (peerData.visible) {
+          ctx.globalAlpha = peerOpacity;
           peerData.annotations.forEach((ann) => {
             drawAnnotation(ctx, ann, 0.5);
           });
+          ctx.globalAlpha = 1;
         }
       });
     }
@@ -366,20 +373,54 @@ export default function AnnotationCanvas({
     finishDrawing();
   };
 
+  const handleCanvasWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!isMouseOverCanvas) return; // Only zoom canvas when mouse is over it
+    
+    e.preventDefault();
+    const delta = -e.deltaY;
+    const zoomSpeed = 0.1;
+    const newZoom = Math.max(0.5, Math.min(3, canvasZoom + (delta > 0 ? zoomSpeed : -zoomSpeed)));
+    setCanvasZoom(newZoom);
+  };
+
+  const handleZoomIn = () => {
+    setCanvasZoom(prev => Math.min(3, prev + 0.2));
+  };
+
+  const handleZoomOut = () => {
+    setCanvasZoom(prev => Math.max(0.5, prev - 0.2));
+  };
+
+  const handleResetZoom = () => {
+    setCanvasZoom(1);
+  };
+
   return (
     <div
       ref={containerRef}
-      className="bg-card rounded-lg border border-border h-full flex items-center justify-center relative annotation-canvas"
+      className="bg-card rounded-lg border border-border h-full flex items-center justify-center relative annotation-canvas overflow-hidden"
       data-testid="annotation-canvas"
+      onWheel={handleCanvasWheel}
+      onMouseEnter={() => setIsMouseOverCanvas(true)}
+      onMouseLeave={() => setIsMouseOverCanvas(false)}
     >
-      <img
-        ref={imageRef}
-        src={imageUrl}
-        alt="Medical image for annotation"
-        className="max-w-full max-h-full object-contain rounded-lg"
-        draggable={false}
-        data-testid="medical-image"
-      />
+      <div
+        className="flex items-center justify-center h-full w-full"
+        style={{
+          transform: `scale(${canvasZoom})`,
+          transformOrigin: 'center',
+          transition: 'transform 0.1s ease-out'
+        }}
+      >
+        <img
+          ref={imageRef}
+          src={imageUrl}
+          alt="Medical image for annotation"
+          className="max-w-full max-h-full object-contain rounded-lg"
+          draggable={false}
+          data-testid="medical-image"
+        />
+      </div>
 
       <canvas
         ref={canvasRef}
@@ -389,15 +430,15 @@ export default function AnnotationCanvas({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         data-testid="annotation-overlay"
+        style={{
+          transform: `scale(${canvasZoom})`,
+          transformOrigin: 'center',
+          transition: 'transform 0.1s ease-out'
+        }}
       />
 
 
-      <div className="absolute top-4 right-4 flex space-x-2">
-        <div className="flex items-center space-x-1 bg-green-100 dark:bg-green-900 px-2 py-1 rounded-full">
-          <div className="w-2 h-2 bg-green-500 dark:bg-green-400 rounded-full pulse-dot"></div>
-          <span className="text-xs text-green-900 dark:text-green-100" data-testid="online-user">Dr. Smith</span>
-        </div>
-      </div>
+      
 
       {textInputPosition && (
         <InlineTextEditor
