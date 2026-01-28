@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Optional
 from fastapi.encoders import jsonable_encoder
 from bson import ObjectId
+import random
+from collections import Counter
+from datetime import timedelta
 
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
@@ -14,6 +17,50 @@ from models.models import ForumThread, ForumReply, ForumAuthor
 router = APIRouter(prefix="/forum", tags=["Forum"])
 
 BASE_UPLOAD_DIR = Path("uploads")
+
+async def get_trending_tags(limit: int = 5):
+    """
+    Returns up to `limit` trending tags.
+    If all counts are equal or no tags exist → random selection.
+    """
+    cursor = forum_collection.find(
+        {}, {"tags": 1, "timestamp": 1}
+    )
+
+    tag_counter = Counter()
+
+    async for doc in cursor:
+        for tag in doc.get("tags", []):
+            tag_counter[tag] += 1
+
+    if not tag_counter:
+        return []
+
+    # Group tags by frequency
+    freq_map = {}
+    for tag, count in tag_counter.items():
+        freq_map.setdefault(count, []).append(tag)
+
+    # Sort frequencies desc
+    sorted_freqs = sorted(freq_map.keys(), reverse=True)
+
+    result = []
+    for freq in sorted_freqs:
+        tags = freq_map[freq]
+        random.shuffle(tags)
+        for tag in tags:
+            result.append(tag)
+            if len(result) == limit:
+                return result
+
+    return result
+
+@router.get("/tags")
+async def get_all_tags():
+    tags = set()
+    async for doc in forum_collection.find({}, {"tags": 1}):
+        tags.update(doc.get("tags", []))
+    return sorted(tags)
 
 def serialize_doc(doc):
     """Convert MongoDB _id to string and handle nested replies."""
@@ -65,6 +112,20 @@ async def create_thread(
         image_url = f"http://127.0.0.1:8000/uploads/{user_id}/{filename}"
 
     tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+
+    if not tags_list:
+        trending = await get_trending_tags(limit=5)
+
+        if trending:
+            tags_list = trending
+        else:
+            # fallback: random tags from all existing threads
+            cursor = forum_collection.find({}, {"tags": 1})
+            all_tags = set()
+            async for doc in cursor:
+                all_tags.update(doc.get("tags", []))
+            tags_list = random.sample(list(all_tags), min(5, len(all_tags)))
+
 
     author = ForumAuthor(
         user_id=str(user["_id"]),

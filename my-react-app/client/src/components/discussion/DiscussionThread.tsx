@@ -27,7 +27,7 @@ const DiscussionThread: React.FC = () => {
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
-  const [availableTags, setAvailableTags] = useState<string[]>(['TestTag1', 'TestTag2']);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newCustomTag, setNewCustomTag] = useState('');
   
@@ -78,6 +78,21 @@ const DiscussionThread: React.FC = () => {
       reader.readAsDataURL(file);
     }
   };
+
+  useEffect(() => {
+  const fetchTags = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/forum/tags");
+      const data = await res.json();
+      setAvailableTags(data);
+    } catch (err) {
+      console.error("Failed to fetch tags", err);
+    }
+  };
+
+  fetchTags();
+}, []);
+
 
   useEffect(() => {
   const fetchThreads = async () => {
@@ -302,20 +317,15 @@ const DiscussionThread: React.FC = () => {
                       {availableTags.map((tag) => (
                         <Button
                           key={tag}
-                          variant={newPostTags.includes(tag) ? 'default' : 'outline'}
-                          onClick={() => handleTagToggle(tag)}
+                          variant={selectedTag === tag ? 'default' : 'outline'}
+                          onClick={() => setSelectedTag(tag)}
                           size="sm"
-                          className={`rounded-full ${
-                            newPostTags.includes(tag) && tag === 'TestTag2'
-                              ? 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'
-                              : newPostTags.includes(tag)
-                              ? 'border border-transparent'
-                              : ''
-                          }`}
+                          className="rounded-full"
                         >
                           {tag}
                         </Button>
                       ))}
+
                       
                       {!isAddingTag ? (
                         <Button
