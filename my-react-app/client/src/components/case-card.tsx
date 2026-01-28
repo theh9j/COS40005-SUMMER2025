@@ -57,39 +57,6 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isCreating) return;
-                if (!user || !user.user_id) {
-                  toast({ title: "Not signed in", description: "Please sign in to create a discussion.", variant: 'destructive' });
-                  return;
-                }
-
-                const prefill = {
-                  title: medicalCase.title,
-                  message: medicalCase.description || "",
-                  tags: [medicalCase.category].filter(Boolean),
-                  caseId: medicalCase.id,
-                };
-                try {
-                  sessionStorage.setItem("discussionPrefill", JSON.stringify(prefill));
-                  try {
-                    window.dispatchEvent(new CustomEvent('discussion-prefill', { detail: prefill }));
-                  } catch (e) {}
-                  setLocation("/student");
-                } catch (err) {
-                  console.error("Could not open discussion prefill", err);
-                  toast({ title: 'Error', description: 'Unable to open discussion composer', variant: 'destructive' });
-                }
-              }}
-            >
-              Create Discussion
-            </Button>
-          </div>
         </div>
       </CardContent>
     </Card>

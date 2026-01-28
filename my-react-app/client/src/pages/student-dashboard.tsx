@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import ProfileMenu from "@/components/profile-menu";
+import { useI18n } from "@/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -71,6 +72,7 @@ const VALID_TABS: StudentView[] = ["overview", "cases", "annotations", "collabor
 const VIEW_STORAGE_KEY = "student.activeView";
 
 export default function StudentDashboard() {
+  const { t } = useI18n();
 
   const [onlineCount, setOnlineCount] = useState<number>(0);
 
@@ -288,13 +290,13 @@ export default function StudentDashboard() {
             className="flex items-center space-x-4 focus:outline-none hover:opacity-80 transition"
           >
             <UserRound className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold">Medical Imaging Platform</h1>
+            <h1 className="text-xl font-semibold">{t("medicalImagingPlatform")}</h1>
           </button>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${onlineCount > 0 ? "bg-green-500" : "bg-gray-400"} animate-pulse`}></div>
               <span className="text-sm text-muted-foreground">
-                {onlineCount} {onlineCount === 1 ? "user" : "users"} online
+                {onlineCount} {onlineCount === 1 ? t("userOnline") : t("usersOnline")}
               </span>
             </div>
 
@@ -397,7 +399,7 @@ export default function StudentDashboard() {
                         <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
-                    <p className="text-sm text-muted-foreground mt-2">Your performance has improved by 19% over the last 7 weeks</p>
+                    <p className="text-sm text-muted-foreground mt-2">{t("yourPerformanceImproved")}</p>
                   </CardContent>
                 </Card>
 
@@ -405,7 +407,7 @@ export default function StudentDashboard() {
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold mb-4 flex items-center">
                       <Calendar className="h-5 w-5 mr-2 text-primary" />
-                      Upcoming Assignments
+                      {t("upcomingAssignments")}
                     </h3>
                     <div className="space-y-3">
                       {mockUpcomingAssignments.map((assignment) => {
@@ -437,7 +439,7 @@ export default function StudentDashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Recent Cases</h3>
+                    <h3 className="text-lg font-semibold mb-4">{t("recentCases")}</h3>
                     <div className="space-y-4">
                       {mockCases.slice(0, 2).map((case_) => (
                         <div
@@ -449,9 +451,9 @@ export default function StudentDashboard() {
                           <img src={case_.imageUrl} alt={case_.title} className="w-12 h-12 rounded object-cover" />
                           <div className="flex-1">
                             <p className="font-medium">{case_.title}</p>
-                            <p className="text-sm text-muted-foreground">Last reviewed 2 hours ago</p>
+                            <p className="text-sm text-muted-foreground">{t("lastReviewedHoursAgo")}</p>
                           </div>
-                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Completed</span>
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">{t("completed")}</span>
                         </div>
                       ))}
                     </div>
@@ -460,7 +462,7 @@ export default function StudentDashboard() {
 
                 <Card>
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Recent Feedback</h3>
+                    <h3 className="text-lg font-semibold mb-4">{t("recentFeedback")}</h3>
                     <div className="space-y-4">
                       <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
                         <div className="flex items-start space-x-3">
@@ -490,15 +492,15 @@ export default function StudentDashboard() {
           {activeView === "annotations" && (
             <div className="p-6" data-testid="view-annotations">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">My Annotations</h2>
+                <h2 className="text-2xl font-bold">{t("myAnnotations")}</h2>
                 <Link href="/student">
-                  <Button variant="outline" size="sm">Back to Overview</Button>
+                  <Button variant="outline" size="sm">{t("backToOverview")}</Button>
                 </Link>
               </div>
 
               {myAnnotations.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  You don’t have any annotations yet. Open a case in <b>Case Library</b> to start.
+                  {t("youDontHaveAnnotations")}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -516,17 +518,17 @@ export default function StudentDashboard() {
 
                           {/* Status badge theo yêu cầu */}
                           <div className="flex items-center gap-2">
-                            {hw && <Badge>Homework</Badge>}
+                            {hw && <Badge>{t("homework")}</Badge>}
                             {hw?.closed ? (
                               my?.status === "graded" ? (
-                                <Badge variant="default">Score: {my?.score}/10</Badge>
+                                <Badge variant="default">{t("score")}: {my?.score}/10</Badge>
                               ) : (
-                                <Badge variant="secondary">Grading</Badge>
+                                <Badge variant="secondary">{t("grading")}</Badge>
                               )
                             ) : (
                               hw && (
                                 <Badge variant="outline">
-                                  Due in {Math.max(0, daysLeft(hw?.dueAt) ?? 0)} days
+                                  {t("dueInDays").replace("{{days}}", String(Math.max(0, daysLeft(hw?.dueAt) ?? 0)))}
                                 </Badge>
                               )
                             )}
@@ -535,7 +537,7 @@ export default function StudentDashboard() {
 
                         <div className="flex justify-end">
                           {hw?.closed ? (
-                            <Button size="sm" variant="outline" disabled>Closed</Button>
+                            <Button size="sm" variant="outline" disabled>{t("closed")}</Button>
                           ) : (
                             <Link href={`/annotation/${annot.caseId}`}>
                               <Button size="sm">Open</Button>
@@ -554,10 +556,10 @@ export default function StudentDashboard() {
           {activeView === "cases" && (
             <div className="p-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">Case Library</h2>
+                <h2 className="text-2xl font-bold">{t("caseLibrary")}</h2>
                 <Button onClick={() => setShowUploadModal(true)} className="bg-primary text-primary-foreground hover:opacity-90" data-testid="button-upload-case">
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload Case
+                  {t("uploadCase")}
                 </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -576,12 +578,12 @@ export default function StudentDashboard() {
                       {/* Meta bar cho Assignment */}
                       <div className="flex items-center justify-between px-1">
                         <div className="flex items-center gap-2">
-                          {hw && <Badge>Homework</Badge>}
+                          {hw && <Badge>{t("homework")}</Badge>}
                           {hw ? (
                             hw.closed ? (
-                              <Badge variant="destructive">Closed</Badge>
+                              <Badge variant="destructive">{t("closed")}</Badge>
                             ) : (
-                              <Badge variant="secondary">Due in {dl} days</Badge>
+                              <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
                             )
                           ) : null}
                         </div>
@@ -589,15 +591,15 @@ export default function StudentDashboard() {
                         <div>
                           {hw ? (
                             hw.closed ? (
-                              <Button size="sm" variant="outline" disabled>Closed</Button>
+                              <Button size="sm" variant="outline" disabled>{t("closed")}</Button>
                             ) : (
                               <Link href={`/annotation/${case_.id}`}>
-                                <Button size="sm">Open</Button>
+                                <Button size="sm">{t("open")}</Button>
                               </Link>
                             )
                           ) : (
                             <Link href={`/annotation/${case_.id}`}>
-                              <Button size="sm" variant="ghost">Open</Button>
+                              <Button size="sm" variant="ghost">{t("open")}</Button>
                             </Link>
                           )}
                         </div>
@@ -612,14 +614,14 @@ export default function StudentDashboard() {
           {activeView === "progress" && stats && (
             <div className="p-6" data-testid="view-progress">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">Learning Progress</h2>
-                <Button onClick={exportStudentProgressCSV}>Export CSV</Button>
+                <h2 className="text-2xl font-bold">{t("learningProgress")}</h2>
+                <Button onClick={exportStudentProgressCSV}>{t("exportCSV")}</Button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 <Card>
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Overall Performance</h3>
+                    <h3 className="text-lg font-semibold mb-4">{t("overallPerformance")}</h3>
                     <div className="space-y-4">
                       <div><div className="flex justify-between text-sm mb-1"><span>Annotation Accuracy</span><span data-testid="accuracy-percentage">{stats.annotationAccuracyPct}%</span></div><Progress value={stats.annotationAccuracyPct} className="h-2" /></div>
                       <div><div className="flex justify-between text-sm mb-1"><span>Case Completion Rate</span><span data-testid="completion-percentage">{stats.completionRatePct}%</span></div><Progress value={stats.completionRatePct} className="h-2" /></div>
@@ -630,11 +632,11 @@ export default function StudentDashboard() {
 
                 <Card>
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Recent Achievements</h3>
+                    <h3 className="text-lg font-semibold mb-4">{t("recentAchievements")}</h3>
                     <div className="space-y-3 text-sm text-muted-foreground">
-                      <div>Case Master — Completed {Math.max(1, Math.round(stats.casesCompleted / 2))} cases this week</div>
-                      <div>Perfect Annotation — {stats.annotationAccuracyPct}% accuracy on stroke case</div>
-                      <div>Team Player — Collaboration score {stats.collaborationScorePct}%</div>
+                      <div>{t("caseMaster")} — {t("completedCases").replace("{{count}}", String(Math.max(1, Math.round(stats.casesCompleted / 2))))}</div>
+                      <div>{t("perfectAnnotation")} — {t("accuracyOnStrokeCase").replace("{{accuracy}}", String(stats.annotationAccuracyPct))}</div>
+                      <div>{t("teamPlayer")} — {t("collaborationScore")}: {stats.collaborationScorePct}%</div>
                     </div>
                   </CardContent>
                 </Card>
@@ -642,15 +644,15 @@ export default function StudentDashboard() {
 
               <Card>
                 <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Study Timeline</h3>
+                  <h3 className="text-lg font-semibold mb-4">{t("studyTimeline")}</h3>
                   <div className="space-y-4">
                     <div className="flex items-center space-x-4 p-3 border-l-4 border-green-500 bg-green-500/10">
                       <div className="flex-shrink-0"><div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm"><CheckCircle className="h-4 w-4" /></div></div>
-                      <div className="flex-1"><p className="font-medium">Completed Brain MRI Case</p><p className="text-sm text-muted-foreground">2 hours ago - Score: 95%</p></div>
+                      <div className="flex-1"><p className="font-medium">{t("completedBrainMRICase")}</p><p className="text-sm text-muted-foreground">2 hours ago - {t("scoreLabel")}</p></div>
                     </div>
                     <div className="flex items-center space-x-4 p-3 border-l-4 border-primary bg-primary/10">
                       <div className="flex-shrink-0"><div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm"><MessageCircle className="h-4 w-4" /></div></div>
-                      <div className="flex-1"><p className="font-medium">Received Feedback</p><p className="text-sm text-muted-foreground">4 hours ago - Dr. Smith reviewed your work</p></div>
+                      <div className="flex-1"><p className="font-medium">{t("receivedFeedback")}</p><p className="text-sm text-muted-foreground">4 hours ago - {t("doctorReviewedYourWork").replace("{{doctor}}", "Dr. Smith")}</p></div>
                     </div>
                   </div>
                 </CardContent>
@@ -659,15 +661,15 @@ export default function StudentDashboard() {
           )}
           {activeView === "settings" && (
             <div className="p-6 space-y-6" data-testid="view-settings">
-              <h2 className="text-2xl font-bold mb-4">Account Settings</h2>
+              <h2 className="text-2xl font-bold mb-4">{t("accountSettings")}</h2>
 
               <Card>
                 <CardContent className="p-6 space-y-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Manage your profile information.</p>
+                    <p className="text-sm text-muted-foreground">{t("manageYourProfile")}</p>
                   </div>
                   <Button onClick={() => setLocation("/settings")} className="w-full">
-                    Open Settings Page
+                    {t("openSettingsPage")}
                   </Button>
                 </CardContent>
               </Card>
