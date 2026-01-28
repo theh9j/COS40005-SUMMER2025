@@ -55,6 +55,11 @@ async def get_trending_tags(limit: int = 5):
 
     return result
 
+@router.get("/tags/trending")
+async def get_trending_tags_api():
+    tags = await get_trending_tags(limit=5)
+    return tags
+
 @router.get("/tags")
 async def get_all_tags():
     tags = set()

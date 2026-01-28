@@ -34,6 +34,7 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
+  const [trendingTags, setTrendingTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newCustomTag, setNewCustomTag] = useState('');
@@ -130,6 +131,23 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
   fetchTags();
 }, []);
 
+useEffect(() => {
+  const fetchTags = async () => {
+    try {
+      const [allRes, trendingRes] = await Promise.all([
+        fetch("http://127.0.0.1:8000/forum/tags"),
+        fetch("http://127.0.0.1:8000/forum/tags/trending"),
+      ]);
+
+      setAvailableTags(await allRes.json());
+      setTrendingTags(await trendingRes.json());
+    } catch (err) {
+      console.error("Failed to fetch tags", err);
+    }
+  };
+
+  fetchTags();
+}, []);
 
   useEffect(() => {
   const fetchThreads = async () => {
@@ -351,7 +369,7 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
                     <div className="flex items-center gap-2 flex-wrap">
                       <TagIcon className="h-4 w-4 text-muted-foreground" />
                       
-                      {availableTags.map((tag) => (
+                      {trendingTags.map((tag) => (
                         <Button
                           key={tag}
                           variant={selectedTag === tag ? 'default' : 'outline'}
