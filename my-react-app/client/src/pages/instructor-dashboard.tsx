@@ -4,11 +4,9 @@ import ProfileMenu from "@/components/profile-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { mockAtRiskStudents } from "@/lib/mock-data";
+import { mockAtRiskStudents, mockCases } from "@/lib/mock-data";
 import UploadModal from "@/components/upload-modal";
-import { mockCases } from "@/lib/mock-data";
 import {
   Presentation,
   Gauge,
@@ -30,27 +28,99 @@ import { useAnnotation } from "@/hooks/use-annotation";
 import RubricPanel from "@/components/grading/RubricPanel";
 import HomeworkPrepPanel from "@/components/grading/HomeworkPrepPanel";
 
-type InstructorView = "overview" | "students" | "grading" | "analytics" | "cases" | "settings";
+type InstructorView =
+  | "overview"
+  | "students"
+  | "grading"
+  | "analytics"
+  | "cases"
+  | "settings";
 
 const VIEW_STORAGE_KEY = "instructor.activeView";
-const VALID_TABS: InstructorView[] = ["overview", "students", "grading", "analytics", "cases", "settings"];
+const VALID_TABS: InstructorView[] = [
+  "overview",
+  "students",
+  "grading",
+  "analytics",
+  "cases",
+  "settings",
+];
 
 // ====== API base (update nếu bạn dùng port khác) ======
 const API_BASE = "http://127.0.0.1:8000";
 
-export default function InstructorDashboard() {
-  // --- Grading submissions (now from backend) ---
-  type Submission = {
-    id: string;
-    caseId: string;
-    caseTitle: string;
-    studentId: string;
-    status: "submitted" | "graded" | "grading";
-    score?: number;
-    updatedAt: string;
-  };
+// ===== Types =====
+type SubmissionStatus = "submitted" | "graded" | "grading";
 
-  // khởi tạo với mock để UI không trống khi BE chưa chạy
+type Submission = {
+  id: string;
+  caseId: string;
+  caseTitle: string;
+  studentId: string;
+
+  status: SubmissionStatus;
+
+  // grading result
+  score?: number;
+  feedback?: string; // "return answer to student" (instructor feedback / model answer)
+  rubric?: any[]; // optional
+  modelAnswers?: any[]; // optional nếu bạn cần trả đáp án dạng structured
+
+  // publish control (IMPORTANT)
+  published?: boolean;
+  publishedAt?: string;
+
+  updatedAt: string;
+};
+
+type Mode = "one" | "group";
+
+// ===== Helpers: hook-safe components =====
+function GroupCompareCard({
+  submission,
+}: {
+  submission: Submission;
+}) {
+  const caseObj = mockCases.find((c) => c.id === submission.caseId);
+  const ann = useAnnotation(submission.caseId, submission.studentId);
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">{submission.studentId}</div>
+          <div className="text-xs text-muted-foreground">
+            {submission.score != null ? `Score ${submission.score}` : submission.status}
+            {submission.published ? " • Published" : ""}
+          </div>
+        </div>
+        <AnnotationCanvas
+          imageUrl={caseObj?.imageUrl}
+          annotation={ann}
+          peerAnnotations={ann.peerAnnotations}
+          versionOverlay={ann.versionOverlay}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function InstructorDashboard() {
+  // ==== Auth / routing ====
+  const [, setLocation] = useLocation();
+  const { user, logout, isLoading } = useAuth();
+  useHeartbeat(user?.user_id);
+
+  // ==== UI state ====
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [activeView, setActiveView] = useState<InstructorView>(() => {
+    const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
+    return VALID_TABS.includes(saved) ? saved : "overview";
+  });
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // ==== Grading state ====
+  // default mock để UI không trống nếu BE chưa chạy
   const [submissions, setSubmissions] = useState<Submission[]>([
     {
       id: "sub-1",
@@ -59,6 +129,8 @@ export default function InstructorDashboard() {
       studentId: "david.tran",
       status: "submitted",
       score: 8,
+      feedback: "",
+      published: false,
       updatedAt: "2025-10-10T10:00:00Z",
     },
     {
@@ -68,6 +140,8 @@ export default function InstructorDashboard() {
       studentId: "emma.wilson",
       status: "submitted",
       score: 7,
+      feedback: "",
+      published: false,
       updatedAt: "2025-10-11T08:00:00Z",
     },
     {
@@ -77,21 +151,27 @@ export default function InstructorDashboard() {
       studentId: "james.lee",
       status: "graded",
       score: 9,
+      feedback: "Good job. Consider boundary precision.",
+      published: true,
+      publishedAt: "2025-10-12T12:30:00Z",
       updatedAt: "2025-10-12T12:00:00Z",
     },
   ]);
 
-  type Mode = "one" | "group";
   const [mode, setMode] = useState<Mode>("one");
   const [query, setQuery] = useState("");
   const [activeIds, setActiveIds] = useState<string[]>([]);
 
+  // instructor text boxes (return answer)
+  const [draftFeedback, setDraftFeedback] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  // ==== Derived lists ====
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return submissions.filter(
-      (s) =>
-        s.studentId.toLowerCase().includes(q) ||
-        s.caseTitle.toLowerCase().includes(q)
+      (s) => s.studentId.toLowerCase().includes(q) || s.caseTitle.toLowerCase().includes(q)
     );
   }, [query, submissions]);
 
@@ -110,106 +190,26 @@ export default function InstructorDashboard() {
       mode === "one" ? [id] : prev.includes(id) ? prev : [...prev, id].slice(-4)
     );
 
-  // tính avgScore cho Homework Builder dựa trên submissions thực tế
+  // avgScore for Homework Builder
   const avgScore =
     submissions.length === 0
       ? 0
       : Math.round(
-          (submissions.reduce((a, b) => a + (b.score ?? 0), 0) /
-            submissions.length) *
-            10
+          (submissions.reduce((a, b) => a + (b.score ?? 0), 0) / submissions.length) * 10
         ) / 10;
 
-  // gọi API save grade
-  const saveGrade = (subId: string) => async (score: number) => {
-    try {
-      const res = await fetch(
-        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/grade`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            score,
-            rubric: [], // bạn có thể map rubric sau
-            feedback: null,
-          }),
-        }
-      );
+  // ===== FIX hooks: call useAnnotation unconditionally (1–1 mode) =====
+  const selectedCaseId = selected?.caseId ?? "case-1";
+  const selectedStudentId = selected?.studentId ?? "unknown";
+  const selectedCase = mockCases.find((c) => c.id === selectedCaseId);
+  const selectedAnn = useAnnotation(selectedCaseId, selectedStudentId);
 
-      if (!res.ok) {
-        console.error("Failed to save grade", await res.text());
-        alert("Failed to save grade");
-        return;
-      }
-
-      const data = await res.json(); // { status, score, graded_at }
-      setSubmissions((prev) =>
-        prev.map((s) =>
-          s.id === subId ? { ...s, score: data.score, status: "graded" } : s
-        )
-      );
-    } catch (err) {
-      console.error("Error saving grade", err);
-      alert("Error saving grade");
-    }
-  };
-
-  // derive case + annotation for selected (1–1 mode)
-  const selectedCase = mockCases.find((c) => c.id === selected?.caseId);
-  const selectedAnn = selected
-    ? useAnnotation(selected.caseId, selected.studentId)
-    : null;
-
-  const [, setLocation] = useLocation();
-  const { user, logout, isLoading } = useAuth();
-  useHeartbeat(user?.user_id);
-
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [activeView, setActiveView] = useState<InstructorView>(() => {
-    const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
-    return VALID_TABS.includes(saved) ? saved : "overview";
-  });
-  const [feedback, setFeedback] = useState("");
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  // when switching selected submission, sync draftFeedback
+  useEffect(() => {
+    setDraftFeedback(selected?.feedback ?? "");
+  }, [selected?.id]);
 
   // ==== EFFECTS ====
-
-  // load submissions from backend
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/instructor/submissions`);
-        if (!res.ok) {
-          console.error("Failed to load submissions", await res.text());
-          return;
-        }
-        const data = await res.json();
-        const mapped: Submission[] = data.map((s: any) => ({
-          id: s.id,
-          caseId: s.case_id,
-          caseTitle: s.case_title ?? "Unknown case",
-          studentId: s.student_id,
-          status: (s.status as Submission["status"]) ?? "submitted",
-          score: s.score ?? undefined,
-          updatedAt: s.updated_at ?? "",
-        }));
-        if (mapped.length) {
-          setSubmissions(mapped);
-        }
-      } catch (err) {
-        console.error("Error loading submissions", err);
-      }
-    };
-    load();
-  }, []);
-
-  useEffect(() => {
-    console.log("Current user in dashboard:", user);
-    if (!isLoading && (!user || user.role !== "instructor")) {
-      setLocation("/login");
-    }
-  }, [user, isLoading, setLocation]);
-
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
@@ -227,6 +227,160 @@ export default function InstructorDashboard() {
     };
   }, []);
 
+  // guard route
+  useEffect(() => {
+    if (!isLoading && (!user || user.role !== "instructor")) {
+      setLocation("/login");
+    }
+  }, [user, isLoading, setLocation]);
+
+  // load submissions from backend
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/instructor/submissions`);
+        if (!res.ok) {
+          console.error("Failed to load submissions", await res.text());
+          return;
+        }
+        const data = await res.json();
+
+        const mapped: Submission[] = (data ?? []).map((s: any) => ({
+          id: s.id,
+          caseId: s.case_id,
+          caseTitle: s.case_title ?? "Unknown case",
+          studentId: s.student_id,
+          status: (s.status as SubmissionStatus) ?? "submitted",
+          score: s.score ?? undefined,
+          feedback: s.feedback ?? "",
+          rubric: s.rubric ?? [],
+          modelAnswers: s.model_answers ?? [],
+          published: Boolean(s.published),
+          publishedAt: s.published_at ?? undefined,
+          updatedAt: s.updated_at ?? "",
+        }));
+
+        if (mapped.length) setSubmissions(mapped);
+      } catch (err) {
+        console.error("Error loading submissions", err);
+      }
+    };
+    load();
+  }, []);
+
+  // ==== API actions ====
+
+  // 1) Save draft grade + feedback (NOT published)
+  const saveDraft = async (subId: string, score: number) => {
+    setIsSaving(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/grade`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            score,
+            rubric: [], // TODO: map rubric rows nếu bạn muốn
+            feedback: draftFeedback ?? "",
+            published: false,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        console.error("Failed to save grade", await res.text());
+        alert("Failed to save grade");
+        return;
+      }
+
+      const data = await res.json();
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === subId
+            ? {
+                ...s,
+                score: data.score ?? score,
+                status: "graded",
+                feedback: data.feedback ?? draftFeedback,
+                published: false,
+                publishedAt: undefined,
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      console.error("Error saving grade", err);
+      alert("Error saving grade");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 2) Publish marks & answers (students can view AFTER this)
+  const publish = async (subId: string) => {
+    setIsPublishing(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/publish`,
+        { method: "POST" }
+      );
+
+      if (!res.ok) {
+        console.error("Failed to publish", await res.text());
+        alert("Failed to publish");
+        return;
+      }
+
+      const data = await res.json(); // expect { published:true, published_at:"..." }
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === subId
+            ? {
+                ...s,
+                published: true,
+                publishedAt: data.published_at ?? new Date().toISOString(),
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      console.error("Error publishing", err);
+      alert("Error publishing");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  // 3) Return answer to student (optional endpoint)
+  // Nếu BE chưa có endpoint riêng, bạn có thể bỏ nút này,
+  // hoặc dùng luôn saveDraft + publish để coi như "return".
+  const returnToStudent = async (subId: string) => {
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/return`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ feedback: draftFeedback ?? "" }),
+        }
+      );
+
+      if (!res.ok) {
+        // fallback: nếu BE chưa có /return → vẫn không crash
+        console.warn("Return endpoint not available. Falling back to draft save.");
+        alert("Return API not found. Ask BE to add /return or use Publish instead.");
+        return;
+      }
+
+      alert("Returned to student successfully");
+    } catch (err) {
+      console.error("Error returning to student", err);
+      alert("Error returning to student");
+    }
+  };
+
+  // ==== UI ====
   if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
 
@@ -241,27 +395,6 @@ export default function InstructorDashboard() {
   const handleLogout = () => {
     logout();
     setLocation("/login");
-  };
-
-  const exportClassAnalyticsCSV = () => {
-    const classRows = [
-      ["Student", "Cases Completed", "Avg Score (%)", "Accuracy (%)", "Time Spent (min)"],
-      ["Sarah Chen", "12", "91", "95", "540"],
-      ["Mike Johnson", "9", "83", "88", "420"],
-      ["Aisha Rahman", "15", "92", "93", "600"],
-      ["David Tran", "11", "85", "86", "505"],
-    ];
-    const csv = classRows
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const today = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `class_analytics_${today}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -297,6 +430,7 @@ export default function InstructorDashboard() {
                   className="w-8 h-8 rounded-full border-2 border-primary"
                 />
               </button>
+
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -312,6 +446,11 @@ export default function InstructorDashboard() {
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <ProfileMenu />
+                  <div className="p-2">
+                    <Button variant="outline" className="w-full" onClick={handleLogout}>
+                      Logout
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -320,6 +459,7 @@ export default function InstructorDashboard() {
       </header>
 
       <div className="flex">
+        {/* Sidebar */}
         <aside className="group/sidebar w-16 hover:w-64 transition-all duration-300 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-hidden hover:overflow-auto">
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
@@ -330,9 +470,7 @@ export default function InstructorDashboard() {
                   key={item.id}
                   variant="ghost"
                   className={`w-full justify-start hover:bg-transparent ${
-                    isActive
-                      ? "text-primary hover:text-primary"
-                      : "text-foreground hover:text-foreground"
+                    isActive ? "text-primary" : "text-foreground"
                   }`}
                   onClick={() => setActiveView(item.id as InstructorView)}
                 >
@@ -352,79 +490,8 @@ export default function InstructorDashboard() {
           {activeView === "overview" && (
             <div className="p-6" data-testid="view-overview">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">
-                  Welcome, Dr. {user.lastName}!
-                </h2>
-                <p className="text-muted-foreground">
-                  Monitor student progress and provide feedback
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Active Students</p>
-                        <p
-                          className="text-2xl font-bold text-primary"
-                          data-testid="stat-active-students"
-                        >
-                          24
-                        </p>
-                      </div>
-                      <GraduationCap className="h-8 w-8 text-primary" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Pending Reviews</p>
-                        <p
-                          className="text-2xl font-bold text-orange-500"
-                          data-testid="stat-pending-reviews"
-                        >
-                          8
-                        </p>
-                      </div>
-                      <Clock className="h-8 w-8 text-orange-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Cases Assigned</p>
-                        <p
-                          className="text-2xl font-bold text-green-500"
-                          data-testid="stat-cases-assigned"
-                        >
-                          15
-                        </p>
-                      </div>
-                      <FolderOpen className="h-8 w-8 text-green-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Avg. Score</p>
-                        <p
-                          className="text-2xl font-bold text-accent"
-                          data-testid="stat-avg-score"
-                        >
-                          87%
-                        </p>
-                      </div>
-                      <ChartLine className="h-8 w-8 text-accent" />
-                    </div>
-                  </CardContent>
-                </Card>
+                <h2 className="text-2xl font-bold mb-2">Welcome, Dr. {user.lastName}!</h2>
+                <p className="text-muted-foreground">Monitor student progress and provide feedback</p>
               </div>
 
               <Card className="mb-8">
@@ -466,26 +533,17 @@ export default function InstructorDashboard() {
                                 </span>
                               </div>
                             </div>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {student.issue}
-                            </p>
+                            <p className="text-sm text-muted-foreground mb-2">{student.issue}</p>
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-muted-foreground">
                                 Last active: {student.lastActive}
                               </span>
                               <div className="flex space-x-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                >
+                                <Button size="sm" variant="outline" className="h-7 text-xs">
                                   <Mail className="h-3 w-3 mr-1" />
                                   Contact
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
-                                >
+                                <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700">
                                   View Details
                                 </Button>
                               </div>
@@ -507,16 +565,10 @@ export default function InstructorDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold">Grading</h2>
                 <div className="flex gap-2">
-                  <Button
-                    variant={mode === "one" ? "default" : "secondary"}
-                    onClick={() => setMode("one")}
-                  >
+                  <Button variant={mode === "one" ? "default" : "secondary"} onClick={() => setMode("one")}>
                     1–1
                   </Button>
-                  <Button
-                    variant={mode === "group" ? "default" : "secondary"}
-                    onClick={() => setMode("group")}
-                  >
+                  <Button variant={mode === "group" ? "default" : "secondary"} onClick={() => setMode("group")}>
                     Group
                   </Button>
                 </div>
@@ -534,6 +586,7 @@ export default function InstructorDashboard() {
                       onChange={(e) => setQuery(e.target.value)}
                     />
                   </div>
+
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[240px] overflow-auto">
                     {filtered.map((s) => (
                       <Button
@@ -544,12 +597,12 @@ export default function InstructorDashboard() {
                       >
                         {s.studentId} — {s.caseTitle}{" "}
                         {s.score != null ? `(Score ${s.score})` : `(${s.status})`}
+                        {s.published ? " • Published" : ""}
                       </Button>
                     ))}
+
                     {filtered.length === 0 && (
-                      <div className="text-sm text-muted-foreground p-2">
-                        No submissions
-                      </div>
+                      <div className="text-sm text-muted-foreground p-2">No submissions</div>
                     )}
                   </div>
                 </CardContent>
@@ -564,20 +617,74 @@ export default function InstructorDashboard() {
                         {selected.studentId} • {selected.caseTitle}
                       </div>
 
-                      {selectedAnn && (
-                        <AnnotationCanvas
-                          imageUrl={selectedCase?.imageUrl}
-                          annotation={selectedAnn}
-                          peerAnnotations={selectedAnn.peerAnnotations}
-                          versionOverlay={selectedAnn.versionOverlay}
-                        />
-                      )}
+                      <AnnotationCanvas
+                        imageUrl={selectedCase?.imageUrl}
+                        annotation={selectedAnn}
+                        peerAnnotations={selectedAnn.peerAnnotations}
+                        versionOverlay={selectedAnn.versionOverlay}
+                      />
                     </CardContent>
                   </Card>
 
-                  <RubricPanel
-                    onSubmit={(score) => saveGrade(selected.id)(score)}
-                  />
+                  <div className="space-y-3">
+                    {/* Rubric Panel (score input) */}
+                    <RubricPanel
+                      onSubmit={(score: number) => saveDraft(selected.id, score)}
+                    />
+
+                    {/* Return answer to student (feedback/model answer) */}
+                    <Card>
+                      <CardContent className="p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold">Return answer / Feedback</h3>
+                          <span className="text-xs text-muted-foreground">
+                            {selected.published ? "Published" : "Draft"}
+                          </span>
+                        </div>
+
+                        <Textarea
+                          value={draftFeedback}
+                          onChange={(e) => setDraftFeedback(e.target.value)}
+                          placeholder="Write instructor feedback / model answer for the student..."
+                          className="min-h-[120px]"
+                        />
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              // Save draft without changing score: keep existing score or 0
+                              const scoreToSave = selected.score ?? 0;
+                              saveDraft(selected.id, scoreToSave);
+                            }}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? "Saving..." : "Save Draft"}
+                          </Button>
+
+                          <Button
+                            onClick={() => publish(selected.id)}
+                            disabled={isPublishing || selected.status !== "graded" || selected.published}
+                          >
+                            {selected.published ? "Published" : isPublishing ? "Publishing..." : "Publish marks & answers"}
+                          </Button>
+                        </div>
+
+                        {/* optional: notify student (needs BE endpoint) */}
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => returnToStudent(selected.id)}
+                        >
+                          Notify / Return to student
+                        </Button>
+
+                        <div className="text-xs text-muted-foreground">
+                          Publish is only enabled after grading is saved (status = graded).
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               )}
 
@@ -589,32 +696,7 @@ export default function InstructorDashboard() {
                       Select 2–4 submissions from the list to compare.
                     </div>
                   ) : (
-                    activeGroup.map((s) => {
-                      const caseObj = mockCases.find((c) => c.id === s.caseId);
-                      const ann = useAnnotation(s.caseId, s.studentId);
-                      return (
-                        <Card key={s.id}>
-                          <CardContent className="p-4 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm font-medium">
-                                {s.studentId}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {s.score != null
-                                  ? `Score ${s.score}`
-                                  : s.status}
-                              </div>
-                            </div>
-                            <AnnotationCanvas
-                              imageUrl={caseObj?.imageUrl}
-                              annotation={ann}
-                              peerAnnotations={ann.peerAnnotations}
-                              versionOverlay={ann.versionOverlay}
-                            />
-                          </CardContent>
-                        </Card>
-                      );
-                    })
+                    activeGroup.map((s) => <GroupCompareCard key={s.id} submission={s} />)
                   )}
                 </div>
               )}
@@ -634,44 +716,30 @@ export default function InstructorDashboard() {
               <HomeworkPrepPanel
                 cases={mockCases.map((c) => ({ id: c.id, title: c.title }))}
                 stats={{
-                  avgScore: avgScore,
-                  commonMistakes: [
-                    "Overlapping regions",
-                    "Incorrect boundary",
-                    "Missed edema area",
-                  ],
-                  skillGaps: [
-                    "Anatomical localization",
-                    "Contrast handling",
-                    "Annotation labeling",
-                  ],
+                  avgScore,
+                  commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
+                  skillGaps: ["Anatomical localization", "Contrast handling", "Annotation labeling"],
                 }}
                 onPublish={async (payload) => {
                   try {
-                    const res = await fetch(
-                      `${API_BASE}/api/instructor/homeworks`,
-                      {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          case_id: payload.caseId,
-                          due_at: payload.dueAtISO,
-                          audience: payload.audience,
-                          group_name: payload.groupName ?? null,
-                          student_ids: payload.studentIds ?? null,
-                          instructions: payload.instructions ?? null,
-                          checklist: payload.autoChecklist,
-                          uploads: payload.uploads,
-                          questions: payload.questions,
-                        }),
-                      }
-                    );
+                    const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        case_id: payload.caseId,
+                        due_at: payload.dueAtISO,
+                        audience: payload.audience,
+                        group_name: payload.groupName ?? null,
+                        student_ids: payload.studentIds ?? null,
+                        instructions: payload.instructions ?? null,
+                        checklist: payload.autoChecklist,
+                        uploads: payload.uploads,
+                        questions: payload.questions,
+                      }),
+                    });
 
                     if (!res.ok) {
-                      console.error(
-                        "Failed to publish homework",
-                        await res.text()
-                      );
+                      console.error("Failed to publish homework", await res.text());
                       alert("Failed to publish homework");
                       return;
                     }
@@ -708,33 +776,22 @@ export default function InstructorDashboard() {
                     className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
                     onClick={() => setLocation(`/annotation/${case_.id}`)}
                   >
-                    <img
-                      src={case_.imageUrl}
-                      alt={case_.title}
-                      className="w-full h-48 object-cover"
-                    />
+                    <img src={case_.imageUrl} alt={case_.title} className="w-full h-48 object-cover" />
                     <CardContent className="p-4">
                       <h3 className="font-semibold mb-2">{case_.title}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {case_.description}
-                      </p>
+                      <p className="text-sm text-muted-foreground mb-2">{case_.description}</p>
                       <div className="flex items-center justify-between">
                         <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                           {case_.category}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          12 annotations
-                        </span>
+                        <span className="text-xs text-muted-foreground">12 annotations</span>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
               </div>
 
-              <UploadModal
-                isOpen={showUploadModal}
-                onClose={() => setShowUploadModal(false)}
-              />
+              <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
             </div>
           )}
 
@@ -748,7 +805,6 @@ export default function InstructorDashboard() {
                   <p className="text-sm text-muted-foreground">
                     Manage instructor profile, theme, and preferences.
                   </p>
-
                   <Button onClick={() => setLocation("/settings")} className="w-full">
                     Open Settings Page
                   </Button>
@@ -761,4 +817,5 @@ export default function InstructorDashboard() {
     </div>
   );
 }
+
 
