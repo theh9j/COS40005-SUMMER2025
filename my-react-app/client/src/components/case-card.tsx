@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -9,9 +10,11 @@ import { MedicalCase } from "@shared/schema";
 interface CaseCardProps {
   case: MedicalCase;
   onClick: () => void;
+  homework?: { dueAt: string; closed: boolean };
+  daysLeft?: number;
 }
 
-export default function CaseCard({ case: medicalCase, onClick }: CaseCardProps) {
+export default function CaseCard({ case: medicalCase, onClick, homework, daysLeft: daysLeftProp }: CaseCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isCreating, setIsCreating] = React.useState(false);
