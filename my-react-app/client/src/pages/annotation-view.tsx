@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useAnnotation } from "@/hooks/use-annotation";
+import { useI18n } from "@/i18n";
 import { useSubmission, SubmissionFile } from "@/hooks/use-submission";
 import { mockCases } from "@/lib/mock-data";
 import AnnotationToolbar from "@/components/annotation-toolbar";
@@ -37,6 +38,7 @@ export default function AnnotationView() {
   const [, params] = useRoute<{ caseId: string }>("/annotation/:caseId");
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const caseId = params?.caseId || "";
   const case_ = mockCases.find((c) => c.id === caseId);
 

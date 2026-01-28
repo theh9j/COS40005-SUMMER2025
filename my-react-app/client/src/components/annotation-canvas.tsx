@@ -5,10 +5,14 @@ import InlineTextEditor from "./inline-text-editor";
 import { ZoomIn, ZoomOut } from "lucide-react";
 
 interface AnnotationCanvasProps {
-  imageUrl: string;
+  // imageUrl may be undefined in some callers; accept optional string
+  imageUrl?: string | undefined;
+  // annotation is the hook return
   annotation: ReturnType<typeof useAnnotation>;
-  peerAnnotations?: Map<string, { annotations: Annotation[]; color: string; visible: boolean }>;
-  versionOverlay?: Annotation | null;
+  // peerAnnotations can be either a Map (newer shape) or an array (older hook uses any[])
+  peerAnnotations?: any[] | Map<string, { annotations: Annotation[]; color: string; visible: boolean }>;
+  // versionOverlay may be any shape (optional) — keep permissive
+  versionOverlay?: any | null;
   peerOpacity?: number;
 }
 
@@ -305,22 +309,36 @@ export default function AnnotationCanvas({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (versionOverlay) {
-      ctx.save();
-      ctx.globalAlpha = 0.5;
-      drawAnnotation(ctx, versionOverlay, 0.3);
-      ctx.restore();
+      try {
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        drawAnnotation(ctx, versionOverlay, 0.3);
+        ctx.restore();
+      } catch (e) {
+        // ignore drawing errors for unknown overlay shapes
+      }
     }
 
     if (peerAnnotations) {
-      peerAnnotations.forEach((peerData) => {
-        if (peerData.visible) {
-          ctx.globalAlpha = peerOpacity;
-          peerData.annotations.forEach((ann) => {
-            drawAnnotation(ctx, ann, 0.5);
-          });
-          ctx.globalAlpha = 1;
-        }
-      });
+      // support both Map and Array shapes
+      if (typeof (peerAnnotations as any).forEach === 'function' && !(peerAnnotations instanceof Map)) {
+        // Array
+        (peerAnnotations as any[]).forEach((peerData) => {
+          if (peerData && peerData.visible && Array.isArray(peerData.annotations)) {
+            ctx.globalAlpha = peerOpacity;
+            peerData.annotations.forEach((ann: any) => drawAnnotation(ctx, ann, 0.5));
+            ctx.globalAlpha = 1;
+          }
+        });
+      } else if (peerAnnotations instanceof Map) {
+        (peerAnnotations as Map<string, any>).forEach((peerData) => {
+          if (peerData && peerData.visible) {
+            ctx.globalAlpha = peerOpacity;
+            peerData.annotations.forEach((ann: any) => drawAnnotation(ctx, ann, 0.5));
+            ctx.globalAlpha = 1;
+          }
+        });
+      }
     }
 
     annotations.forEach((ann) => {

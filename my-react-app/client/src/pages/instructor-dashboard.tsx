@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
+import { useI18n } from "@/i18n";
 import { mockAtRiskStudents, mockCases } from "@/lib/mock-data";
 import UploadModal from "@/components/upload-modal";
 import {
@@ -94,12 +95,11 @@ function GroupCompareCard({
             {submission.published ? " • Published" : ""}
           </div>
         </div>
-        <AnnotationCanvas
-          imageUrl={caseObj?.imageUrl}
-          annotation={ann}
-          peerAnnotations={ann.peerAnnotations}
-          versionOverlay={ann.versionOverlay}
-        />
+          <AnnotationCanvas
+            imageUrl={caseObj?.imageUrl ?? ""}
+            annotation={ann}
+            peerAnnotations={ann.peerAnnotations}
+          />
       </CardContent>
     </Card>
   );
@@ -109,6 +109,7 @@ export default function InstructorDashboard() {
   // ==== Auth / routing ====
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
+  const { t } = useI18n();
   useHeartbeat(user?.user_id);
 
   // ==== UI state ====
@@ -390,6 +391,11 @@ export default function InstructorDashboard() {
     { id: "grading", label: "Grading", icon: ClipboardCheck },
     { id: "analytics", label: "Homework Builder", icon: LineChart },
     { id: "cases", label: "Case Management", icon: FolderOpen },
+      { id: "overview", label: t("overview"), icon: Gauge },
+      { id: "students", label: t("studentWork"), icon: GraduationCap },
+      { id: "grading", label: t("grading"), icon: ClipboardCheck },
+      { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
+      { id: "cases", label: t("caseManagement"), icon: FolderOpen },
   ];
 
   const handleLogout = () => {
@@ -408,6 +414,7 @@ export default function InstructorDashboard() {
           >
             <Presentation className="h-8 w-8 text-primary" />
             <h1 className="text-xl font-semibold">Instructor Dashboard</h1>
+              <h1 className="text-xl font-semibold">{t("instructorDashboard")}</h1>
           </button>
 
           <div className="flex items-center space-x-4">
@@ -617,12 +624,11 @@ export default function InstructorDashboard() {
                         {selected.studentId} • {selected.caseTitle}
                       </div>
 
-                      <AnnotationCanvas
-                        imageUrl={selectedCase?.imageUrl}
-                        annotation={selectedAnn}
-                        peerAnnotations={selectedAnn.peerAnnotations}
-                        versionOverlay={selectedAnn.versionOverlay}
-                      />
+                        <AnnotationCanvas
+                          imageUrl={selectedCase?.imageUrl ?? ""}
+                          annotation={selectedAnn}
+                          peerAnnotations={selectedAnn.peerAnnotations}
+                        />
                     </CardContent>
                   </Card>
 
