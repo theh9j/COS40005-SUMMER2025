@@ -34,7 +34,8 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
-  const [availableTags, setAvailableTags] = useState<string[]>(['TestTag1', 'TestTag2']);
+  const [trendingTags, setTrendingTags] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newCustomTag, setNewCustomTag] = useState('');
   
@@ -115,6 +116,38 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
       reader.readAsDataURL(file);
     }
   };
+
+  useEffect(() => {
+  const fetchTags = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/forum/tags");
+      const data = await res.json();
+      setAvailableTags(data);
+    } catch (err) {
+      console.error("Failed to fetch tags", err);
+    }
+  };
+
+  fetchTags();
+}, []);
+
+useEffect(() => {
+  const fetchTags = async () => {
+    try {
+      const [allRes, trendingRes] = await Promise.all([
+        fetch("http://127.0.0.1:8000/forum/tags"),
+        fetch("http://127.0.0.1:8000/forum/tags/trending"),
+      ]);
+
+      setAvailableTags(await allRes.json());
+      setTrendingTags(await trendingRes.json());
+    } catch (err) {
+      console.error("Failed to fetch tags", err);
+    }
+  };
+
+  fetchTags();
+}, []);
 
   useEffect(() => {
   const fetchThreads = async () => {
@@ -336,23 +369,18 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
                     <div className="flex items-center gap-2 flex-wrap">
                       <TagIcon className="h-4 w-4 text-muted-foreground" />
                       
-                      {availableTags.map((tag) => (
+                      {trendingTags.map((tag) => (
                         <Button
                           key={tag}
-                          variant={newPostTags.includes(tag) ? 'default' : 'outline'}
-                          onClick={() => handleTagToggle(tag)}
+                          variant={selectedTag === tag ? 'default' : 'outline'}
+                          onClick={() => setSelectedTag(tag)}
                           size="sm"
-                          className={`rounded-full ${
-                            newPostTags.includes(tag) && tag === 'TestTag2'
-                              ? 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'
-                              : newPostTags.includes(tag)
-                              ? 'border border-transparent'
-                              : ''
-                          }`}
+                          className="rounded-full"
                         >
                           {tag}
                         </Button>
                       ))}
+
                       
                       {!isAddingTag ? (
                         <Button
