@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { useAnnotation } from "@/hooks/use-annotation";
 import { useSubmission, SubmissionFile } from "@/hooks/use-submission";
 import { mockCases } from "@/lib/mock-data";
@@ -35,6 +36,7 @@ export default function AnnotationView() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute<{ caseId: string }>("/annotation/:caseId");
   const { user } = useAuth();
+  const { toast } = useToast();
   const caseId = params?.caseId || "";
   const case_ = mockCases.find((c) => c.id === caseId);
 
@@ -76,6 +78,7 @@ export default function AnnotationView() {
   const [showAIChat, setShowAIChat] = useState(false);
   const [showAIVision, setShowAIVision] = useState(false);
   const [aiChatMinimized, setAIChatMinimized] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [compare, setCompare] = useState<{ peer?: any; alpha?: number }>({});
   const [showClosedCaseNotification, setShowClosedCaseNotification] = useState(false);
   
@@ -541,7 +544,40 @@ export default function AnnotationView() {
                     }
                   />
 
-                  <ChatPanel />
+                  {/* Replace Collaboration Chat with Create Discussion button for this case */}
+                  <div className="flex items-center justify-center py-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCreating) return;
+                        if (!user || !user.user_id) {
+                          toast({ title: "Not signed in", description: "Please sign in to create a discussion.", variant: 'destructive' });
+                          return;
+                        }
+
+                        const prefill = {
+                          title: case_.title,
+                          message: case_.description || "",
+                          tags: [case_.category].filter(Boolean),
+                          caseId: caseId,
+                        };
+                        try {
+                          sessionStorage.setItem("discussionPrefill", JSON.stringify(prefill));
+                          try {
+                            window.dispatchEvent(new CustomEvent('discussion-prefill', { detail: prefill }));
+                          } catch (e) {}
+                          setLocation("/student?openDiscussion=1");
+                        } catch (err) {
+                          console.error("Could not open discussion prefill", err);
+                          toast({ title: 'Error', description: 'Unable to open discussion composer', variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      Create Discussion
+                    </Button>
+                  </div>
                 </div>
               )}
 
