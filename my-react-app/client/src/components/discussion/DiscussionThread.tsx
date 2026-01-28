@@ -36,6 +36,7 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
 
   const [trendingTags, setTrendingTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newCustomTag, setNewCustomTag] = useState('');
   
@@ -120,20 +121,6 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
   useEffect(() => {
   const fetchTags = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/forum/tags");
-      const data = await res.json();
-      setAvailableTags(data);
-    } catch (err) {
-      console.error("Failed to fetch tags", err);
-    }
-  };
-
-  fetchTags();
-}, []);
-
-useEffect(() => {
-  const fetchTags = async () => {
-    try {
       const [allRes, trendingRes] = await Promise.all([
         fetch("http://127.0.0.1:8000/forum/tags"),
         fetch("http://127.0.0.1:8000/forum/tags/trending"),
@@ -148,6 +135,8 @@ useEffect(() => {
 
   fetchTags();
 }, []);
+
+
 
   useEffect(() => {
   const fetchThreads = async () => {
