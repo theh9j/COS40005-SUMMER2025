@@ -79,6 +79,50 @@ const dict = {
     heroTitle: "Learn medical imaging with hands-on annotations",
     heroDescription: "Collaborate with instructors and peers, annotate real cases, and track your progress — all in one place.",
 
+    // Student dashboard – common
+    loading: "Loading...",
+    overview: "Overview",
+    myAnnotations: "My Annotations",
+    forums: "Forums",
+    progress: "Progress",
+    usersOnline: "users online",
+    userOnline: "user online",
+
+    // CSV export
+    metric: "Metric",
+    value: "Value",
+    casesCompleted: "Cases Completed",
+    activeAnnotations: "Active Annotations",
+    feedbackReceived: "Feedback Received",
+    studyStreakDays: "Study Streak (days)",
+    annotationAccuracy: "Annotation Accuracy (%)",
+    caseCompletionRate: "Case Completion Rate (%)",
+    collaborationScore: "Collaboration Score (%)",
+
+    // Student dashboard – overview
+    continueStudies: "Continue your medical imaging studies",
+    averageScore: "Average Score",
+    performanceTrend: "Performance Trend",
+    performanceImproved: "Your performance has improved by 19% over the last 7 weeks",
+    upcomingAssignments: "Upcoming Assignments",
+    dueInDays: "Due in {{days}} days",
+    recentCases: "Recent Cases",
+    lastReviewed: "Last reviewed {{time}} ago",
+    completed: "Completed",
+    recentFeedback: "Recent Feedback",
+
+    // Annotations view
+    backToOverview: "Back to Overview",
+    noAnnotations: "You don’t have any annotations yet.",
+    startFromCaseLibrary: "Open a case in Case Library to start.",
+    lastEdited: "Last edited {{time}}",
+    homework: "Homework",
+    score: "Score",
+    grading: "Grading",
+    closed: "Closed",
+    open: "Open",
+
+
     // Auth
     signIn: "Sign In",
     createAccount: "Create account",
@@ -154,9 +198,52 @@ const dict = {
     instructorDashboard: "Bảng điều khiển giảng viên",
     studentDashboard: "Bảng điều khiển sinh viên",
     caseLibrary: "Thư viện ca bệnh",
-    tipNavbar:"Mẹo: Sử dụng thanh điều hướng để chuyển nhanh giữa bảng điều khiển và ca bệnh.",
+    tipNavbar: "Mẹo: Sử dụng thanh điều hướng để chuyển nhanh giữa bảng điều khiển và ca bệnh.",
     heroTitle: "Học chẩn đoán hình ảnh với chú thích thực hành",
-    heroDescription:"Hợp tác với giảng viên và bạn học, chú thích ca bệnh thực tế và theo dõi tiến trình — tất cả trong một nền tảng.",
+    heroDescription: "Hợp tác với giảng viên và bạn học, chú thích ca bệnh thực tế và theo dõi tiến trình — tất cả trong một nền tảng.",
+
+    // Student dashboard – common
+    loading: "Đang tải...",
+    overview: "Tổng quan",
+    myAnnotations: "Chú thích của tôi",
+    forums: "Diễn đàn",
+    progress: "Tiến độ",
+    usersOnline: "người đang trực tuyến",
+    userOnline: "người đang trực tuyến",
+
+    // CSV export
+    metric: "Chỉ số",
+    value: "Giá trị",
+    casesCompleted: "Số ca đã hoàn thành",
+    activeAnnotations: "Chú thích đang hoạt động",
+    feedbackReceived: "Phản hồi đã nhận",
+    studyStreakDays: "Chuỗi học tập (ngày)",
+    annotationAccuracy: "Độ chính xác chú thích (%)",
+    caseCompletionRate: "Tỷ lệ hoàn thành ca (%)",
+    collaborationScore: "Điểm hợp tác (%)",
+
+    // Student dashboard – overview
+    continueStudies: "Tiếp tục học chẩn đoán hình ảnh",
+    averageScore: "Điểm trung bình",
+    performanceTrend: "Xu hướng hiệu suất",
+    performanceImproved: "Hiệu suất của bạn đã cải thiện 19% trong 7 tuần qua",
+    upcomingAssignments: "Bài tập sắp tới",
+    dueInDays: "Còn {{days}} ngày",
+    recentCases: "Ca bệnh gần đây",
+    lastReviewed: "Xem lần cuối {{time}} trước",
+    completed: "Hoàn thành",
+    recentFeedback: "Phản hồi gần đây",
+
+    // Annotations view
+    backToOverview: "Quay lại tổng quan",
+    noAnnotations: "Bạn chưa có chú thích nào.",
+    startFromCaseLibrary: "Mở một ca trong Thư viện ca bệnh để bắt đầu.",
+    lastEdited: "Chỉnh sửa lần cuối {{time}}",
+    homework: "Bài tập",
+    score: "Điểm",
+    grading: "Đang chấm",
+    closed: "Đã đóng",
+    open: "Mở",
 
     // Auth
     signIn: "Đăng nhập",
