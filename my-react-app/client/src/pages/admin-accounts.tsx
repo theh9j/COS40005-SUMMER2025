@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
+import { useI18n } from "@/i18n";
 import {
   Search,
   ShieldCheck,
@@ -36,6 +37,7 @@ const API_URL = "http://127.0.0.1:8000/api/admin";
 
 export default function AdminAccounts() {
   const { user, isLoading, logout } = useAuth();
+  const { t } = useI18n();
   useHeartbeat(user?.user_id);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -184,15 +186,18 @@ export default function AdminAccounts() {
           >
             <UserCog className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-semibold">Admin · Account Management</h1>
+              <h1 className="text-xl font-semibold">{t("adminAccountManagement")}</h1>
           </button>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={logout} title="Log out">
               <LogOut className="h-4 w-4 mr-1" />
               Logout
+                {t("logout")}
             </Button>
             <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing} title="Refresh list">
               <RefreshCw className="h-4 w-4 mr-1" />
               Refresh
+                {t("refresh")}
             </Button>
           </div>
         </div>
@@ -205,17 +210,23 @@ export default function AdminAccounts() {
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <Input placeholder="Search name or email…" value={query} onChange={(e) => setQuery(e.target.value)} />
+                  <Input placeholder={t("searchNameOrEmail")} value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               <div>
                 <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
                   <SelectTrigger>
                     <SelectValue placeholder="Role filter" />
                   </SelectTrigger>
+                    <SelectValue placeholder={t("roleFilter")} />
                   <SelectContent>
                     <SelectItem value="all">All roles</SelectItem>
                     <SelectItem value="student">Student</SelectItem>
                     <SelectItem value="instructor">Instructor</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="all">{t("allRoles")}</SelectItem>
+                      <SelectItem value="student">{t("student")}</SelectItem>
+                      <SelectItem value="instructor">{t("instructor")}</SelectItem>
+                      <SelectItem value="admin">{t("admin")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -229,6 +240,9 @@ export default function AdminAccounts() {
                 <label htmlFor="onlyPending" className="text-sm">
                   Show only unverified instructors
                 </label>
+                  <label htmlFor="onlyPending" className="text-sm">
+                    {t("showOnlyUnverifiedInstructors")}
+                  </label>
               </div>
             </div>
           </CardContent>
@@ -245,6 +259,12 @@ export default function AdminAccounts() {
                   <th className="py-3 px-4">Instructor Verified</th>
                   <th className="py-3 px-4">Active</th>
                   <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4">User</th>
+                    <th className="py-3 px-4">{t("userId")}</th>
+                    <th className="py-3 px-4">{t("role")}</th>
+                    <th className="py-3 px-4">{t("instructorVerified")}</th>
+                    <th className="py-3 px-4">{t("active")}</th>
+                    <th className="py-3 px-4 text-right">{t("actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -355,6 +375,9 @@ export default function AdminAccounts() {
                     <td colSpan={6} className="py-6 px-4 text-center text-muted-foreground">
                       No users match your filters.
                     </td>
+                      <td colSpan={6} className="py-6 px-4 text-center text-muted-foreground">
+                        {t("noUsersMatch")}
+                      </td>
                   </tr>
                 )}
               </tbody>
