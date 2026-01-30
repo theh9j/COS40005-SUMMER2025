@@ -1,0 +1,6 @@
+std:
+-timer fix
+-assignment desc fix <-> instructor asm desc
+inst:
+-case management: open+close
+-new separate case (annotation) card 
