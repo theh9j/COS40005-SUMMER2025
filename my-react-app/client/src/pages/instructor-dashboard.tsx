@@ -386,16 +386,11 @@ export default function InstructorDashboard() {
   if (!user) return null;
 
   const navItems = [
-    { id: "overview", label: "Overview", icon: Gauge },
-    { id: "students", label: "Student Work", icon: GraduationCap },
-    { id: "grading", label: "Grading", icon: ClipboardCheck },
-    { id: "analytics", label: "Homework Builder", icon: LineChart },
-    { id: "cases", label: "Case Management", icon: FolderOpen },
-      { id: "overview", label: t("overview"), icon: Gauge },
-      { id: "students", label: t("studentWork"), icon: GraduationCap },
-      { id: "grading", label: t("grading"), icon: ClipboardCheck },
-      { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
-      { id: "cases", label: t("caseManagement"), icon: FolderOpen },
+    { id: "overview", label: t("overview"), icon: Gauge },
+    { id: "students", label: t("studentWork"), icon: GraduationCap },
+    { id: "grading", label: t("grading"), icon: ClipboardCheck },
+    { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
+    { id: "cases", label: t("caseManagement"), icon: FolderOpen },
   ];
 
   const handleLogout = () => {
@@ -413,8 +408,7 @@ export default function InstructorDashboard() {
             className="flex items-center space-x-4 focus:outline-none hover:opacity-80 transition"
           >
             <Presentation className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold">Instructor Dashboard</h1>
-              <h1 className="text-xl font-semibold">{t("instructorDashboard")}</h1>
+            <h1 className="text-xl font-semibold">{t("instructorDashboard")}</h1>
           </button>
 
           <div className="flex items-center space-x-4">

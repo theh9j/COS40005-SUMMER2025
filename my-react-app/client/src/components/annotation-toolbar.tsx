@@ -15,14 +15,12 @@ import {
   Clock,
   Users,
   Eraser,
-  FileText,
 } from "lucide-react";
 
 interface AnnotationToolbarProps {
   annotation: ReturnType<typeof useAnnotation>;
   onToggleHistory?: () => void;
   onToggleComparison?: () => void;
-  onShowRequirements?: () => void;
   showHistory?: boolean;
   showComparison?: boolean;
 }
@@ -42,7 +40,6 @@ export default function AnnotationToolbar({
   annotation,
   onToggleHistory,
   onToggleComparison,
-  onShowRequirements,
   showHistory = false,
   showComparison = false,
 }: AnnotationToolbarProps) {
@@ -183,19 +180,6 @@ export default function AnnotationToolbar({
             data-testid="button-history"
           >
             <Clock className="h-4 w-4" />
-          </Button>
-        )}
-        
-        {onShowRequirements && (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="px-3 h-9"
-            onClick={onShowRequirements}
-            title="View Assignment Requirements"
-            data-testid="button-requirements"
-          >
-            <FileText className="h-4 w-4" />
           </Button>
         )}
       </div>
