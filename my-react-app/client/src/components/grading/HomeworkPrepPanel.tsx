@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X } from "lucide-react";
 
 /** ============ Types ============ */
@@ -177,17 +178,18 @@ export default function HomeworkPrepPanel({ cases, stats, onPublish }: Props) {
         <div className="grid md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Case</label>
-            <select
-              className="w-full border rounded-md p-2"
-              value={caseId}
-              onChange={(e) => setCaseId(e.target.value)}
-            >
-              {cases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
+            <Select value={caseId} onValueChange={setCaseId}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a case" />
+              </SelectTrigger>
+              <SelectContent>
+                {cases.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             <label className="text-sm font-medium">Due date</label>
             <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
@@ -195,15 +197,16 @@ export default function HomeworkPrepPanel({ cases, stats, onPublish }: Props) {
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Audience</label>
-            <select
-              className="w-full border rounded-md p-2"
-              value={audience}
-              onChange={(e) => setAudience(e.target.value as any)}
-            >
-              <option value="all">All students</option>
-              <option value="group">Group (named)</option>
-              <option value="list">Specific student IDs</option>
-            </select>
+            <Select value={audience} onValueChange={(e) => setAudience(e as any)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select audience" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All students</SelectItem>
+                <SelectItem value="group">Group (named)</SelectItem>
+                <SelectItem value="list">Specific student IDs</SelectItem>
+              </SelectContent>
+            </Select>
 
             {audience === "group" && (
               <>
@@ -320,22 +323,26 @@ export default function HomeworkPrepPanel({ cases, stats, onPublish }: Props) {
                 {uploads.length > 0 && (
                   <div>
                     <label className="block text-xs font-medium">Attach image (optional)</label>
-                    <select
-                      className="w-full border rounded-md p-2 text-sm"
-                      value={q.imageIndex ?? ""}
-                      onChange={(e) =>
+                    <Select
+                      value={(q.imageIndex ?? "").toString()}
+                      onValueChange={(e) =>
                         updateQuestion(qi, {
-                          imageIndex: e.target.value === "" ? undefined : Number(e.target.value),
+                          imageIndex: e === "" ? undefined : Number(e),
                         })
                       }
                     >
-                      <option value="">— None —</option>
-                      {uploads.map((u, i) => (
-                        <option key={i} value={i}>
-                          {i + 1}. {u.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select image" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— None —</SelectItem>
+                        {uploads.map((u, i) => (
+                          <SelectItem key={i} value={i.toString()}>
+                            {i + 1}. {u.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
