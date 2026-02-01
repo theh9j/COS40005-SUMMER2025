@@ -132,6 +132,35 @@ export default function InstructorDashboard() {
 
   // ==== UI state ====
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const [classrooms, setClassrooms] = useState<string[]>([]);
+  const [selectedClassroom, setSelectedClassroom] = useState("");
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [availableStudents, setAvailableStudents] = useState<any[]>([]);
+  useEffect(() => {
+    // fetch classrooms and students from backend
+    async function load() {
+      try {
+        const resC = await fetch(`${API_BASE}/api/classroom/all`);
+        if (resC.ok) {
+          const data = await resC.json();
+          setClassrooms(data.classrooms.map((c: any) => c.name));
+        }
+
+        const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
+        if (resS.ok) {
+          const d = await resS.json();
+          setAvailableStudents(d.students.map((s: any) => ({ id: s.id, firstName: s.firstName, lastName: s.lastName })));
+        }
+      } catch (e) {
+        console.error("Failed to load classrooms/students", e);
+      }
+    }
+
+    load();
+  }, []);
   const [activeView, setActiveView] = useState<InstructorView>(() => {
     const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
     return VALID_TABS.includes(saved) ? saved : "overview";
@@ -780,13 +809,27 @@ export default function InstructorDashboard() {
             <div className="p-6 space-y-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Case Management</h2>
-                <Button
-                  onClick={() => setShowUploadModal(true)}
-                  className="bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  <UploadIcon className="h-4 w-4 mr-2" />
-                  Upload Case
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => setShowCreateClassModal(true)}
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  >
+                    Create Class
+                  </Button>
+                  <Button
+                    onClick={() => setShowAddStudentModal(true)}
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Add People to Class
+                  </Button>
+                  <Button
+                    onClick={() => setShowUploadModal(true)}
+                    className="bg-primary text-primary-foreground hover:opacity-90"
+                  >
+                    <UploadIcon className="h-4 w-4 mr-2" />
+                    Upload Case
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -812,6 +855,172 @@ export default function InstructorDashboard() {
               </div>
 
               <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
+
+              {/* Create Class Modal */}
+              {showCreateClassModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <Card className="w-full max-w-md">
+                    <CardContent className="p-6 space-y-4">
+                      <h3 className="text-lg font-semibold">Create New Class</h3>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Class Name</label>
+                        <Input
+                          value={newClassName}
+                          onChange={(e) => setNewClassName(e.target.value)}
+                          placeholder="e.g., Class A, Period 1, etc."
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          onClick={() => {
+                            setShowCreateClassModal(false);
+                            setNewClassName("");
+                          }}
+                          variant="outline"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            if (!newClassName.trim()) return;
+                            try {
+                              const res = await fetch(`${API_BASE}/api/classroom/create`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ name: newClassName.trim() }),
+                              });
+                              if (!res.ok) {
+                                const err = await res.json();
+                                throw new Error(err.detail || "Failed to create class");
+                              }
+                              const d = await res.json();
+                              // refresh classroom list
+                              setClassrooms((prev) => Array.from(new Set([...prev, newClassName.trim()])));
+                              alert(`Class "${newClassName}" created successfully!`);
+                              setShowCreateClassModal(false);
+                              setNewClassName("");
+                            } catch (e: any) {
+                              alert(e.message || "Error creating class");
+                            }
+                          }}
+                          className="bg-green-600 text-white hover:bg-green-700"
+                        >
+                          Create
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Add Student to Class Modal */}
+              {showAddStudentModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <Card className="w-full max-w-md max-h-96 overflow-y-auto">
+                    <CardContent className="p-6 space-y-4">
+                      <h3 className="text-lg font-semibold">Add Student to Class</h3>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Select Class</label>
+                        <select
+                          value={selectedClassroom}
+                          onChange={(e) => setSelectedClassroom(e.target.value)}
+                          className="w-full border rounded px-3 py-2"
+                        >
+                          <option value="">Choose a class...</option>
+                          {classrooms.map((cls) => (
+                            <option key={cls} value={cls}>
+                              {cls}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Select Students</label>
+                        <div className="border rounded p-3 space-y-2 max-h-40 overflow-y-auto">
+                          {availableStudents.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              No students available. Create students first.
+                            </p>
+                          ) : (
+                            availableStudents.map((student) => (
+                              <label key={student.id} className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStudents.includes(student.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedStudents([...selectedStudents, student.id]);
+                                    } else {
+                                      setSelectedStudents(
+                                        selectedStudents.filter((id) => id !== student.id)
+                                      );
+                                    }
+                                  }}
+                                  className="rounded"
+                                />
+                                <span className="text-sm">
+                                  {student.firstName} {student.lastName}
+                                </span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          onClick={() => {
+                            setShowAddStudentModal(false);
+                            setSelectedClassroom("");
+                            setSelectedStudents([]);
+                          }}
+                          variant="outline"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            if (!selectedClassroom || selectedStudents.length === 0) return;
+                            try {
+                              // add each selected student
+                              await Promise.all(
+                                selectedStudents.map((sid) =>
+                                  fetch(`${API_BASE}/api/classroom/add-student`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ student_id: sid, classroom_name: selectedClassroom }),
+                                  })
+                                )
+                              );
+
+                              // refresh students and classrooms
+                              const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
+                              if (resS.ok) {
+                                const d = await resS.json();
+                                setAvailableStudents(d.students.map((s: any) => ({ id: s.id, firstName: s.firstName, lastName: s.lastName })));
+                              }
+                              const resC = await fetch(`${API_BASE}/api/classroom/all`);
+                              if (resC.ok) {
+                                const data = await resC.json();
+                                setClassrooms(data.classrooms.map((c: any) => c.name));
+                              }
+
+                              alert(`Added ${selectedStudents.length} student(s) to ${selectedClassroom}`);
+                              setShowAddStudentModal(false);
+                              setSelectedClassroom("");
+                              setSelectedStudents([]);
+                            } catch (e: any) {
+                              alert(e.message || "Failed to add students to class");
+                            }
+                          }}
+                          className="bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          Add to Class
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
