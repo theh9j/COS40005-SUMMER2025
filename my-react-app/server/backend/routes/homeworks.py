@@ -23,7 +23,12 @@ async def create_homework(payload: HomeworkCreate):
         "instructions": payload.instructions,
         "checklist": payload.checklist or [],
         "status": "active",
-        "created_at": now_iso()
+        "created_at": now_iso(),
+
+        # ✅ optional metadata
+        "requirement_id": payload.requirement_id,
+        "class_name": payload.class_name,
+        "year": payload.year,
     }
     res = await homeworks_collection.insert_one(hw_doc)
     hw_id = str(res.inserted_id)
@@ -110,3 +115,4 @@ async def homework_by_case(caseId: str = Query(..., alias="caseId"),
         uploads=uploads,
         questions=qdocs
     )
+
