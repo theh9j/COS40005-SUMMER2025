@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X } from "lucide-react";
+import { X, ImagePlus } from "lucide-react";
 
 /** ============ Types ============ */
 type SuggestStats = {
@@ -16,59 +15,74 @@ type SuggestStats = {
 
 type Upload = { name: string; url: string; type: string; size: number };
 
-type QuestionMCQ = {
-  type: "mcq";
+// Essay question only
+type EssayQuestion = {
+  type: "essay";
   prompt: string;
   points: number;
   guidance?: string;
-  options: string[];
-  correctIndex: number | null; // null -> chưa chọn
-  imageIndex?: number; // optional: đính kèm ảnh từ uploads
-};
-
-type QuestionShort = {
-  type: "short";
-  prompt: string;
-  points: number;
-  guidance?: string;
-  expectedAnswer?: string;
   imageIndex?: number;
 };
 
-type Question = QuestionMCQ | QuestionShort;
+type PublishPayload = {
+  // ✅ NEW: create case in builder (instead of choose existing)
+  newCase: {
+    title: string;
+    description?: string;
+    // main image for annotation (student)
+    imageFile?: File | null;
+    // preview URL for UI
+    imagePreviewUrl?: string;
+  };
 
-type Props = {
-  cases: { id: string; title: string }[];
-  stats: SuggestStats;
-  onPublish: (payload: {
-    caseId: string;
-    dueAtISO: string;
-    audience: "all" | "group" | "list";
-    groupName?: string;
-    studentIds?: string[];
-    instructions?: string;
-    autoChecklist?: string[];
-    uploads: Upload[];
-    questions: Question[];
-  }) => void;
+  dueAtISO: string;
+  audience: "all" | "group" | "list";
+  groupName?: string;
+  studentIds?: string[];
+  instructions?: string;
+  autoChecklist?: string[];
+  referenceUploads: Upload[]; // optional reference images
+  questions: EssayQuestion[];
+
+  requirementId: string;
+  className: string;
+  year: string;
 };
 
-/** ============ Component ============ */
-export default function HomeworkPrepPanel({ cases, stats, onPublish }: Props) {
-  const [caseId, setCaseId] = useState(cases[0]?.id ?? "");
-  const [due, setDue] = useState<string>(""); // yyyy-mm-dd
+type Props = {
+  stats: SuggestStats;
+  onPublish: (payload: PublishPayload) => void;
+};
+
+export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
+  // ====== Create Case fields ======
+  const [caseTitle, setCaseTitle] = useState("");
+  const [caseDesc, setCaseDesc] = useState("");
+  const [caseImageFile, setCaseImageFile] = useState<File | null>(null);
+  const [caseImagePreview, setCaseImagePreview] = useState<string>("");
+
+  // ====== meta ======
+  const [requirementId, setRequirementId] = useState("");
+  const [className, setClassName] = useState("");
+  const [year, setYear] = useState("");
+
+  // ====== schedule & audience ======
+  const [due, setDue] = useState<string>("");
   const [audience, setAudience] = useState<"all" | "group" | "list">("all");
   const [groupName, setGroupName] = useState("");
   const [studentIds, setStudentIds] = useState("");
+
+  // ====== content ======
   const [instructions, setInstructions] = useState("");
 
-  // uploads
-  const [uploads, setUploads] = useState<Upload[]>([]);
+  // right panel: reference uploads (optional)
+  const [referenceUploads, setReferenceUploads] = useState<Upload[]>([]);
+  const refFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
-  // questions
-  const [questions, setQuestions] = useState<Question[]>([]);
+  // essay questions only
+  const [questions, setQuestions] = useState<EssayQuestion[]>([]);
 
-  // checklist auto từ thống kê
   const autoChecklist = useMemo(() => {
     const base = [
       ...stats.commonMistakes.map((x) => `Fix: ${x}`),
@@ -77,94 +91,95 @@ export default function HomeworkPrepPanel({ cases, stats, onPublish }: Props) {
     return Array.from(new Set(base)).slice(0, 6);
   }, [stats]);
 
-  const canPublish = caseId && due && questions.length > 0;
+  // ✅ must have: caseTitle + caseImageFile + due + requirement meta + >=1 question
+  const canPublish =
+    caseTitle.trim().length > 0 &&
+    Boolean(caseImageFile) &&
+    Boolean(due) &&
+    requirementId.trim().length > 0 &&
+    className.trim().length > 0 &&
+    year.trim().length > 0 &&
+    questions.length > 0;
 
-  /** ---------- Handlers ---------- */
-  const handleUploadFiles = async (files: FileList | null) => {
+  const toISO = (d: string) => (d ? new Date(d + "T23:59:00").toISOString() : "");
+
+  /** ============ Case image ============ */
+  const onPickCaseImage = (file: File | null) => {
+    if (!file) return;
+    setCaseImageFile(file);
+    const url = URL.createObjectURL(file);
+    setCaseImagePreview(url);
+  };
+
+  const clearCaseImage = () => {
+    setCaseImageFile(null);
+    setCaseImagePreview("");
+  };
+
+  /** ============ Reference images (optional) ============ */
+  const pushRefFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const list: Upload[] = Array.from(files).map((f) => ({
       name: f.name,
-      url: URL.createObjectURL(f), // mock preview; BE sẽ trả URL thật
+      url: URL.createObjectURL(f),
       type: f.type || "application/octet-stream",
       size: f.size,
     }));
-    setUploads((prev) => [...prev, ...list]);
+    setReferenceUploads((prev) => [...prev, ...list]);
   };
 
-  const removeUpload = (idx: number) => {
-    setUploads((prev) => prev.filter((_, i) => i !== idx));
-    // đồng thời bỏ imageIndex trong câu hỏi nếu trỏ đến ảnh vừa xoá
+  const removeRefUpload = (idx: number) => {
+    setReferenceUploads((prev) => prev.filter((_, i) => i !== idx));
+    // shift imageIndex on questions
     setQuestions((prev) =>
-      prev.map((q) =>
-        q.imageIndex === idx ? { ...q, imageIndex: undefined } as Question : q
-      )
+      prev.map((q) => {
+        if (q.imageIndex == null) return q;
+        if (q.imageIndex === idx) return { ...q, imageIndex: undefined };
+        if (q.imageIndex > idx) return { ...q, imageIndex: q.imageIndex - 1 };
+        return q;
+      })
     );
   };
 
-  const addQuestion = (type: Question["type"]) => {
-    const base = { points: 1, prompt: "", guidance: "" } as const;
-    if (type === "mcq") {
-      setQuestions((qs) => [
-        ...qs,
-        { type: "mcq", ...base, options: ["", ""], correctIndex: null },
-      ]);
-    } else {
-      setQuestions((qs) => [...qs, { type: "short", ...base, expectedAnswer: "" }]);
-    }
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    pushRefFiles(e.dataTransfer.files);
   };
 
-  const updateQuestion = (idx: number, patch: Partial<Question>) => {
-    setQuestions((qs) =>
-      qs.map((q, i) => (i === idx ? ({ ...q, ...patch } as Question) : q))
-    );
+  /** ============ Questions (essay only) ============ */
+  const addEssayQuestion = () => {
+    setQuestions((qs) => [
+      ...qs,
+      { type: "essay", prompt: "", points: 5, guidance: "" },
+    ]);
+  };
+
+  const updateQuestion = (idx: number, patch: Partial<EssayQuestion>) => {
+    setQuestions((qs) => qs.map((q, i) => (i === idx ? { ...q, ...patch } : q)));
   };
 
   const removeQuestion = (idx: number) => {
     setQuestions((qs) => qs.filter((_, i) => i !== idx));
   };
 
-  const addOption = (qi: number) => {
-    const q = questions[qi];
-    if (q?.type !== "mcq") return;
-    const next = [...q.options, ""];
-    updateQuestion(qi, { options: next } as Partial<QuestionMCQ>);
-  };
-
-  const updateOption = (qi: number, oi: number, value: string) => {
-    const q = questions[qi];
-    if (q?.type !== "mcq") return;
-    const next = q.options.map((o, i) => (i === oi ? value : o));
-    updateQuestion(qi, { options: next } as Partial<QuestionMCQ>);
-  };
-
-  const removeOption = (qi: number, oi: number) => {
-    const q = questions[qi];
-    if (q?.type !== "mcq") return;
-    const next = q.options.filter((_, i) => i !== oi);
-    const patch: Partial<QuestionMCQ> = { options: next };
-    if (q.correctIndex != null && q.correctIndex === oi) {
-      patch.correctIndex = null; // reset
-    } else if (q.correctIndex != null && oi < q.correctIndex) {
-      patch.correctIndex = q.correctIndex - 1;
-    }
-    updateQuestion(qi, patch);
-  };
-
-  const toISO = (d: string) => (d ? new Date(d + "T23:59:00").toISOString() : "");
-
-  /** ---------- Render ---------- */
   return (
-    <Card>
-      <CardContent className="p-4 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold">Homework Builder</h3>
-          <div className="text-xs text-muted-foreground">Class avg: {stats.avgScore}/10</div>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Homework Builder</h3>
+          <div className="text-xs text-muted-foreground">
+            Create case + upload image for annotation • Essay questions only
+          </div>
         </div>
+        <div className="text-xs text-muted-foreground">Class avg: {stats.avgScore}/10</div>
+      </div>
 
-        {/* Suggestions */}
-        <div className="space-y-2">
-          <div className="text-xs font-medium">Suggested focus</div>
+      {/* Suggested focus */}
+      <Card>
+        <CardContent className="p-4 space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">Suggested focus</div>
           <div className="flex flex-wrap gap-2">
             {autoChecklist.map((c, i) => (
               <Badge key={i} variant="secondary">
@@ -172,265 +187,426 @@ export default function HomeworkPrepPanel({ cases, stats, onPublish }: Props) {
               </Badge>
             ))}
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* Form: case + due + audience */}
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Case</label>
-            <Select value={caseId} onValueChange={setCaseId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a case" />
-              </SelectTrigger>
-              <SelectContent>
-                {cases.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <label className="text-sm font-medium">Due date</label>
-            <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Audience</label>
-            <Select value={audience} onValueChange={(e) => setAudience(e as any)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select audience" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All students</SelectItem>
-                <SelectItem value="group">Group (named)</SelectItem>
-                <SelectItem value="list">Specific student IDs</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {audience === "group" && (
-              <>
-                <label className="text-sm font-medium">Group name</label>
-                <Input
-                  placeholder="e.g., Week8-Remedial"
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                />
-              </>
-            )}
-
-            {audience === "list" && (
-              <>
-                <label className="text-sm font-medium">Student IDs (comma separated)</label>
-                <Input
-                  placeholder="david.tran, emma.wilson"
-                  value={studentIds}
-                  onChange={(e) => setStudentIds(e.target.value)}
-                />
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Upload images */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Reference images (optional)</label>
-            <Input type="file" multiple onChange={(e) => handleUploadFiles(e.target.files)} />
-          </div>
-          {uploads.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {uploads.map((u, i) => (
-                <div key={i} className="relative group border rounded-md overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={u.url} alt={u.name} className="h-28 w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => removeUpload(i)}
-                    className="absolute top-1 right-1 hidden group-hover:flex items-center justify-center bg-black/60 rounded-full p-1"
-                    title="Remove"
-                  >
-                    <X className="h-4 w-4 text-white" />
-                  </button>
-                  <div className="px-2 py-1 text-[11px] truncate">{u.name}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Questions builder */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-medium">Questions</div>
-            <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => addQuestion("short")}>
-                + Short answer
-              </Button>
-              <Button size="sm" onClick={() => addQuestion("mcq")}>+ Multiple choice</Button>
+      {/* ✅ Create Case (like management, but create) */}
+      <Card>
+        <CardContent className="p-4 space-y-4">
+          <div>
+            <div className="text-sm font-semibold">Create a Case</div>
+            <div className="text-xs text-muted-foreground">
+              You write case name and upload the image students will annotate.
             </div>
           </div>
 
-          {questions.length === 0 && (
-            <div className="text-xs text-muted-foreground">No questions yet. Add one to start.</div>
-          )}
+          <div className="grid lg:grid-cols-[1fr_360px] gap-5">
+            {/* Left: title/desc */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Case title</label>
+                <Input
+                  placeholder="e.g., Brain MRI – Stroke Case"
+                  value={caseTitle}
+                  onChange={(e) => setCaseTitle(e.target.value)}
+                />
+              </div>
 
-          {questions.map((q, qi) => (
-            <Card key={qi}>
-              <CardContent className="p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {q.type === "mcq" ? "Multiple Choice" : "Short Answer"}
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeQuestion(qi)}>
-                    Remove
-                  </Button>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Case description (optional)</label>
+                <Textarea
+                  placeholder="Short description shown in case management/student view…"
+                  value={caseDesc}
+                  onChange={(e) => setCaseDesc(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Right: square upload - this is the ACTUAL annotation image */}
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Annotation image</div>
+
+              <label className="block">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => onPickCaseImage(e.target.files?.[0] ?? null)}
+                />
+
+                <div
+                  className={[
+                    "aspect-square w-full rounded-xl border-2 border-dashed",
+                    "flex items-center justify-center text-center cursor-pointer transition",
+                    caseImagePreview ? "border-border bg-background" : "border-border hover:bg-muted/50",
+                  ].join(" ")}
+                >
+                  {caseImagePreview ? (
+                    <div className="relative w-full h-full">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={caseImagePreview}
+                        alt="Case preview"
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          clearCaseImage();
+                        }}
+                        className="absolute top-2 right-2 bg-black/60 rounded-full p-1"
+                        title="Remove"
+                      >
+                        <X className="h-4 w-4 text-white" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 px-6">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                        <ImagePlus className="h-6 w-6" />
+                      </div>
+                      <div className="text-sm font-medium">Click to upload image</div>
+                      <div className="text-xs text-muted-foreground">
+                        This image will be used in student annotation page.
+                      </div>
+                    </div>
+                  )}
                 </div>
+              </label>
 
-                {/* prompt */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium">Prompt</label>
-                  <Textarea
-                    value={q.prompt}
-                    onChange={(e) => updateQuestion(qi, { prompt: e.target.value })}
-                    placeholder="Write the question…"
+              <div className="text-xs text-muted-foreground">
+                Required. Upload 1 image (PNG/JPG).
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Main layout: left settings + questions, right reference images */}
+      <div className="grid lg:grid-cols-[1fr_340px] gap-5">
+        {/* Left */}
+        <div className="space-y-5">
+          {/* Requirement meta */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="text-sm font-semibold">Requirement Metadata</div>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Requirement ID</label>
+                  <Input
+                    placeholder="e.g., RQ-2025-W3-01"
+                    value={requirementId}
+                    onChange={(e) => setRequirementId(e.target.value)}
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Class</label>
+                  <Input
+                    placeholder="e.g., COS40005"
+                    value={className}
+                    onChange={(e) => setClassName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Year</label>
+                  <Input
+                    placeholder="e.g., 2025"
+                    value={year}
+                    onChange={(e) => setYear(e.target.value)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-                {/* points + guidance */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs font-medium">Points</label>
-                    <Input
-                      type="number"
-                      value={q.points}
-                      onChange={(e) =>
-                        updateQuestion(qi, { points: Math.max(0, Number(e.target.value)) })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium">Guidance (optional)</label>
-                    <Input
-                      value={q.guidance ?? ""}
-                      onChange={(e) => updateQuestion(qi, { guidance: e.target.value })}
-                      placeholder="What to pay attention to…"
-                    />
+          {/* Assign settings */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="text-sm font-semibold">Assign Settings</div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Due date</label>
+                  <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Audience</label>
+                  <select
+                    className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value as any)}
+                  >
+                    <option value="all">All students</option>
+                    <option value="group">Group (named)</option>
+                    <option value="list">Specific student IDs</option>
+                  </select>
+                </div>
+              </div>
+
+              {audience === "group" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Group name</label>
+                  <Input
+                    placeholder="e.g., Week8-Remedial"
+                    value={groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {audience === "list" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Student IDs (comma separated)</label>
+                  <Input
+                    placeholder="david.tran, emma.wilson"
+                    value={studentIds}
+                    onChange={(e) => setStudentIds(e.target.value)}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Essay questions */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold">Essay Questions</div>
+                  <div className="text-xs text-muted-foreground">
+                    Students write their own answers (no MCQ)
                   </div>
                 </div>
+                <Button size="sm" onClick={addEssayQuestion}>
+                  + Add question
+                </Button>
+              </div>
 
-                {/* attach image from uploads */}
-                {uploads.length > 0 && (
-                  <div>
-                    <label className="block text-xs font-medium">Attach image (optional)</label>
-                    <Select
-                      value={(q.imageIndex ?? "").toString()}
-                      onValueChange={(e) =>
-                        updateQuestion(qi, {
-                          imageIndex: e === "" ? undefined : Number(e),
-                        })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select image" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">— None —</SelectItem>
-                        {uploads.map((u, i) => (
-                          <SelectItem key={i} value={i.toString()}>
-                            {i + 1}. {u.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+              {questions.length === 0 && (
+                <div className="text-xs text-muted-foreground">
+                  No questions yet. Add one to start.
+                </div>
+              )}
 
-                {/* answer type specifics */}
-                {q.type === "short" ? (
-                  <div>
-                    <label className="block text-xs font-medium">Expected answer (optional)</label>
-                    <Input
-                      value={(q as QuestionShort).expectedAnswer ?? ""}
-                      onChange={(e) =>
-                        updateQuestion(qi, { expectedAnswer: e.target.value } as Partial<QuestionShort>)
-                      }
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium">Options</div>
-                    {(q as QuestionMCQ).options.map((opt, oi) => (
-                      <div key={oi} className="flex items-center gap-2">
+              {questions.map((q, qi) => (
+                <Card key={qi} className="border-border">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Essay #{qi + 1}
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => removeQuestion(qi)}>
+                        Remove
+                      </Button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium">Prompt</label>
+                      <Textarea
+                        value={q.prompt}
+                        onChange={(e) => updateQuestion(qi, { prompt: e.target.value })}
+                        placeholder="Write the essay question…"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium">Points</label>
                         <Input
-                          className="flex-1"
-                          value={opt}
-                          onChange={(e) => updateOption(qi, oi, e.target.value)}
-                          placeholder={`Option ${oi + 1}`}
+                          type="number"
+                          value={q.points}
+                          onChange={(e) =>
+                            updateQuestion(qi, { points: Math.max(0, Number(e.target.value)) })
+                          }
                         />
-                        <label className="text-xs flex items-center gap-1">
-                          <input
-                            type="radio"
-                            name={`correct-${qi}`}
-                            checked={(q as QuestionMCQ).correctIndex === oi}
-                            onChange={() => updateQuestion(qi, { correctIndex: oi } as Partial<QuestionMCQ>)}
-                          />
-                          Correct
-                        </label>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeOption(qi, oi)}
+                      </div>
+
+                      {referenceUploads.length > 0 && (
+                        <div>
+                          <label className="block text-xs font-medium">
+                            Attach reference image (optional)
+                          </label>
+                          <select
+                            className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                            value={(q.imageIndex ?? "").toString()}
+                            onChange={(e) =>
+                              updateQuestion(qi, {
+                                imageIndex:
+                                  e.target.value === "" ? undefined : Number(e.target.value),
+                              })
+                            }
+                          >
+                            <option value="">— None —</option>
+                            {referenceUploads.map((u, i) => (
+                              <option key={i} value={i.toString()}>
+                                {i + 1}. {u.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium">Guidance (optional)</label>
+                      <Input
+                        value={q.guidance ?? ""}
+                        onChange={(e) => updateQuestion(qi, { guidance: e.target.value })}
+                        placeholder="What should students focus on?"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* General instructions */}
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <label className="text-sm font-semibold">General instructions (optional)</label>
+              <Textarea
+                placeholder="Short guidance for the assignment…"
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Publish */}
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {canPublish
+                ? "Ready to publish."
+                : "Need: Case title + annotation image + due + requirement meta + 1 essay question."}
+            </div>
+
+            <Button
+              disabled={!canPublish}
+              onClick={() =>
+                onPublish({
+                  newCase: {
+                    title: caseTitle.trim(),
+                    description: caseDesc.trim() || undefined,
+                    imageFile: caseImageFile,
+                    imagePreviewUrl: caseImagePreview || undefined,
+                  },
+                  dueAtISO: toISO(due),
+                  audience,
+                  groupName: audience === "group" ? groupName || undefined : undefined,
+                  studentIds:
+                    audience === "list"
+                      ? studentIds.split(",").map((s) => s.trim()).filter(Boolean)
+                      : undefined,
+                  instructions: instructions || undefined,
+                  autoChecklist,
+                  referenceUploads,
+                  questions,
+                  requirementId: requirementId.trim(),
+                  className: className.trim(),
+                  year: year.trim(),
+                })
+              }
+            >
+              Publish homework
+            </Button>
+          </div>
+        </div>
+
+        {/* Right: reference images (optional) */}
+        <div className="space-y-4">
+          <Card className="border-border">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold">Reference images</div>
+                  <div className="text-xs text-muted-foreground">Optional • drag & drop</div>
+                </div>
+
+                <input
+                  ref={refFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => pushRefFiles(e.target.files)}
+                />
+              </div>
+
+              <div
+                onClick={() => refFileInputRef.current?.click()}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                }}
+                onDrop={onDrop}
+                className={[
+                  "aspect-square w-full rounded-xl border-2 border-dashed",
+                  "flex items-center justify-center text-center cursor-pointer transition",
+                  dragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                ].join(" ")}
+              >
+                <div className="space-y-2 px-6">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                    <ImagePlus className="h-6 w-6" />
+                  </div>
+                  <div className="text-sm font-medium">Click to upload</div>
+                  <div className="text-xs text-muted-foreground">PNG/JPG • Multiple allowed</div>
+                </div>
+              </div>
+
+              {referenceUploads.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Uploaded ({referenceUploads.length})
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {referenceUploads.slice(0, 6).map((u, i) => (
+                      <div
+                        key={i}
+                        className="relative group overflow-hidden rounded-lg border border-border"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={u.url} alt={u.name} className="h-28 w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRefUpload(i);
+                          }}
+                          className="absolute top-1 right-1 hidden group-hover:flex items-center justify-center bg-black/60 rounded-full p-1"
+                          title="Remove"
                         >
-                          <X className="h-4 w-4" />
-                        </Button>
+                          <X className="h-4 w-4 text-white" />
+                        </button>
+                        <div className="px-2 py-1 text-[11px] truncate">{u.name}</div>
                       </div>
                     ))}
-                    <Button variant="secondary" size="sm" onClick={() => addOption(qi)}>
-                      + Add option
-                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  {referenceUploads.length > 6 && (
+                    <div className="text-xs text-muted-foreground">
+                      + {referenceUploads.length - 6} more…
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Instructions */}
-        <div>
-          <label className="text-sm font-medium">General instructions (optional)</label>
-          <Textarea
-            placeholder="Short guidance for the assignment…"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
+          <div className="text-xs text-muted-foreground">
+            Note: “Annotation image” (ở trên) là ảnh chính để student vẽ. “Reference images” chỉ là
+            ảnh phụ gắn vào câu hỏi.
+          </div>
         </div>
-
-        {/* Publish */}
-        <div className="flex justify-end">
-          <Button
-            onClick={() =>
-              onPublish({
-                caseId,
-                dueAtISO: toISO(due),
-                audience,
-                groupName: audience === "group" ? groupName || undefined : undefined,
-                studentIds:
-                  audience === "list"
-                    ? studentIds.split(",").map((s) => s.trim()).filter(Boolean)
-                    : undefined,
-                instructions: instructions || undefined,
-                autoChecklist,
-                uploads,
-                questions,
-              })
-            }
-            disabled={!canPublish}
-          >
-            Publish homework
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
