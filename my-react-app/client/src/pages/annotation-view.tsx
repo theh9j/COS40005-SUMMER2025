@@ -111,8 +111,8 @@ export default function AnnotationView() {
 
   const handleAcceptRequirements = () => {
     setShowRequirements(false);
-    // Show closed case notification if case is closed
-    if (hw?.closed) {
+    // Show closed case notification if case is closed (students only)
+    if (hw?.closed && user?.role === 'student') {
       setShowClosedCaseNotification(true);
     }
   };
@@ -201,8 +201,8 @@ export default function AnnotationView() {
     return <div>Loading...</div>;
   }
 
-  // Show assignment requirements first
-  if (showRequirements) {
+  // Show assignment requirements first (students only)
+  if (showRequirements && user?.role === 'student') {
     return (
       <AssignmentRequirements
         case={case_}
@@ -772,8 +772,8 @@ export default function AnnotationView() {
             </aside>
           )}
 
-          {/* Closed Case Notification Modal */}
-          {showClosedCaseNotification && hw?.closed && (
+          {/* Closed Case Notification Modal (students only) */}
+          {user?.role === 'student' && showClosedCaseNotification && hw?.closed && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
               <div className="bg-card border border-border rounded-lg shadow-lg max-w-md w-full p-6 space-y-4">
                 <div className="flex items-start gap-3">
