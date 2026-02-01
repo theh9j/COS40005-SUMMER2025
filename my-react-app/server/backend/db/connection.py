@@ -18,3 +18,5 @@ homework_uploads_collection = db["homework_uploads"]
 homework_questions_collection = db["homework_questions"]
 submissions_collection = db["submissions"]
 classrooms_collection = db["classrooms"]
+cases_collection = db["cases"]
+
