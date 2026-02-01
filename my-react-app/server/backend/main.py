@@ -7,7 +7,7 @@ from datetime import datetime
 from core.security import hash_password
 from fastapi.staticfiles import StaticFiles
 from routes import auth, admin, online, annotations, user, ws_routes, forum
-from routes import homeworks, submissions, ai, classroom
+from routes import homeworks, submissions, ai, classroom, cases
 
 app = FastAPI()
 
@@ -30,6 +30,8 @@ app.include_router(homeworks.router)
 app.include_router(submissions.router)
 app.include_router(ai.router)
 app.include_router(classroom.router)
+app.include_router(cases.router)
+
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
