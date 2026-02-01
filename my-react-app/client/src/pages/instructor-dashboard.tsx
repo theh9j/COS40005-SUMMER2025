@@ -106,6 +106,24 @@ function GroupCompareCard({
 }
 
 export default function InstructorDashboard() {
+
+  const [onlineCount, setOnlineCount] = useState<number>(0);
+
+  useEffect(() => {
+    async function fetchOnlineUsers() {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/admin/users");
+        if (!res.ok) throw new Error("Failed to load users");
+        const data = await res.json();
+        const online = data.filter((u: any) => u.online).length;
+        setOnlineCount(online);
+      } catch {
+        setOnlineCount(0);
+      }
+    }
+
+    fetchOnlineUsers();
+  }, []);
   // ==== Auth / routing ====
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
@@ -413,8 +431,10 @@ export default function InstructorDashboard() {
 
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
-              <span className="text-sm text-muted-foreground">15 students online</span>
+              <div className={`w-2 h-2 rounded-full ${onlineCount > 0 ? "bg-green-500" : "bg-gray-400"} animate-pulse`}></div>
+              <span className="text-sm text-muted-foreground">
+                {onlineCount} {onlineCount === 1 ? t("userOnline") : t("usersOnline")}
+              </span>
             </div>
 
             <div className="flex items-center space-x-2 relative">
