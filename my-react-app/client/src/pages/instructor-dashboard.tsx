@@ -727,7 +727,7 @@ export default function InstructorDashboard() {
                 </CardContent>
               </Card>
             </div>
-a          )}
+          )}
 
           {/* GRADING */}
           {activeView === "grading" && (
