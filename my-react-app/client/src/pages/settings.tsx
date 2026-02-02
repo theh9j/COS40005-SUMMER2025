@@ -26,6 +26,7 @@ export default function SettingsPage() {
 
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
+  const [dob, setDob] = useState(user?.dob || "");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -34,6 +35,7 @@ export default function SettingsPage() {
     if (user) {
       setFirstName(user.firstName || "");
       setLastName(user.lastName || "");
+      setDob(user.dob || "");
       setAvatarPreview(user.avatar || null);
     }
   }, [user]);
@@ -61,6 +63,7 @@ export default function SettingsPage() {
         const formData = new FormData();
         formData.append("firstName", firstName);
         formData.append("lastName", lastName);
+        formData.append("dob", dob);
         formData.append("avatar", avatarFile);
 
         const res = await fetch(
@@ -76,7 +79,7 @@ export default function SettingsPage() {
         const { token: newToken } = await res.json();
         localStorage.setItem("session_token", newToken);
       } else {
-        await updateUser({ firstName, lastName });
+        await updateUser({ firstName, lastName, dob });
       }
 
       toast({
@@ -153,6 +156,11 @@ export default function SettingsPage() {
               <div>
                 <Label>{t("lastName")}</Label>
                 <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              </div>
+
+              <div>
+                <Label>Date of Birth</Label>
+                <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
               </div>
 
               <div>

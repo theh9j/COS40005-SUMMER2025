@@ -14,8 +14,6 @@ import {
   GraduationCap,
   ClipboardCheck,
   FolderOpen,
-  Clock,
-  ChartLine,
   Upload as UploadIcon,
   AlertTriangle,
   TrendingDown,
@@ -61,13 +59,11 @@ type Submission = {
 
   status: SubmissionStatus;
 
-  // grading result
   score?: number;
-  feedback?: string; // "return answer to student" (instructor feedback / model answer)
-  rubric?: any[]; // optional
-  modelAnswers?: any[]; // optional nếu bạn cần trả đáp án dạng structured
+  feedback?: string;
+  rubric?: any[];
+  modelAnswers?: any[];
 
-  // publish control (IMPORTANT)
   published?: boolean;
   publishedAt?: string;
 
@@ -76,12 +72,29 @@ type Submission = {
 
 type Mode = "one" | "group";
 
+// ===== Case Management types =====
+type CaseFromApi = {
+  case_id: string;
+  title: string;
+  description?: string | null;
+  image_url?: string | null;
+  created_at?: string;
+};
+
+type CaseCard = {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  source: "db" | "mock";
+  createdAt?: string;
+};
+
+type CaseFilter = "all" | "db" | "mock";
+type CaseSort = "newest" | "oldest" | "az" | "za";
+
 // ===== Helpers: hook-safe components =====
-function GroupCompareCard({
-  submission,
-}: {
-  submission: Submission;
-}) {
+function GroupCompareCard({ submission }: { submission: Submission }) {
   const caseObj = mockCases.find((c) => c.id === submission.caseId);
   const ann = useAnnotation(submission.caseId, submission.studentId);
 
@@ -95,24 +108,24 @@ function GroupCompareCard({
             {submission.published ? " • Published" : ""}
           </div>
         </div>
-          <AnnotationCanvas
-            imageUrl={caseObj?.imageUrl ?? ""}
-            annotation={ann}
-            peerAnnotations={ann.peerAnnotations}
-          />
+
+        <AnnotationCanvas
+          imageUrl={caseObj?.imageUrl ?? ""}
+          annotation={ann}
+          peerAnnotations={ann.peerAnnotations}
+        />
       </CardContent>
     </Card>
   );
 }
 
 export default function InstructorDashboard() {
-
   const [onlineCount, setOnlineCount] = useState<number>(0);
 
   useEffect(() => {
     async function fetchOnlineUsers() {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/admin/users");
+        const res = await fetch(`${API_BASE}/api/admin/users`);
         if (!res.ok) throw new Error("Failed to load users");
         const data = await res.json();
         const online = data.filter((u: any) => u.online).length;
@@ -124,6 +137,7 @@ export default function InstructorDashboard() {
 
     fetchOnlineUsers();
   }, []);
+
   // ==== Auth / routing ====
   const [, setLocation] = useLocation();
   const { user, logout, isLoading } = useAuth();
@@ -139,6 +153,7 @@ export default function InstructorDashboard() {
   const [selectedClassroom, setSelectedClassroom] = useState("");
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [availableStudents, setAvailableStudents] = useState<any[]>([]);
+
   useEffect(() => {
     // fetch classrooms and students from backend
     async function load() {
@@ -152,7 +167,13 @@ export default function InstructorDashboard() {
         const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
         if (resS.ok) {
           const d = await resS.json();
-          setAvailableStudents(d.students.map((s: any) => ({ id: s.id, firstName: s.firstName, lastName: s.lastName })));
+          setAvailableStudents(
+            d.students.map((s: any) => ({
+              id: s.id,
+              firstName: s.firstName,
+              lastName: s.lastName,
+            }))
+          );
         }
       } catch (e) {
         console.error("Failed to load classrooms/students", e);
@@ -161,14 +182,126 @@ export default function InstructorDashboard() {
 
     load();
   }, []);
+
   const [activeView, setActiveView] = useState<InstructorView>(() => {
     const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
     return VALID_TABS.includes(saved) ? saved : "overview";
   });
+
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  // ==== Case Management state (DB cases + merge mock) ====
+  const [casesFromApi, setCasesFromApi] = useState<CaseFromApi[]>([]);
+  const [loadingCases, setLoadingCases] = useState(false);
+
+  const [caseSearch, setCaseSearch] = useState("");
+  const [caseFilter, setCaseFilter] = useState<CaseFilter>("all");
+  const [caseSort, setCaseSort] = useState<CaseSort>("newest");
+
+  const loadCases = async () => {
+    setLoadingCases(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/instructor/cases`);
+      if (!res.ok) {
+        console.error("Failed to load cases", await res.text());
+        setCasesFromApi([]);
+        return;
+      }
+      const data = await res.json();
+      setCasesFromApi(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Error loading cases", e);
+      setCasesFromApi([]);
+    } finally {
+      setLoadingCases(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeView === "cases") loadCases();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
+
+  const mergedCases: CaseCard[] = useMemo(() => {
+    const dbCases: CaseCard[] = casesFromApi.map((c) => ({
+      id: c.case_id,
+      title: c.title,
+      description: (c.description as string) ?? "No description",
+      imageUrl: c.image_url ?? "",
+      source: "db",
+      createdAt: c.created_at,
+    }));
+
+    const demoCases: CaseCard[] = mockCases.map((c) => ({
+      id: c.id,
+      title: c.title,
+      description: c.description ?? "No description",
+      imageUrl: c.imageUrl,
+      source: "mock",
+      createdAt: undefined,
+    }));
+
+    return [...dbCases, ...demoCases];
+  }, [casesFromApi]);
+
+  const visibleCases = useMemo(() => {
+    const q = caseSearch.trim().toLowerCase();
+
+    let list = mergedCases;
+
+    if (caseFilter !== "all") {
+      list = list.filter((c) => c.source === caseFilter);
+    }
+
+    if (q) {
+      list = list.filter((c) => {
+        const hay = `${c.title} ${c.description}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    const parseTime = (s?: string) => {
+      if (!s) return 0;
+      const t = Date.parse(s);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    list = [...list].sort((a, b) => {
+      if (caseSort === "az") return a.title.localeCompare(b.title);
+      if (caseSort === "za") return b.title.localeCompare(a.title);
+
+      const ta = parseTime(a.createdAt);
+      const tb = parseTime(b.createdAt);
+      if (caseSort === "oldest") return ta - tb;
+      return tb - ta; // newest
+    });
+
+    return list;
+  }, [mergedCases, caseSearch, caseFilter, caseSort]);
+
+  const deleteDbCase = async (caseId: string, title: string) => {
+    const yes = window.confirm(`Delete case "${title}"?\nThis cannot be undone.`);
+    if (!yes) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/instructor/cases/${caseId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        console.error("Delete case failed", await res.text());
+        alert("Delete failed. Check backend DELETE /api/instructor/cases/{case_id}");
+        return;
+      }
+
+      await loadCases();
+    } catch (e) {
+      console.error(e);
+      alert("Delete error");
+    }
+  };
+
   // ==== Grading state ====
-  // default mock để UI không trống nếu BE chưa chạy
   const [submissions, setSubmissions] = useState<Submission[]>([
     {
       id: "sub-1",
@@ -210,12 +343,10 @@ export default function InstructorDashboard() {
   const [query, setQuery] = useState("");
   const [activeIds, setActiveIds] = useState<string[]>([]);
 
-  // instructor text boxes (return answer)
   const [draftFeedback, setDraftFeedback] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // ==== Derived lists ====
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return submissions.filter(
@@ -238,7 +369,6 @@ export default function InstructorDashboard() {
       mode === "one" ? [id] : prev.includes(id) ? prev : [...prev, id].slice(-4)
     );
 
-  // avgScore for Homework Builder
   const avgScore =
     submissions.length === 0
       ? 0
@@ -246,18 +376,15 @@ export default function InstructorDashboard() {
           (submissions.reduce((a, b) => a + (b.score ?? 0), 0) / submissions.length) * 10
         ) / 10;
 
-  // ===== FIX hooks: call useAnnotation unconditionally (1–1 mode) =====
   const selectedCaseId = selected?.caseId ?? "case-1";
   const selectedStudentId = selected?.studentId ?? "unknown";
   const selectedCase = mockCases.find((c) => c.id === selectedCaseId);
   const selectedAnn = useAnnotation(selectedCaseId, selectedStudentId);
 
-  // when switching selected submission, sync draftFeedback
   useEffect(() => {
     setDraftFeedback(selected?.feedback ?? "");
   }, [selected?.id]);
 
-  // ==== EFFECTS ====
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
@@ -275,14 +402,12 @@ export default function InstructorDashboard() {
     };
   }, []);
 
-  // guard route
   useEffect(() => {
     if (!isLoading && (!user || user.role !== "instructor")) {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
 
-  // load submissions from backend
   useEffect(() => {
     const load = async () => {
       try {
@@ -318,23 +443,19 @@ export default function InstructorDashboard() {
 
   // ==== API actions ====
 
-  // 1) Save draft grade + feedback (NOT published)
   const saveDraft = async (subId: string, score: number) => {
     setIsSaving(true);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/grade`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            score,
-            rubric: [], // TODO: map rubric rows nếu bạn muốn
-            feedback: draftFeedback ?? "",
-            published: false,
-          }),
-        }
-      );
+      const res = await fetch(`${API_BASE}/api/submissions/${encodeURIComponent(subId)}/grade`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          score,
+          rubric: [],
+          feedback: draftFeedback ?? "",
+          published: false,
+        }),
+      });
 
       if (!res.ok) {
         console.error("Failed to save grade", await res.text());
@@ -365,14 +486,12 @@ export default function InstructorDashboard() {
     }
   };
 
-  // 2) Publish marks & answers (students can view AFTER this)
   const publish = async (subId: string) => {
     setIsPublishing(true);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/publish`,
-        { method: "POST" }
-      );
+      const res = await fetch(`${API_BASE}/api/submissions/${encodeURIComponent(subId)}/publish`, {
+        method: "POST",
+      });
 
       if (!res.ok) {
         console.error("Failed to publish", await res.text());
@@ -380,7 +499,7 @@ export default function InstructorDashboard() {
         return;
       }
 
-      const data = await res.json(); // expect { published:true, published_at:"..." }
+      const data = await res.json();
       setSubmissions((prev) =>
         prev.map((s) =>
           s.id === subId
@@ -400,22 +519,15 @@ export default function InstructorDashboard() {
     }
   };
 
-  // 3) Return answer to student (optional endpoint)
-  // Nếu BE chưa có endpoint riêng, bạn có thể bỏ nút này,
-  // hoặc dùng luôn saveDraft + publish để coi như "return".
   const returnToStudent = async (subId: string) => {
     try {
-      const res = await fetch(
-        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/return`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ feedback: draftFeedback ?? "" }),
-        }
-      );
+      const res = await fetch(`${API_BASE}/api/submissions/${encodeURIComponent(subId)}/return`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: draftFeedback ?? "" }),
+      });
 
       if (!res.ok) {
-        // fallback: nếu BE chưa có /return → vẫn không crash
         console.warn("Return endpoint not available. Falling back to draft save.");
         alert("Return API not found. Ask BE to add /return or use Publish instead.");
         return;
@@ -460,7 +572,11 @@ export default function InstructorDashboard() {
 
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${onlineCount > 0 ? "bg-green-500" : "bg-gray-400"} animate-pulse`}></div>
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  onlineCount > 0 ? "bg-green-500" : "bg-gray-400"
+                } animate-pulse`}
+              />
               <span className="text-sm text-muted-foreground">
                 {onlineCount} {onlineCount === 1 ? t("userOnline") : t("usersOnline")}
               </span>
@@ -541,7 +657,9 @@ export default function InstructorDashboard() {
             <div className="p-6" data-testid="view-overview">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold mb-2">Welcome, Dr. {user.lastName}!</h2>
-                <p className="text-muted-foreground">Monitor student progress and provide feedback</p>
+                <p className="text-muted-foreground">
+                  Monitor student progress and provide feedback
+                </p>
               </div>
 
               <Card className="mb-8">
@@ -593,7 +711,10 @@ export default function InstructorDashboard() {
                                   <Mail className="h-3 w-3 mr-1" />
                                   Contact
                                 </Button>
-                                <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700">
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                                >
                                   View Details
                                 </Button>
                               </div>
@@ -611,20 +732,24 @@ export default function InstructorDashboard() {
           {/* GRADING */}
           {activeView === "grading" && (
             <div className="p-6" data-testid="view-grading">
-              {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold">Grading</h2>
                 <div className="flex gap-2">
-                  <Button variant={mode === "one" ? "default" : "secondary"} onClick={() => setMode("one")}>
+                  <Button
+                    variant={mode === "one" ? "default" : "secondary"}
+                    onClick={() => setMode("one")}
+                  >
                     1–1
                   </Button>
-                  <Button variant={mode === "group" ? "default" : "secondary"} onClick={() => setMode("group")}>
+                  <Button
+                    variant={mode === "group" ? "default" : "secondary"}
+                    onClick={() => setMode("group")}
+                  >
                     Group
                   </Button>
                 </div>
               </div>
 
-              {/* Submissions list */}
               <Card className="mb-4">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -658,7 +783,6 @@ export default function InstructorDashboard() {
                 </CardContent>
               </Card>
 
-              {/* ONE-ON-ONE */}
               {mode === "one" && selected && (
                 <div className="grid md:grid-cols-3 gap-4">
                   <Card className="md:col-span-2">
@@ -667,21 +791,17 @@ export default function InstructorDashboard() {
                         {selected.studentId} • {selected.caseTitle}
                       </div>
 
-                        <AnnotationCanvas
-                          imageUrl={selectedCase?.imageUrl ?? ""}
-                          annotation={selectedAnn}
-                          peerAnnotations={selectedAnn.peerAnnotations}
-                        />
+                      <AnnotationCanvas
+                        imageUrl={selectedCase?.imageUrl ?? ""}
+                        annotation={selectedAnn}
+                        peerAnnotations={selectedAnn.peerAnnotations}
+                      />
                     </CardContent>
                   </Card>
 
                   <div className="space-y-3">
-                    {/* Rubric Panel (score input) */}
-                    <RubricPanel
-                      onSubmit={(score: number) => saveDraft(selected.id, score)}
-                    />
+                    <RubricPanel onSubmit={(score: number) => saveDraft(selected.id, score)} />
 
-                    {/* Return answer to student (feedback/model answer) */}
                     <Card>
                       <CardContent className="p-4 space-y-2">
                         <div className="flex items-center justify-between">
@@ -702,7 +822,6 @@ export default function InstructorDashboard() {
                           <Button
                             variant="secondary"
                             onClick={() => {
-                              // Save draft without changing score: keep existing score or 0
                               const scoreToSave = selected.score ?? 0;
                               saveDraft(selected.id, scoreToSave);
                             }}
@@ -713,13 +832,18 @@ export default function InstructorDashboard() {
 
                           <Button
                             onClick={() => publish(selected.id)}
-                            disabled={isPublishing || selected.status !== "graded" || selected.published}
+                            disabled={
+                              isPublishing || selected.status !== "graded" || selected.published
+                            }
                           >
-                            {selected.published ? "Published" : isPublishing ? "Publishing..." : "Publish marks & answers"}
+                            {selected.published
+                              ? "Published"
+                              : isPublishing
+                              ? "Publishing..."
+                              : "Publish marks & answers"}
                           </Button>
                         </div>
 
-                        {/* optional: notify student (needs BE endpoint) */}
                         <Button
                           variant="outline"
                           className="w-full"
@@ -737,7 +861,6 @@ export default function InstructorDashboard() {
                 </div>
               )}
 
-              {/* GROUP COMPARE */}
               {mode === "group" && (
                 <div className="grid md:grid-cols-2 gap-4">
                   {activeGroup.length === 0 ? (
@@ -763,14 +886,81 @@ export default function InstructorDashboard() {
               </div>
 
               <HomeworkPrepPanel
-                cases={mockCases.map((c) => ({ id: c.id, title: c.title }))}
                 stats={{
                   avgScore,
-                  commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
-                  skillGaps: ["Anatomical localization", "Contrast handling", "Annotation labeling"],
+                  commonMistakes: [
+                    "Overlapping regions",
+                    "Incorrect boundary",
+                    "Missed edema area",
+                  ],
+                  skillGaps: [
+                    "Anatomical localization",
+                    "Contrast handling",
+                    "Annotation labeling",
+                  ],
                 }}
-                onPublish={async (payload) => {
+                onPublish={async (payload: any) => {
+                  // ✅ handler "mềm": không phá code cũ, nhưng support payload mới nếu có
                   try {
+                    // Case A: payload có newCase (bản bạn làm mới)
+                    if (payload?.newCase?.title && payload?.newCase?.imageFile) {
+                      const fd = new FormData();
+                      fd.append("title", payload.newCase.title);
+                      if (payload.newCase.description)
+                        fd.append("description", payload.newCase.description);
+                      fd.append("image", payload.newCase.imageFile);
+
+                      const createRes = await fetch(`${API_BASE}/api/instructor/cases`, {
+                        method: "POST",
+                        body: fd,
+                      });
+
+                      if (!createRes.ok) {
+                        console.error("Create case failed", await createRes.text());
+                        alert("Cannot create case. Check backend /api/instructor/cases");
+                        return;
+                      }
+
+                      const caseData = await createRes.json();
+                      const createdCaseId = caseData.case_id ?? caseData.id;
+
+                      const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          case_id: createdCaseId,
+                          due_at: payload.dueAtISO,
+                          audience: payload.audience,
+                          group_name: payload.groupName ?? null,
+                          student_ids: payload.studentIds ?? null,
+                          instructions: payload.instructions ?? null,
+                          checklist: payload.autoChecklist,
+                          uploads: payload.referenceUploads ?? payload.uploads ?? [],
+                          questions: payload.questions ?? [],
+
+                          // optional meta fields (nếu panel có)
+                          requirement_id: payload.requirementId,
+                          class_name: payload.className,
+                          year: payload.year,
+                        }),
+                      });
+
+                      if (!res.ok) {
+                        console.error("Failed to publish homework", await res.text());
+                        alert("Failed to publish homework");
+                        return;
+                      }
+
+                      const data = await res.json();
+                      alert(`Homework published with id ${data.homework_id}`);
+
+                      // auto switch + refresh case list
+                      setActiveView("cases");
+                      await loadCases();
+                      return;
+                    }
+
+                    // Case B: payload kiểu cũ (chỉ có caseId)
                     const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -782,8 +972,8 @@ export default function InstructorDashboard() {
                         student_ids: payload.studentIds ?? null,
                         instructions: payload.instructions ?? null,
                         checklist: payload.autoChecklist,
-                        uploads: payload.uploads,
-                        questions: payload.questions,
+                        uploads: payload.uploads ?? [],
+                        questions: payload.questions ?? [],
                       }),
                     });
 
@@ -804,7 +994,7 @@ export default function InstructorDashboard() {
             </div>
           )}
 
-          {/* CASE MANAGEMENT VIEW */}
+          {/* CASE MANAGEMENT VIEW (DB + MOCK + search/filter/sort + delete DB) */}
           {activeView === "cases" && (
             <div className="p-6 space-y-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
@@ -822,6 +1012,11 @@ export default function InstructorDashboard() {
                   >
                     Add People to Class
                   </Button>
+
+                  <Button variant="outline" onClick={loadCases}>
+                    Refresh
+                  </Button>
+
                   <Button
                     onClick={() => setShowUploadModal(true)}
                     className="bg-primary text-primary-foreground hover:opacity-90"
@@ -832,26 +1027,108 @@ export default function InstructorDashboard() {
                 </div>
               </div>
 
+              {/* Controls */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Input
+                      placeholder="Search cases by title/description..."
+                      value={caseSearch}
+                      onChange={(e) => setCaseSearch(e.target.value)}
+                    />
+
+                    <select
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      value={caseFilter}
+                      onChange={(e) => setCaseFilter(e.target.value as CaseFilter)}
+                    >
+                      <option value="all">All</option>
+                      <option value="db">NEW (DB)</option>
+                      <option value="mock">DEMO (Mock)</option>
+                    </select>
+
+                    <select
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      value={caseSort}
+                      onChange={(e) => setCaseSort(e.target.value as CaseSort)}
+                    >
+                      <option value="newest">Sort: Newest</option>
+                      <option value="oldest">Sort: Oldest</option>
+                      <option value="az">Sort: A → Z</option>
+                      <option value="za">Sort: Z → A</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <div>
+                      Showing <span className="font-medium">{visibleCases.length}</span> cases
+                      {caseFilter !== "all" ? ` • Filter: ${caseFilter}` : ""}
+                      {caseSearch.trim() ? ` • Search: "${caseSearch.trim()}"` : ""}
+                    </div>
+                    <button
+                      className="hover:underline"
+                      onClick={() => {
+                        setCaseSearch("");
+                        setCaseFilter("all");
+                        setCaseSort("newest");
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mockCases.map((case_) => (
-                  <Card
-                    key={case_.id}
-                    className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                    onClick={() => setLocation(`/annotation/${case_.id}`)}
-                  >
-                    <img src={case_.imageUrl} alt={case_.title} className="w-full h-48 object-cover" />
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold mb-2">{case_.title}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">{case_.description}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          {case_.category}
-                        </span>
-                        <span className="text-xs text-muted-foreground">12 annotations</span>
+                {loadingCases ? (
+                  <div className="text-sm text-muted-foreground">Loading cases…</div>
+                ) : visibleCases.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    No matches. Try another keyword or reset filters.
+                  </div>
+                ) : (
+                  visibleCases.map((c) => (
+                    <Card
+                      key={`${c.source}-${c.id}`}
+                      className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => setLocation(`/annotation/${c.id}`)}
+                    >
+                      <div className="relative">
+                        <img
+                          src={c.imageUrl}
+                          alt={c.title}
+                          className="w-full h-48 object-cover bg-muted"
+                        />
+
+                        {/* ✅ Delete only for DB cases */}
+                        {c.source === "db" && (
+                          <button
+                            className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border bg-background/90 hover:bg-background"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteDbCase(c.id, c.title);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
+
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-semibold mb-1 truncate">{c.title}</h3>
+                          <span className="text-[10px] px-2 py-1 rounded-full border border-border text-muted-foreground shrink-0">
+                            {c.source === "db" ? "NEW" : "DEMO"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {c.description}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
 
               <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
@@ -893,9 +1170,10 @@ export default function InstructorDashboard() {
                                 const err = await res.json();
                                 throw new Error(err.detail || "Failed to create class");
                               }
-                              const d = await res.json();
-                              // refresh classroom list
-                              setClassrooms((prev) => Array.from(new Set([...prev, newClassName.trim()])));
+
+                              setClassrooms((prev) =>
+                                Array.from(new Set([...prev, newClassName.trim()]))
+                              );
                               alert(`Class "${newClassName}" created successfully!`);
                               setShowCreateClassModal(false);
                               setNewClassName("");
@@ -935,7 +1213,9 @@ export default function InstructorDashboard() {
                         </select>
                       </div>
                       <div>
-                        <label className="text-sm font-medium mb-2 block">Select Students</label>
+                        <label className="text-sm font-medium mb-2 block">
+                          Select Students
+                        </label>
                         <div className="border rounded p-3 space-y-2 max-h-40 overflow-y-auto">
                           {availableStudents.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
@@ -981,30 +1261,40 @@ export default function InstructorDashboard() {
                           onClick={async () => {
                             if (!selectedClassroom || selectedStudents.length === 0) return;
                             try {
-                              // add each selected student
                               await Promise.all(
                                 selectedStudents.map((sid) =>
                                   fetch(`${API_BASE}/api/classroom/add-student`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ student_id: sid, classroom_name: selectedClassroom }),
+                                    body: JSON.stringify({
+                                      student_id: sid,
+                                      classroom_name: selectedClassroom,
+                                    }),
                                   })
                                 )
                               );
 
-                              // refresh students and classrooms
                               const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
                               if (resS.ok) {
                                 const d = await resS.json();
-                                setAvailableStudents(d.students.map((s: any) => ({ id: s.id, firstName: s.firstName, lastName: s.lastName })));
+                                setAvailableStudents(
+                                  d.students.map((s: any) => ({
+                                    id: s.id,
+                                    firstName: s.firstName,
+                                    lastName: s.lastName,
+                                  }))
+                                );
                               }
+
                               const resC = await fetch(`${API_BASE}/api/classroom/all`);
                               if (resC.ok) {
                                 const data = await resC.json();
                                 setClassrooms(data.classrooms.map((c: any) => c.name));
                               }
 
-                              alert(`Added ${selectedStudents.length} student(s) to ${selectedClassroom}`);
+                              alert(
+                                `Added ${selectedStudents.length} student(s) to ${selectedClassroom}`
+                              );
                               setShowAddStudentModal(false);
                               setSelectedClassroom("");
                               setSelectedStudents([]);
@@ -1046,5 +1336,3 @@ export default function InstructorDashboard() {
     </div>
   );
 }
-
-
