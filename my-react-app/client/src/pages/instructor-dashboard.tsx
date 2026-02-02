@@ -886,7 +886,6 @@ export default function InstructorDashboard() {
               </div>
 
               <HomeworkPrepPanel
-                cases={mockCases.map((c) => ({ id: c.id, title: c.title }))}
                 stats={{
                   avgScore,
                   commonMistakes: [
