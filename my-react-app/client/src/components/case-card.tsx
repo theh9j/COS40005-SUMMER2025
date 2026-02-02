@@ -1,12 +1,25 @@
+import * as React from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 import { MedicalCase } from "@shared/schema";
 
 interface CaseCardProps {
   case: MedicalCase;
   onClick: () => void;
+  homework?: { dueAt: string; closed: boolean };
+  daysLeft?: number;
 }
 
-export default function CaseCard({ case: medicalCase, onClick }: CaseCardProps) {
+export default function CaseCard({ case: medicalCase, onClick, homework, daysLeft: daysLeftProp }: CaseCardProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [isCreating, setIsCreating] = React.useState(false);
+  const [location, setLocation] = useLocation();
+
   const getCategoryColor = (category: string) => {
     switch (category.toLowerCase()) {
       case "neurology":
@@ -35,12 +48,15 @@ export default function CaseCard({ case: medicalCase, onClick }: CaseCardProps) 
         <h3 className="font-semibold mb-2">{medicalCase.title}</h3>
         <p className="text-sm text-muted-foreground mb-2">{medicalCase.description}</p>
         <div className="flex items-center justify-between">
-          <span className={`text-xs px-2 py-1 rounded ${getCategoryColor(medicalCase.category)}`}>
-            {medicalCase.category}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            12 annotations
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-1 rounded ${getCategoryColor(medicalCase.category)}`}>
+              {medicalCase.category}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              12 annotations
+            </span>
+          </div>
+
         </div>
       </CardContent>
     </Card>

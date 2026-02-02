@@ -17,6 +17,16 @@ class QuestionShort(BaseModel):
     expectedAnswer: Optional[str] = None
     imageIndex: Optional[int] = None
 
+class QuestionEssay(BaseModel):
+    # ✅ NEW: accept essay from frontend
+    type: Literal["essay"]
+    prompt: str
+    points: int
+    guidance: Optional[str] = None
+    # keep optional for compatibility (even if you don’t use it)
+    expectedAnswer: Optional[str] = None
+    imageIndex: Optional[int] = None
+
 class QuestionMCQ(BaseModel):
     type: Literal["mcq"]
     prompt: str
@@ -26,7 +36,8 @@ class QuestionMCQ(BaseModel):
     correctIndex: Optional[int] = None
     imageIndex: Optional[int] = None
 
-Question = Union[QuestionShort, QuestionMCQ]
+# ✅ now includes essay
+Question = Union[QuestionShort, QuestionEssay, QuestionMCQ]
 
 # ---- Create / Out ----
 class HomeworkCreate(BaseModel):
@@ -40,6 +51,11 @@ class HomeworkCreate(BaseModel):
     uploads: List[HWUpload] = Field(default_factory=list)
     questions: List[Question] = Field(default_factory=list)
 
+    # ✅ Optional extra metadata from frontend (won’t break old clients)
+    requirement_id: Optional[str] = None
+    class_name: Optional[str] = None
+    year: Optional[str] = None
+
 class HomeworkOut(BaseModel):
     homework_id: str
     case_id: str
@@ -49,3 +65,4 @@ class HomeworkOut(BaseModel):
     instructions: Optional[str] = None
     uploads: List[HWUpload] = Field(default_factory=list)
     questions: List[Question] = Field(default_factory=list)
+

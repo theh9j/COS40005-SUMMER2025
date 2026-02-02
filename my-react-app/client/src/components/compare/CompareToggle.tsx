@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { Version } from "@/types/collab";
-import { Eye, ChevronDown } from "lucide-react";
+import { Eye, ChevronDown, Layers } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function CompareToggle({
   peers, onChange,
@@ -8,6 +9,7 @@ export default function CompareToggle({
   const [showPeerAnnotations, setShowPeerAnnotations] = useState<boolean>(false);
   const [selectedPeerId, setSelectedPeerId] = useState<string>("");
   const [opacityPercent, setOpacityPercent] = useState<number>(50);
+  const [comparisonMode, setComparisonMode] = useState<"overlay" | "side-by-side">("overlay");
 
   const selectedPeer = peers.find(p => p.id === selectedPeerId);
 
@@ -39,6 +41,28 @@ export default function CompareToggle({
     <div className="border rounded-lg p-3 bg-card space-y-4">
       <h4 className="font-semibold text-sm">Peer Comparison</h4>
       
+      {/* Comparison Mode Selection */}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant={comparisonMode === "overlay" ? "default" : "outline"}
+          className="flex-1 text-xs h-8"
+          onClick={() => setComparisonMode("overlay")}
+        >
+          <Layers className="h-3 w-3 mr-1" />
+          Overlay
+        </Button>
+        <Button
+          size="sm"
+          variant={comparisonMode === "side-by-side" ? "default" : "outline"}
+          className="flex-1 text-xs h-8"
+          onClick={() => setComparisonMode("side-by-side")}
+        >
+          <Layers className="h-3 w-3 mr-1" />
+          Side-by-Side
+        </Button>
+      </div>
+
       {/* Toggle switch */}
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
@@ -52,6 +76,7 @@ export default function CompareToggle({
               ? "bg-black dark:bg-white"
               : "bg-gray-300 dark:bg-gray-600"
           }`}
+          title={showPeerAnnotations ? "Hide peer annotations" : "Show peer annotations"}
         >
           <span
             className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-black transition-transform ${
@@ -70,6 +95,7 @@ export default function CompareToggle({
               value={selectedPeerId}
               onChange={(e) => handlePeerSelect(e.target.value)}
               className="w-full appearance-none px-3 py-2 pr-8 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-900 dark:border-gray-700"
+              title="Select a peer to compare with"
             >
               <option value="">— Select a peer —</option>
               {peers.map((p) => (
@@ -84,7 +110,7 @@ export default function CompareToggle({
       )}
 
       {/* Opacity slider - shown when toggle is enabled */}
-      {showPeerAnnotations && (
+      {showPeerAnnotations && comparisonMode === "overlay" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium">Peer Opacity: {opacityPercent}%</label>
@@ -97,6 +123,7 @@ export default function CompareToggle({
             value={opacityPercent}
             onChange={(e) => handleOpacityChange(Number(e.target.value))}
             className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-black dark:accent-white"
+            title="Adjust peer annotation opacity"
           />
         </div>
       )}

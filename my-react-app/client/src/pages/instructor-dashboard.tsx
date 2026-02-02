@@ -4,19 +4,16 @@ import ProfileMenu from "@/components/profile-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { mockAtRiskStudents } from "@/lib/mock-data";
+import { useI18n } from "@/i18n";
+import { mockAtRiskStudents, mockCases } from "@/lib/mock-data";
 import UploadModal from "@/components/upload-modal";
-import { mockCases } from "@/lib/mock-data";
 import {
   Presentation,
   Gauge,
   GraduationCap,
   ClipboardCheck,
   FolderOpen,
-  Clock,
-  ChartLine,
   Upload as UploadIcon,
   AlertTriangle,
   TrendingDown,
@@ -30,27 +27,281 @@ import { useAnnotation } from "@/hooks/use-annotation";
 import RubricPanel from "@/components/grading/RubricPanel";
 import HomeworkPrepPanel from "@/components/grading/HomeworkPrepPanel";
 
-type InstructorView = "overview" | "students" | "grading" | "analytics" | "cases" | "settings";
+type InstructorView =
+  | "overview"
+  | "students"
+  | "grading"
+  | "analytics"
+  | "cases"
+  | "settings";
 
 const VIEW_STORAGE_KEY = "instructor.activeView";
-const VALID_TABS: InstructorView[] = ["overview", "students", "grading", "analytics", "cases", "settings"];
+const VALID_TABS: InstructorView[] = [
+  "overview",
+  "students",
+  "grading",
+  "analytics",
+  "cases",
+  "settings",
+];
 
 // ====== API base (update nếu bạn dùng port khác) ======
 const API_BASE = "http://127.0.0.1:8000";
 
+// ===== Types =====
+type SubmissionStatus = "submitted" | "graded" | "grading";
+
+type Submission = {
+  id: string;
+  caseId: string;
+  caseTitle: string;
+  studentId: string;
+
+  status: SubmissionStatus;
+
+  score?: number;
+  feedback?: string;
+  rubric?: any[];
+  modelAnswers?: any[];
+
+  published?: boolean;
+  publishedAt?: string;
+
+  updatedAt: string;
+};
+
+type Mode = "one" | "group";
+
+// ===== Case Management types =====
+type CaseFromApi = {
+  case_id: string;
+  title: string;
+  description?: string | null;
+  image_url?: string | null;
+  created_at?: string;
+};
+
+type CaseCard = {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  source: "db" | "mock";
+  createdAt?: string;
+};
+
+type CaseFilter = "all" | "db" | "mock";
+type CaseSort = "newest" | "oldest" | "az" | "za";
+
+// ===== Helpers: hook-safe components =====
+function GroupCompareCard({ submission }: { submission: Submission }) {
+  const caseObj = mockCases.find((c) => c.id === submission.caseId);
+  const ann = useAnnotation(submission.caseId, submission.studentId);
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">{submission.studentId}</div>
+          <div className="text-xs text-muted-foreground">
+            {submission.score != null ? `Score ${submission.score}` : submission.status}
+            {submission.published ? " • Published" : ""}
+          </div>
+        </div>
+
+        <AnnotationCanvas
+          imageUrl={caseObj?.imageUrl ?? ""}
+          annotation={ann}
+          peerAnnotations={ann.peerAnnotations}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function InstructorDashboard() {
-  // --- Grading submissions (now from backend) ---
-  type Submission = {
-    id: string;
-    caseId: string;
-    caseTitle: string;
-    studentId: string;
-    status: "submitted" | "graded" | "grading";
-    score?: number;
-    updatedAt: string;
+  const [onlineCount, setOnlineCount] = useState<number>(0);
+
+  useEffect(() => {
+    async function fetchOnlineUsers() {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/users`);
+        if (!res.ok) throw new Error("Failed to load users");
+        const data = await res.json();
+        const online = data.filter((u: any) => u.online).length;
+        setOnlineCount(online);
+      } catch {
+        setOnlineCount(0);
+      }
+    }
+
+    fetchOnlineUsers();
+  }, []);
+
+  // ==== Auth / routing ====
+  const [, setLocation] = useLocation();
+  const { user, logout, isLoading } = useAuth();
+  const { t } = useI18n();
+  useHeartbeat(user?.user_id);
+
+  // ==== UI state ====
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const [classrooms, setClassrooms] = useState<string[]>([]);
+  const [selectedClassroom, setSelectedClassroom] = useState("");
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [availableStudents, setAvailableStudents] = useState<any[]>([]);
+
+  useEffect(() => {
+    // fetch classrooms and students from backend
+    async function load() {
+      try {
+        const resC = await fetch(`${API_BASE}/api/classroom/all`);
+        if (resC.ok) {
+          const data = await resC.json();
+          setClassrooms(data.classrooms.map((c: any) => c.name));
+        }
+
+        const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
+        if (resS.ok) {
+          const d = await resS.json();
+          setAvailableStudents(
+            d.students.map((s: any) => ({
+              id: s.id,
+              firstName: s.firstName,
+              lastName: s.lastName,
+            }))
+          );
+        }
+      } catch (e) {
+        console.error("Failed to load classrooms/students", e);
+      }
+    }
+
+    load();
+  }, []);
+
+  const [activeView, setActiveView] = useState<InstructorView>(() => {
+    const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
+    return VALID_TABS.includes(saved) ? saved : "overview";
+  });
+
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // ==== Case Management state (DB cases + merge mock) ====
+  const [casesFromApi, setCasesFromApi] = useState<CaseFromApi[]>([]);
+  const [loadingCases, setLoadingCases] = useState(false);
+
+  const [caseSearch, setCaseSearch] = useState("");
+  const [caseFilter, setCaseFilter] = useState<CaseFilter>("all");
+  const [caseSort, setCaseSort] = useState<CaseSort>("newest");
+
+  const loadCases = async () => {
+    setLoadingCases(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/instructor/cases`);
+      if (!res.ok) {
+        console.error("Failed to load cases", await res.text());
+        setCasesFromApi([]);
+        return;
+      }
+      const data = await res.json();
+      setCasesFromApi(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Error loading cases", e);
+      setCasesFromApi([]);
+    } finally {
+      setLoadingCases(false);
+    }
   };
 
-  // khởi tạo với mock để UI không trống khi BE chưa chạy
+  useEffect(() => {
+    if (activeView === "cases") loadCases();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
+
+  const mergedCases: CaseCard[] = useMemo(() => {
+    const dbCases: CaseCard[] = casesFromApi.map((c) => ({
+      id: c.case_id,
+      title: c.title,
+      description: (c.description as string) ?? "No description",
+      imageUrl: c.image_url ?? "",
+      source: "db",
+      createdAt: c.created_at,
+    }));
+
+    const demoCases: CaseCard[] = mockCases.map((c) => ({
+      id: c.id,
+      title: c.title,
+      description: c.description ?? "No description",
+      imageUrl: c.imageUrl,
+      source: "mock",
+      createdAt: undefined,
+    }));
+
+    return [...dbCases, ...demoCases];
+  }, [casesFromApi]);
+
+  const visibleCases = useMemo(() => {
+    const q = caseSearch.trim().toLowerCase();
+
+    let list = mergedCases;
+
+    if (caseFilter !== "all") {
+      list = list.filter((c) => c.source === caseFilter);
+    }
+
+    if (q) {
+      list = list.filter((c) => {
+        const hay = `${c.title} ${c.description}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    const parseTime = (s?: string) => {
+      if (!s) return 0;
+      const t = Date.parse(s);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    list = [...list].sort((a, b) => {
+      if (caseSort === "az") return a.title.localeCompare(b.title);
+      if (caseSort === "za") return b.title.localeCompare(a.title);
+
+      const ta = parseTime(a.createdAt);
+      const tb = parseTime(b.createdAt);
+      if (caseSort === "oldest") return ta - tb;
+      return tb - ta; // newest
+    });
+
+    return list;
+  }, [mergedCases, caseSearch, caseFilter, caseSort]);
+
+  const deleteDbCase = async (caseId: string, title: string) => {
+    const yes = window.confirm(`Delete case "${title}"?\nThis cannot be undone.`);
+    if (!yes) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/instructor/cases/${caseId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        console.error("Delete case failed", await res.text());
+        alert("Delete failed. Check backend DELETE /api/instructor/cases/{case_id}");
+        return;
+      }
+
+      await loadCases();
+    } catch (e) {
+      console.error(e);
+      alert("Delete error");
+    }
+  };
+
+  // ==== Grading state ====
   const [submissions, setSubmissions] = useState<Submission[]>([
     {
       id: "sub-1",
@@ -59,6 +310,8 @@ export default function InstructorDashboard() {
       studentId: "david.tran",
       status: "submitted",
       score: 8,
+      feedback: "",
+      published: false,
       updatedAt: "2025-10-10T10:00:00Z",
     },
     {
@@ -68,6 +321,8 @@ export default function InstructorDashboard() {
       studentId: "emma.wilson",
       status: "submitted",
       score: 7,
+      feedback: "",
+      published: false,
       updatedAt: "2025-10-11T08:00:00Z",
     },
     {
@@ -77,21 +332,25 @@ export default function InstructorDashboard() {
       studentId: "james.lee",
       status: "graded",
       score: 9,
+      feedback: "Good job. Consider boundary precision.",
+      published: true,
+      publishedAt: "2025-10-12T12:30:00Z",
       updatedAt: "2025-10-12T12:00:00Z",
     },
   ]);
 
-  type Mode = "one" | "group";
   const [mode, setMode] = useState<Mode>("one");
   const [query, setQuery] = useState("");
   const [activeIds, setActiveIds] = useState<string[]>([]);
 
+  const [draftFeedback, setDraftFeedback] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return submissions.filter(
-      (s) =>
-        s.studentId.toLowerCase().includes(q) ||
-        s.caseTitle.toLowerCase().includes(q)
+      (s) => s.studentId.toLowerCase().includes(q) || s.caseTitle.toLowerCase().includes(q)
     );
   }, [query, submissions]);
 
@@ -110,105 +369,21 @@ export default function InstructorDashboard() {
       mode === "one" ? [id] : prev.includes(id) ? prev : [...prev, id].slice(-4)
     );
 
-  // tính avgScore cho Homework Builder dựa trên submissions thực tế
   const avgScore =
     submissions.length === 0
       ? 0
       : Math.round(
-          (submissions.reduce((a, b) => a + (b.score ?? 0), 0) /
-            submissions.length) *
-            10
+          (submissions.reduce((a, b) => a + (b.score ?? 0), 0) / submissions.length) * 10
         ) / 10;
 
-  // gọi API save grade
-  const saveGrade = (subId: string) => async (score: number) => {
-    try {
-      const res = await fetch(
-        `${API_BASE}/api/submissions/${encodeURIComponent(subId)}/grade`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            score,
-            rubric: [], // bạn có thể map rubric sau
-            feedback: null,
-          }),
-        }
-      );
-
-      if (!res.ok) {
-        console.error("Failed to save grade", await res.text());
-        alert("Failed to save grade");
-        return;
-      }
-
-      const data = await res.json(); // { status, score, graded_at }
-      setSubmissions((prev) =>
-        prev.map((s) =>
-          s.id === subId ? { ...s, score: data.score, status: "graded" } : s
-        )
-      );
-    } catch (err) {
-      console.error("Error saving grade", err);
-      alert("Error saving grade");
-    }
-  };
-
-  // derive case + annotation for selected (1–1 mode)
-  const selectedCase = mockCases.find((c) => c.id === selected?.caseId);
-  const selectedAnn = selected
-    ? useAnnotation(selected.caseId, selected.studentId)
-    : null;
-
-  const [, setLocation] = useLocation();
-  const { user, logout, isLoading } = useAuth();
-  useHeartbeat(user?.user_id);
-
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [activeView, setActiveView] = useState<InstructorView>(() => {
-    const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
-    return VALID_TABS.includes(saved) ? saved : "overview";
-  });
-  const [feedback, setFeedback] = useState("");
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-
-  // ==== EFFECTS ====
-
-  // load submissions from backend
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/instructor/submissions`);
-        if (!res.ok) {
-          console.error("Failed to load submissions", await res.text());
-          return;
-        }
-        const data = await res.json();
-        const mapped: Submission[] = data.map((s: any) => ({
-          id: s.id,
-          caseId: s.case_id,
-          caseTitle: s.case_title ?? "Unknown case",
-          studentId: s.student_id,
-          status: (s.status as Submission["status"]) ?? "submitted",
-          score: s.score ?? undefined,
-          updatedAt: s.updated_at ?? "",
-        }));
-        if (mapped.length) {
-          setSubmissions(mapped);
-        }
-      } catch (err) {
-        console.error("Error loading submissions", err);
-      }
-    };
-    load();
-  }, []);
+  const selectedCaseId = selected?.caseId ?? "case-1";
+  const selectedStudentId = selected?.studentId ?? "unknown";
+  const selectedCase = mockCases.find((c) => c.id === selectedCaseId);
+  const selectedAnn = useAnnotation(selectedCaseId, selectedStudentId);
 
   useEffect(() => {
-    console.log("Current user in dashboard:", user);
-    if (!isLoading && (!user || user.role !== "instructor")) {
-      setLocation("/login");
-    }
-  }, [user, isLoading, setLocation]);
+    setDraftFeedback(selected?.feedback ?? "");
+  }, [selected?.id]);
 
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
@@ -227,41 +402,159 @@ export default function InstructorDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isLoading && (!user || user.role !== "instructor")) {
+      setLocation("/login");
+    }
+  }, [user, isLoading, setLocation]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/instructor/submissions`);
+        if (!res.ok) {
+          console.error("Failed to load submissions", await res.text());
+          return;
+        }
+        const data = await res.json();
+
+        const mapped: Submission[] = (data ?? []).map((s: any) => ({
+          id: s.id,
+          caseId: s.case_id,
+          caseTitle: s.case_title ?? "Unknown case",
+          studentId: s.student_id,
+          status: (s.status as SubmissionStatus) ?? "submitted",
+          score: s.score ?? undefined,
+          feedback: s.feedback ?? "",
+          rubric: s.rubric ?? [],
+          modelAnswers: s.model_answers ?? [],
+          published: Boolean(s.published),
+          publishedAt: s.published_at ?? undefined,
+          updatedAt: s.updated_at ?? "",
+        }));
+
+        if (mapped.length) setSubmissions(mapped);
+      } catch (err) {
+        console.error("Error loading submissions", err);
+      }
+    };
+    load();
+  }, []);
+
+  // ==== API actions ====
+
+  const saveDraft = async (subId: string, score: number) => {
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/submissions/${encodeURIComponent(subId)}/grade`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          score,
+          rubric: [],
+          feedback: draftFeedback ?? "",
+          published: false,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("Failed to save grade", await res.text());
+        alert("Failed to save grade");
+        return;
+      }
+
+      const data = await res.json();
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === subId
+            ? {
+                ...s,
+                score: data.score ?? score,
+                status: "graded",
+                feedback: data.feedback ?? draftFeedback,
+                published: false,
+                publishedAt: undefined,
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      console.error("Error saving grade", err);
+      alert("Error saving grade");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const publish = async (subId: string) => {
+    setIsPublishing(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/submissions/${encodeURIComponent(subId)}/publish`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        console.error("Failed to publish", await res.text());
+        alert("Failed to publish");
+        return;
+      }
+
+      const data = await res.json();
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === subId
+            ? {
+                ...s,
+                published: true,
+                publishedAt: data.published_at ?? new Date().toISOString(),
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      console.error("Error publishing", err);
+      alert("Error publishing");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const returnToStudent = async (subId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/submissions/${encodeURIComponent(subId)}/return`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: draftFeedback ?? "" }),
+      });
+
+      if (!res.ok) {
+        console.warn("Return endpoint not available. Falling back to draft save.");
+        alert("Return API not found. Ask BE to add /return or use Publish instead.");
+        return;
+      }
+
+      alert("Returned to student successfully");
+    } catch (err) {
+      console.error("Error returning to student", err);
+      alert("Error returning to student");
+    }
+  };
+
+  // ==== UI ====
   if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
 
   const navItems = [
-    { id: "overview", label: "Overview", icon: Gauge },
-    { id: "students", label: "Student Work", icon: GraduationCap },
-    { id: "grading", label: "Grading", icon: ClipboardCheck },
-    { id: "analytics", label: "Homework Builder", icon: LineChart },
-    { id: "cases", label: "Case Management", icon: FolderOpen },
+    { id: "overview", label: t("overview"), icon: Gauge },
+    { id: "students", label: t("studentWork"), icon: GraduationCap },
+    { id: "grading", label: t("grading"), icon: ClipboardCheck },
+    { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
+    { id: "cases", label: t("caseManagement"), icon: FolderOpen },
   ];
 
   const handleLogout = () => {
     logout();
     setLocation("/login");
-  };
-
-  const exportClassAnalyticsCSV = () => {
-    const classRows = [
-      ["Student", "Cases Completed", "Avg Score (%)", "Accuracy (%)", "Time Spent (min)"],
-      ["Sarah Chen", "12", "91", "95", "540"],
-      ["Mike Johnson", "9", "83", "88", "420"],
-      ["Aisha Rahman", "15", "92", "93", "600"],
-      ["David Tran", "11", "85", "86", "505"],
-    ];
-    const csv = classRows
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const today = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `class_analytics_${today}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -274,13 +567,19 @@ export default function InstructorDashboard() {
             className="flex items-center space-x-4 focus:outline-none hover:opacity-80 transition"
           >
             <Presentation className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold">Instructor Dashboard</h1>
+            <h1 className="text-xl font-semibold">{t("instructorDashboard")}</h1>
           </button>
 
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
-              <span className="text-sm text-muted-foreground">15 students online</span>
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  onlineCount > 0 ? "bg-green-500" : "bg-gray-400"
+                } animate-pulse`}
+              />
+              <span className="text-sm text-muted-foreground">
+                {onlineCount} {onlineCount === 1 ? t("userOnline") : t("usersOnline")}
+              </span>
             </div>
 
             <div className="flex items-center space-x-2 relative">
@@ -297,6 +596,7 @@ export default function InstructorDashboard() {
                   className="w-8 h-8 rounded-full border-2 border-primary"
                 />
               </button>
+
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -312,6 +612,11 @@ export default function InstructorDashboard() {
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <ProfileMenu />
+                  <div className="p-2">
+                    <Button variant="outline" className="w-full" onClick={handleLogout}>
+                      Logout
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -320,6 +625,7 @@ export default function InstructorDashboard() {
       </header>
 
       <div className="flex">
+        {/* Sidebar */}
         <aside className="group/sidebar w-16 hover:w-64 transition-all duration-300 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-hidden hover:overflow-auto">
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
@@ -330,9 +636,7 @@ export default function InstructorDashboard() {
                   key={item.id}
                   variant="ghost"
                   className={`w-full justify-start hover:bg-transparent ${
-                    isActive
-                      ? "text-primary hover:text-primary"
-                      : "text-foreground hover:text-foreground"
+                    isActive ? "text-primary" : "text-foreground"
                   }`}
                   onClick={() => setActiveView(item.id as InstructorView)}
                 >
@@ -352,79 +656,10 @@ export default function InstructorDashboard() {
           {activeView === "overview" && (
             <div className="p-6" data-testid="view-overview">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">
-                  Welcome, Dr. {user.lastName}!
-                </h2>
+                <h2 className="text-2xl font-bold mb-2">Welcome, Dr. {user.lastName}!</h2>
                 <p className="text-muted-foreground">
                   Monitor student progress and provide feedback
                 </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Active Students</p>
-                        <p
-                          className="text-2xl font-bold text-primary"
-                          data-testid="stat-active-students"
-                        >
-                          24
-                        </p>
-                      </div>
-                      <GraduationCap className="h-8 w-8 text-primary" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Pending Reviews</p>
-                        <p
-                          className="text-2xl font-bold text-orange-500"
-                          data-testid="stat-pending-reviews"
-                        >
-                          8
-                        </p>
-                      </div>
-                      <Clock className="h-8 w-8 text-orange-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Cases Assigned</p>
-                        <p
-                          className="text-2xl font-bold text-green-500"
-                          data-testid="stat-cases-assigned"
-                        >
-                          15
-                        </p>
-                      </div>
-                      <FolderOpen className="h-8 w-8 text-green-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Avg. Score</p>
-                        <p
-                          className="text-2xl font-bold text-accent"
-                          data-testid="stat-avg-score"
-                        >
-                          87%
-                        </p>
-                      </div>
-                      <ChartLine className="h-8 w-8 text-accent" />
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
 
               <Card className="mb-8">
@@ -466,19 +701,13 @@ export default function InstructorDashboard() {
                                 </span>
                               </div>
                             </div>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {student.issue}
-                            </p>
+                            <p className="text-sm text-muted-foreground mb-2">{student.issue}</p>
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-muted-foreground">
                                 Last active: {student.lastActive}
                               </span>
                               <div className="flex space-x-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                >
+                                <Button size="sm" variant="outline" className="h-7 text-xs">
                                   <Mail className="h-3 w-3 mr-1" />
                                   Contact
                                 </Button>
@@ -503,7 +732,6 @@ export default function InstructorDashboard() {
           {/* GRADING */}
           {activeView === "grading" && (
             <div className="p-6" data-testid="view-grading">
-              {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold">Grading</h2>
                 <div className="flex gap-2">
@@ -522,7 +750,6 @@ export default function InstructorDashboard() {
                 </div>
               </div>
 
-              {/* Submissions list */}
               <Card className="mb-4">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -534,6 +761,7 @@ export default function InstructorDashboard() {
                       onChange={(e) => setQuery(e.target.value)}
                     />
                   </div>
+
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[240px] overflow-auto">
                     {filtered.map((s) => (
                       <Button
@@ -544,18 +772,17 @@ export default function InstructorDashboard() {
                       >
                         {s.studentId} — {s.caseTitle}{" "}
                         {s.score != null ? `(Score ${s.score})` : `(${s.status})`}
+                        {s.published ? " • Published" : ""}
                       </Button>
                     ))}
+
                     {filtered.length === 0 && (
-                      <div className="text-sm text-muted-foreground p-2">
-                        No submissions
-                      </div>
+                      <div className="text-sm text-muted-foreground p-2">No submissions</div>
                     )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* ONE-ON-ONE */}
               {mode === "one" && selected && (
                 <div className="grid md:grid-cols-3 gap-4">
                   <Card className="md:col-span-2">
@@ -564,24 +791,76 @@ export default function InstructorDashboard() {
                         {selected.studentId} • {selected.caseTitle}
                       </div>
 
-                      {selectedAnn && (
-                        <AnnotationCanvas
-                          imageUrl={selectedCase?.imageUrl}
-                          annotation={selectedAnn}
-                          peerAnnotations={selectedAnn.peerAnnotations}
-                          versionOverlay={selectedAnn.versionOverlay}
-                        />
-                      )}
+                      <AnnotationCanvas
+                        imageUrl={selectedCase?.imageUrl ?? ""}
+                        annotation={selectedAnn}
+                        peerAnnotations={selectedAnn.peerAnnotations}
+                      />
                     </CardContent>
                   </Card>
 
-                  <RubricPanel
-                    onSubmit={(score) => saveGrade(selected.id)(score)}
-                  />
+                  <div className="space-y-3">
+                    <RubricPanel onSubmit={(score: number) => saveDraft(selected.id, score)} />
+
+                    <Card>
+                      <CardContent className="p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold">Return answer / Feedback</h3>
+                          <span className="text-xs text-muted-foreground">
+                            {selected.published ? "Published" : "Draft"}
+                          </span>
+                        </div>
+
+                        <Textarea
+                          value={draftFeedback}
+                          onChange={(e) => setDraftFeedback(e.target.value)}
+                          placeholder="Write instructor feedback / model answer for the student..."
+                          className="min-h-[120px]"
+                        />
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              const scoreToSave = selected.score ?? 0;
+                              saveDraft(selected.id, scoreToSave);
+                            }}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? "Saving..." : "Save Draft"}
+                          </Button>
+
+                          <Button
+                            onClick={() => publish(selected.id)}
+                            disabled={
+                              isPublishing || selected.status !== "graded" || selected.published
+                            }
+                          >
+                            {selected.published
+                              ? "Published"
+                              : isPublishing
+                              ? "Publishing..."
+                              : "Publish marks & answers"}
+                          </Button>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => returnToStudent(selected.id)}
+                        >
+                          Notify / Return to student
+                        </Button>
+
+                        <div className="text-xs text-muted-foreground">
+                          Publish is only enabled after grading is saved (status = graded).
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               )}
 
-              {/* GROUP COMPARE */}
               {mode === "group" && (
                 <div className="grid md:grid-cols-2 gap-4">
                   {activeGroup.length === 0 ? (
@@ -589,32 +868,7 @@ export default function InstructorDashboard() {
                       Select 2–4 submissions from the list to compare.
                     </div>
                   ) : (
-                    activeGroup.map((s) => {
-                      const caseObj = mockCases.find((c) => c.id === s.caseId);
-                      const ann = useAnnotation(s.caseId, s.studentId);
-                      return (
-                        <Card key={s.id}>
-                          <CardContent className="p-4 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm font-medium">
-                                {s.studentId}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {s.score != null
-                                  ? `Score ${s.score}`
-                                  : s.status}
-                              </div>
-                            </div>
-                            <AnnotationCanvas
-                              imageUrl={caseObj?.imageUrl}
-                              annotation={ann}
-                              peerAnnotations={ann.peerAnnotations}
-                              versionOverlay={ann.versionOverlay}
-                            />
-                          </CardContent>
-                        </Card>
-                      );
-                    })
+                    activeGroup.map((s) => <GroupCompareCard key={s.id} submission={s} />)
                   )}
                 </div>
               )}
@@ -632,9 +886,8 @@ export default function InstructorDashboard() {
               </div>
 
               <HomeworkPrepPanel
-                cases={mockCases.map((c) => ({ id: c.id, title: c.title }))}
                 stats={{
-                  avgScore: avgScore,
+                  avgScore,
                   commonMistakes: [
                     "Overlapping regions",
                     "Incorrect boundary",
@@ -646,32 +899,86 @@ export default function InstructorDashboard() {
                     "Annotation labeling",
                   ],
                 }}
-                onPublish={async (payload) => {
+                onPublish={async (payload: any) => {
+                  // ✅ handler "mềm": không phá code cũ, nhưng support payload mới nếu có
                   try {
-                    const res = await fetch(
-                      `${API_BASE}/api/instructor/homeworks`,
-                      {
+                    // Case A: payload có newCase (bản bạn làm mới)
+                    if (payload?.newCase?.title && payload?.newCase?.imageFile) {
+                      const fd = new FormData();
+                      fd.append("title", payload.newCase.title);
+                      if (payload.newCase.description)
+                        fd.append("description", payload.newCase.description);
+                      fd.append("image", payload.newCase.imageFile);
+
+                      const createRes = await fetch(`${API_BASE}/api/instructor/cases`, {
+                        method: "POST",
+                        body: fd,
+                      });
+
+                      if (!createRes.ok) {
+                        console.error("Create case failed", await createRes.text());
+                        alert("Cannot create case. Check backend /api/instructor/cases");
+                        return;
+                      }
+
+                      const caseData = await createRes.json();
+                      const createdCaseId = caseData.case_id ?? caseData.id;
+
+                      const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                          case_id: payload.caseId,
+                          case_id: createdCaseId,
                           due_at: payload.dueAtISO,
                           audience: payload.audience,
                           group_name: payload.groupName ?? null,
                           student_ids: payload.studentIds ?? null,
                           instructions: payload.instructions ?? null,
                           checklist: payload.autoChecklist,
-                          uploads: payload.uploads,
-                          questions: payload.questions,
+                          uploads: payload.referenceUploads ?? payload.uploads ?? [],
+                          questions: payload.questions ?? [],
+
+                          // optional meta fields (nếu panel có)
+                          requirement_id: payload.requirementId,
+                          class_name: payload.className,
+                          year: payload.year,
                         }),
+                      });
+
+                      if (!res.ok) {
+                        console.error("Failed to publish homework", await res.text());
+                        alert("Failed to publish homework");
+                        return;
                       }
-                    );
+
+                      const data = await res.json();
+                      alert(`Homework published with id ${data.homework_id}`);
+
+                      // auto switch + refresh case list
+                      setActiveView("cases");
+                      await loadCases();
+                      return;
+                    }
+
+                    // Case B: payload kiểu cũ (chỉ có caseId)
+                    const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        case_id: payload.caseId,
+                        due_at: payload.dueAtISO,
+                        audience: payload.audience,
+                        group_name: payload.groupName ?? null,
+                        student_ids: payload.studentIds ?? null,
+                        instructions: payload.instructions ?? null,
+                        checklist: payload.autoChecklist,
+                        uploads: payload.uploads ?? [],
+                        questions: payload.questions ?? [],
+                      }),
+                    });
 
                     if (!res.ok) {
-                      console.error(
-                        "Failed to publish homework",
-                        await res.text()
-                      );
+                      console.error("Failed to publish homework", await res.text());
                       alert("Failed to publish homework");
                       return;
                     }
@@ -687,54 +994,323 @@ export default function InstructorDashboard() {
             </div>
           )}
 
-          {/* CASE MANAGEMENT VIEW */}
+          {/* CASE MANAGEMENT VIEW (DB + MOCK + search/filter/sort + delete DB) */}
           {activeView === "cases" && (
             <div className="p-6 space-y-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Case Management</h2>
-                <Button
-                  onClick={() => setShowUploadModal(true)}
-                  className="bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  <UploadIcon className="h-4 w-4 mr-2" />
-                  Upload Case
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => setShowCreateClassModal(true)}
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  >
+                    Create Class
+                  </Button>
+                  <Button
+                    onClick={() => setShowAddStudentModal(true)}
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Add People to Class
+                  </Button>
+
+                  <Button variant="outline" onClick={loadCases}>
+                    Refresh
+                  </Button>
+
+                  <Button
+                    onClick={() => setShowUploadModal(true)}
+                    className="bg-primary text-primary-foreground hover:opacity-90"
+                  >
+                    <UploadIcon className="h-4 w-4 mr-2" />
+                    Upload Case
+                  </Button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mockCases.map((case_) => (
-                  <Card
-                    key={case_.id}
-                    className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                    onClick={() => setLocation(`/annotation/${case_.id}`)}
-                  >
-                    <img
-                      src={case_.imageUrl}
-                      alt={case_.title}
-                      className="w-full h-48 object-cover"
+              {/* Controls */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Input
+                      placeholder="Search cases by title/description..."
+                      value={caseSearch}
+                      onChange={(e) => setCaseSearch(e.target.value)}
                     />
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold mb-2">{case_.title}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {case_.description}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          {case_.category}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          12 annotations
-                        </span>
+
+                    <select
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      value={caseFilter}
+                      onChange={(e) => setCaseFilter(e.target.value as CaseFilter)}
+                    >
+                      <option value="all">All</option>
+                      <option value="db">NEW (DB)</option>
+                      <option value="mock">DEMO (Mock)</option>
+                    </select>
+
+                    <select
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      value={caseSort}
+                      onChange={(e) => setCaseSort(e.target.value as CaseSort)}
+                    >
+                      <option value="newest">Sort: Newest</option>
+                      <option value="oldest">Sort: Oldest</option>
+                      <option value="az">Sort: A → Z</option>
+                      <option value="za">Sort: Z → A</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <div>
+                      Showing <span className="font-medium">{visibleCases.length}</span> cases
+                      {caseFilter !== "all" ? ` • Filter: ${caseFilter}` : ""}
+                      {caseSearch.trim() ? ` • Search: "${caseSearch.trim()}"` : ""}
+                    </div>
+                    <button
+                      className="hover:underline"
+                      onClick={() => {
+                        setCaseSearch("");
+                        setCaseFilter("all");
+                        setCaseSort("newest");
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {loadingCases ? (
+                  <div className="text-sm text-muted-foreground">Loading cases…</div>
+                ) : visibleCases.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    No matches. Try another keyword or reset filters.
+                  </div>
+                ) : (
+                  visibleCases.map((c) => (
+                    <Card
+                      key={`${c.source}-${c.id}`}
+                      className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => setLocation(`/annotation/${c.id}`)}
+                    >
+                      <div className="relative">
+                        <img
+                          src={c.imageUrl}
+                          alt={c.title}
+                          className="w-full h-48 object-cover bg-muted"
+                        />
+
+                        {/* ✅ Delete only for DB cases */}
+                        {c.source === "db" && (
+                          <button
+                            className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border bg-background/90 hover:bg-background"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteDbCase(c.id, c.title);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-semibold mb-1 truncate">{c.title}</h3>
+                          <span className="text-[10px] px-2 py-1 rounded-full border border-border text-muted-foreground shrink-0">
+                            {c.source === "db" ? "NEW" : "DEMO"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {c.description}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+
+              <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
+
+              {/* Create Class Modal */}
+              {showCreateClassModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <Card className="w-full max-w-md">
+                    <CardContent className="p-6 space-y-4">
+                      <h3 className="text-lg font-semibold">Create New Class</h3>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Class Name</label>
+                        <Input
+                          value={newClassName}
+                          onChange={(e) => setNewClassName(e.target.value)}
+                          placeholder="e.g., Class A, Period 1, etc."
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          onClick={() => {
+                            setShowCreateClassModal(false);
+                            setNewClassName("");
+                          }}
+                          variant="outline"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            if (!newClassName.trim()) return;
+                            try {
+                              const res = await fetch(`${API_BASE}/api/classroom/create`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ name: newClassName.trim() }),
+                              });
+                              if (!res.ok) {
+                                const err = await res.json();
+                                throw new Error(err.detail || "Failed to create class");
+                              }
+
+                              setClassrooms((prev) =>
+                                Array.from(new Set([...prev, newClassName.trim()]))
+                              );
+                              alert(`Class "${newClassName}" created successfully!`);
+                              setShowCreateClassModal(false);
+                              setNewClassName("");
+                            } catch (e: any) {
+                              alert(e.message || "Error creating class");
+                            }
+                          }}
+                          className="bg-green-600 text-white hover:bg-green-700"
+                        >
+                          Create
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
+                </div>
+              )}
 
-              <UploadModal
-                isOpen={showUploadModal}
-                onClose={() => setShowUploadModal(false)}
-              />
+              {/* Add Student to Class Modal */}
+              {showAddStudentModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <Card className="w-full max-w-md max-h-96 overflow-y-auto">
+                    <CardContent className="p-6 space-y-4">
+                      <h3 className="text-lg font-semibold">Add Student to Class</h3>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Select Class</label>
+                        <select
+                          value={selectedClassroom}
+                          onChange={(e) => setSelectedClassroom(e.target.value)}
+                          className="w-full border rounded px-3 py-2"
+                        >
+                          <option value="">Choose a class...</option>
+                          {classrooms.map((cls) => (
+                            <option key={cls} value={cls}>
+                              {cls}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">
+                          Select Students
+                        </label>
+                        <div className="border rounded p-3 space-y-2 max-h-40 overflow-y-auto">
+                          {availableStudents.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              No students available. Create students first.
+                            </p>
+                          ) : (
+                            availableStudents.map((student) => (
+                              <label key={student.id} className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStudents.includes(student.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedStudents([...selectedStudents, student.id]);
+                                    } else {
+                                      setSelectedStudents(
+                                        selectedStudents.filter((id) => id !== student.id)
+                                      );
+                                    }
+                                  }}
+                                  className="rounded"
+                                />
+                                <span className="text-sm">
+                                  {student.firstName} {student.lastName}
+                                </span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          onClick={() => {
+                            setShowAddStudentModal(false);
+                            setSelectedClassroom("");
+                            setSelectedStudents([]);
+                          }}
+                          variant="outline"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            if (!selectedClassroom || selectedStudents.length === 0) return;
+                            try {
+                              await Promise.all(
+                                selectedStudents.map((sid) =>
+                                  fetch(`${API_BASE}/api/classroom/add-student`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      student_id: sid,
+                                      classroom_name: selectedClassroom,
+                                    }),
+                                  })
+                                )
+                              );
+
+                              const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
+                              if (resS.ok) {
+                                const d = await resS.json();
+                                setAvailableStudents(
+                                  d.students.map((s: any) => ({
+                                    id: s.id,
+                                    firstName: s.firstName,
+                                    lastName: s.lastName,
+                                  }))
+                                );
+                              }
+
+                              const resC = await fetch(`${API_BASE}/api/classroom/all`);
+                              if (resC.ok) {
+                                const data = await resC.json();
+                                setClassrooms(data.classrooms.map((c: any) => c.name));
+                              }
+
+                              alert(
+                                `Added ${selectedStudents.length} student(s) to ${selectedClassroom}`
+                              );
+                              setShowAddStudentModal(false);
+                              setSelectedClassroom("");
+                              setSelectedStudents([]);
+                            } catch (e: any) {
+                              alert(e.message || "Failed to add students to class");
+                            }
+                          }}
+                          className="bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          Add to Class
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
@@ -748,7 +1324,6 @@ export default function InstructorDashboard() {
                   <p className="text-sm text-muted-foreground">
                     Manage instructor profile, theme, and preferences.
                   </p>
-
                   <Button onClick={() => setLocation("/settings")} className="w-full">
                     Open Settings Page
                   </Button>
@@ -761,4 +1336,3 @@ export default function InstructorDashboard() {
     </div>
   );
 }
-

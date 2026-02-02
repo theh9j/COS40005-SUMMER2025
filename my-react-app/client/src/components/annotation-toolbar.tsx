@@ -47,37 +47,41 @@ export default function AnnotationToolbar({
   const [hexInput, setHexInput] = useState(color);
 
   return (
-    <div className="w-full bg-card border-b border-border px-4 py-3 flex items-center justify-between gap-4" data-testid="annotation-toolbar">
-      {/* Left Group: Tools */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 border-r border-border pr-4">
-          {tools.map((toolItem) => {
-            const Icon = toolItem.icon;
-            const isActive = tool === toolItem.id;
-            
-            return (
-              <Button
-                key={toolItem.id}
-                variant={isActive ? "default" : "secondary"}
-                size="sm"
-                className={`annotation-tool px-3 h-9 ${
-                  isActive 
-                    ? "bg-primary text-primary-foreground" 
-                    : "bg-secondary text-secondary-foreground hover:bg-muted"
-                }`}
-                onClick={() => setTool(toolItem.id)}
-                title={toolItem.label}
-                data-testid={`tool-${toolItem.id}`}
-              >
-                <Icon className="h-4 w-4" />
-              </Button>
-            );
-          })}
-        </div>
+    <div className="w-full bg-card border-b border-border px-6 py-3 flex items-center gap-6" data-testid="annotation-toolbar">
+      {/* Left Group: Drawing Tools */}
+      <div className="flex items-center gap-1">
+        {tools.map((toolItem) => {
+          const Icon = toolItem.icon;
+          const isActive = tool === toolItem.id;
+          
+          return (
+            <Button
+              key={toolItem.id}
+              variant={isActive ? "default" : "secondary"}
+              size="sm"
+              className={`annotation-tool px-3 h-9 ${
+                isActive 
+                  ? "bg-primary text-primary-foreground" 
+                  : "bg-secondary text-secondary-foreground hover:bg-muted"
+              }`}
+              onClick={() => setTool(toolItem.id)}
+              title={toolItem.label}
+              data-testid={`tool-${toolItem.id}`}
+            >
+              <Icon className="h-4 w-4" />
+            </Button>
+          );
+        })}
+      </div>
 
+      {/* Divider */}
+      <div className="w-px h-6 bg-border" />
+
+      {/* Middle Group: Width and Color Selection */}
+      <div className="flex items-center gap-6">
         {/* Width Customization */}
-        <div className="flex items-center gap-2 border-r border-border pr-4">
-          <label htmlFor="stroke-width" className="text-xs font-medium text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <label htmlFor="stroke-width" className="text-xs font-medium text-muted-foreground whitespace-nowrap">
             Width:
           </label>
           <input
@@ -91,11 +95,11 @@ export default function AnnotationToolbar({
             data-testid="stroke-width-slider"
             title={`Stroke width: ${strokeWidth}px`}
           />
-          <span className="text-xs text-muted-foreground w-6 text-right">{strokeWidth}px</span>
+          <span className="text-xs text-muted-foreground w-8 text-right">{strokeWidth}px</span>
         </div>
 
         {/* Color Picker */}
-        <div className="flex items-center gap-2 border-r border-border pr-4">
+        <div className="flex items-center gap-2">
           <label 
             htmlFor="color-picker" 
             className="w-8 h-8 rounded border-2 cursor-pointer flex items-center justify-center flex-shrink-0"
@@ -138,15 +142,18 @@ export default function AnnotationToolbar({
         </div>
       </div>
 
-      {/* Right Group: Actions */}
-      <div className="flex items-center gap-1 ml-auto">
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Right Group: Undo/Redo/History/Requirements Actions */}
+      <div className="flex items-center gap-1">
         <Button
           variant="secondary"
           size="sm"
           className="px-3 h-9"
           onClick={undo}
           disabled={!canUndo}
-          title="Undo"
+          title="Undo (Ctrl+Z)"
           data-testid="button-undo"
         >
           <Undo className="h-4 w-4" />
@@ -157,13 +164,11 @@ export default function AnnotationToolbar({
           className="px-3 h-9"
           onClick={redo}
           disabled={!canRedo}
-          title="Redo"
+          title="Redo (Ctrl+Y)"
           data-testid="button-redo"
         >
           <Redo className="h-4 w-4" />
         </Button>
-        
-        <div className="border-l border-r border-border mx-2 h-6" />
         
         {onToggleHistory && (
           <Button
@@ -175,18 +180,6 @@ export default function AnnotationToolbar({
             data-testid="button-history"
           >
             <Clock className="h-4 w-4" />
-          </Button>
-        )}
-        {onToggleComparison && (
-          <Button
-            variant={showComparison ? "default" : "secondary"}
-            size="sm"
-            className="px-3 h-9"
-            onClick={onToggleComparison}
-            title="Peer Comparison"
-            data-testid="button-comparison"
-          >
-            <Users className="h-4 w-4" />
           </Button>
         )}
       </div>
