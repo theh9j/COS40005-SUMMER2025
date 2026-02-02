@@ -103,12 +103,26 @@ export default function AIChatAssistant({
       const stream = aiService.chatStream([...messages, userMessage], context);
       let fullContent = "";
 
-      for await (const chunk of stream) {
-        fullContent += chunk;
+      try {
+        for await (const chunk of stream) {
+          fullContent += chunk;
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === assistantMessage.id 
+                ? { ...msg, content: fullContent }
+                : msg
+            )
+          );
+          
+          // Force re-render
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      } catch (streamError) {
+        console.error("Stream processing error:", streamError);
         setMessages(prev => 
           prev.map(msg => 
             msg.id === assistantMessage.id 
-              ? { ...msg, content: fullContent }
+              ? { ...msg, content: fullContent || "Lỗi khi xử lý phản hồi từ AI." }
               : msg
           )
         );
@@ -304,7 +318,7 @@ export default function AIChatAssistant({
                         : "bg-muted"
                     }`}
                   >
-                    <div className="text-sm whitespace-pre-wrap">
+                    <div className="text-sm whitespace-pre-wrap prose prose-sm max-w-none">
                       {message.content}
                     </div>
                     <div className="text-xs opacity-70 mt-1">

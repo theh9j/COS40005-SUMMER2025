@@ -261,13 +261,15 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
     messages: ChatMessage[],
     context?: MedicalContext
   ): AsyncGenerator<string, void, unknown> {
+    console.log("[DEBUG] Starting chatStream with messages:", messages);
+    
     const systemPrompt = this.buildSystemPrompt(context);
     
     const payload = {
       provider: this.config.provider,
       model: this.config.model,
       temperature: this.config.temperature || 0.7,
-      maxTokens: this.config.maxTokens || 1000,
+      maxTokens: this.config.maxTokens || 2000,
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map(m => ({ role: m.role, content: m.content }))
@@ -275,6 +277,8 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
       context,
       stream: true
     };
+
+    console.log("[DEBUG] Payload:", payload);
 
     try {
       const response = await fetch(`${this.baseUrl}/chat/stream`, {
@@ -286,43 +290,54 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
         body: JSON.stringify(payload)
       });
 
+      console.log("[DEBUG] Response status:", response.status);
+
       if (!response.ok) {
-        // Mock streaming response
-        const mockResponse = `🤖 Mock Streaming Response: I understand you're asking about "${messages[messages.length - 1]?.content.slice(0, 30)}..."\n\nThis is a simulated streaming response since no real API key is configured.\n\nI can help you with:\n- Medical case analysis\n- Annotation feedback\n- Study guidance\n- Homework assistance\n\nContext I see:\n${context?.caseTitle ? `- Case: ${context.caseTitle}\n` : ''}${context?.annotations?.length ? `- Annotations: ${context.annotations.length} present\n` : ''}${context?.userRole ? `- Your role: ${context.userRole}` : ''}`;
-        
-        const words = mockResponse.split(' ');
-        for (const word of words) {
-          yield word + ' ';
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
+        console.log("[DEBUG] Response not ok, using fallback");
+        yield "Xin lỗi, tôi đang gặp sự cố kỹ thuật. Bạn có thể thử lại không?";
         return;
       }
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response body");
+      if (!reader) {
+        console.error("[DEBUG] No response body reader");
+        yield "Không thể đọc phản hồi từ server.";
+        return;
+      }
 
       const decoder = new TextDecoder();
       
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log("[DEBUG] Stream done");
+            break;
+          }
           
           const chunk = decoder.decode(value);
+          console.log("[DEBUG] Raw chunk:", chunk);
+          
           const lines = chunk.split('\n');
           
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
-              if (data === '[DONE]') return;
+              console.log("[DEBUG] Data line:", data);
+              
+              if (data === '[DONE]') {
+                console.log("[DEBUG] Stream completed with [DONE]");
+                return;
+              }
               
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.content) {
+                  console.log("[DEBUG] Yielding content:", parsed.content);
                   yield parsed.content;
                 }
               } catch (e) {
-                // Skip invalid JSON
+                console.log("[DEBUG] Failed to parse JSON:", data, e);
               }
             }
           }
@@ -331,61 +346,40 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
         reader.releaseLock();
       }
     } catch (error) {
-      console.error("Streaming error:", error);
-      yield "🤖 Connection error. Using fallback response.\n\n";
-      yield `Your question: "${messages[messages.length - 1]?.content}"\n\n`;
-      yield "Please check your connection and try again.";
+      console.error("[DEBUG] Streaming error:", error);
+      yield "Lỗi kết nối. Vui lòng thử lại.";
     }
   }
 
   // Build context-aware system prompt
   private buildSystemPrompt(context?: MedicalContext): string {
-    let prompt = `You are a medical education mentor using Socratic teaching method. Guide learning through questions and hints, never give direct answers.
+    let prompt = `Bạn là một AI assistant hỗ trợ y khoa. 
 
-🎯 TEACHING APPROACH:
-- Ask guiding questions instead of giving answers
-- Provide general direction, not specific details
-- Encourage students to think critically and discover
-- Use hints like "Consider looking at..." or "What do you notice about..."
-- Make students work for their understanding
+QUY TẮC QUAN TRỌNG:
+- Trả lời NGẮN GỌN, đi thẳng vào vấn đề
+- Tối đa 2-3 câu cho mỗi câu trả lời
+- Chỉ trả lời đúng những gì được hỏi
+- Không giải thích quá chi tiết trừ khi được yêu cầu
+- Dùng tiếng Việt tự nhiên
 
-📋 RESPONSE STYLE:
-- Keep responses SHORT (2-3 sentences max)
-- End with a thought-provoking question
-- Use phrases like "Think about...", "Consider...", "What might..."
-- Never directly identify structures or pathology
-- Guide the learning process, don't shortcut it
-
-⚠️ EDUCATIONAL PHILOSOPHY:
-- Learning happens through struggle and discovery
-- Students must do the work to truly understand
-- Your role is to guide, not to provide answers
-- Encourage systematic thinking and observation`;
+PHONG CÁCH:
+- Súc tích và chính xác
+- Tập trung vào điểm chính
+- Nếu cần thêm thông tin, hỏi "Bạn muốn tôi giải thích thêm về điều gì?"`;
 
     if (context) {
-      prompt += `\n\n🔍 CURRENT CONTEXT:`;
+      prompt += `\n\nCONTEXT:`;
       
       if (context.caseTitle) {
-        prompt += `\nCase: ${context.caseTitle}`;
+        prompt += ` Trường hợp: ${context.caseTitle}.`;
       }
       
-      if (context.annotations.length > 0) {
-        prompt += `\nStudent has made ${context.annotations.length} annotations`;
-      } else {
-        prompt += `\nStudent hasn't started annotating yet`;
+      if (context.annotations && context.annotations.length > 0) {
+        prompt += ` Có ${context.annotations.length} annotations.`;
       }
       
-      if (context.userRole === "student") {
-        prompt += `\n\n🎓 FOR STUDENT: 
-- Ask questions that make them think deeper
-- Provide hints about WHERE to look, not WHAT they'll find
-- Encourage systematic approach without giving the system
-- Challenge their observations with "Why do you think...?"`;
-      } else {
-        prompt += `\n\n👨‍🏫 FOR INSTRUCTOR: 
-- Suggest teaching strategies that promote discovery learning
-- Recommend ways to guide without giving answers
-- Help create learning challenges that build understanding`;
+      if (context.userRole) {
+        prompt += ` User: ${context.userRole}.`;
       }
     }
 
@@ -464,12 +458,12 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
   }
 }
 
-// Default AI service instance với Google Gemini - optimized for concise responses
+// AI service with concise responses
 export const aiService = new AIService({
   provider: "google",
   model: "gemini-2.5-flash",
-  temperature: 0.3, // Lower temperature for more focused responses
-  maxTokens: 500    // Balanced length for detailed but concise responses
+  temperature: 0.3, // Giảm để response tập trung hơn
+  maxTokens: 300    // Giảm để response ngắn gọn hơn
 });
 
 export default AIService;
