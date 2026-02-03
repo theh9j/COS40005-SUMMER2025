@@ -63,3 +63,8 @@ class ForumThread(BaseModel):
     class Config:
         populate_by_name = True
         from_attributes = True
+
+class ClassRoom(BaseModel):
+    name: str
+    year: str
+    instructors: List[str]
