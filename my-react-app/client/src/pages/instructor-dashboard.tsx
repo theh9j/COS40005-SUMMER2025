@@ -19,6 +19,8 @@ import {
   TrendingDown,
   Mail,
   LineChart,
+  Users,
+  UserPlus,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,7 @@ type InstructorView =
   | "grading"
   | "analytics"
   | "cases"
+  | "class"
   | "settings";
 
 const VIEW_STORAGE_KEY = "instructor.activeView";
@@ -42,10 +45,11 @@ const VALID_TABS: InstructorView[] = [
   "grading",
   "analytics",
   "cases",
+  "class",
   "settings",
 ];
 
-// ====== API base (update nếu bạn dùng port khác) ======
+// ====== API base ======
 const API_BASE = "http://127.0.0.1:8000";
 
 // ===== Types =====
@@ -92,6 +96,21 @@ type CaseCard = {
 
 type CaseFilter = "all" | "db" | "mock";
 type CaseSort = "newest" | "oldest" | "az" | "za";
+
+// ===== Class types =====
+type StudentLite = {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string | null;
+};
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "S";
+  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? "S";
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+}
 
 // ===== Helpers: hook-safe components =====
 function GroupCompareCard({ submission }: { submission: Submission }) {
@@ -146,49 +165,101 @@ export default function InstructorDashboard() {
 
   // ==== UI state ====
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
-  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
-  const [newClassName, setNewClassName] = useState("");
-  const [classrooms, setClassrooms] = useState<string[]>([]);
-  const [selectedClassroom, setSelectedClassroom] = useState("");
-  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
-  const [availableStudents, setAvailableStudents] = useState<any[]>([]);
-
-  useEffect(() => {
-    // fetch classrooms and students from backend
-    async function load() {
-      try {
-        const resC = await fetch(`${API_BASE}/api/classroom/all`);
-        if (resC.ok) {
-          const data = await resC.json();
-          setClassrooms(data.classrooms.map((c: any) => c.name));
-        }
-
-        const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
-        if (resS.ok) {
-          const d = await resS.json();
-          setAvailableStudents(
-            d.students.map((s: any) => ({
-              id: s.id,
-              firstName: s.firstName,
-              lastName: s.lastName,
-            }))
-          );
-        }
-      } catch (e) {
-        console.error("Failed to load classrooms/students", e);
-      }
-    }
-
-    load();
-  }, []);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const [activeView, setActiveView] = useState<InstructorView>(() => {
     const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
     return VALID_TABS.includes(saved) ? saved : "overview";
   });
 
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  // ==== Class state (used in Class tab) ====
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+
+  const [classrooms, setClassrooms] = useState<string[]>([]);
+  const [selectedClassroom, setSelectedClassroom] = useState("");
+
+  const [availableStudents, setAvailableStudents] = useState<StudentLite[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [isAddingToClass, setIsAddingToClass] = useState(false);
+
+  const loadClassroomsAndStudents = async () => {
+    try {
+      const resC = await fetch(`${API_BASE}/api/classroom/all`);
+      if (resC.ok) {
+        const data = await resC.json();
+        setClassrooms((data.classrooms ?? []).map((c: any) => c.name));
+      }
+
+      const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
+      if (resS.ok) {
+        const d = await resS.json();
+        setAvailableStudents(
+          (d.students ?? []).map((s: any) => ({
+            id: s.id,
+            firstName: s.firstName,
+            lastName: s.lastName,
+            email: s.email ?? null,
+          }))
+        );
+      }
+    } catch (e) {
+      console.error("Failed to load classrooms/students", e);
+    }
+  };
+
+  useEffect(() => {
+    loadClassroomsAndStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const visibleStudents = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return availableStudents;
+
+    return availableStudents.filter((s) => {
+      const name = `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim().toLowerCase();
+      const email = (s.email ?? "").toLowerCase();
+      const id = (s.id ?? "").toLowerCase();
+      return name.includes(q) || email.includes(q) || id.includes(q);
+    });
+  }, [availableStudents, studentSearch]);
+
+  const toggleSelectStudent = (sid: string) => {
+    setSelectedStudents((prev) =>
+      prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid]
+    );
+  };
+
+  const clearSelection = () => setSelectedStudents([]);
+
+  const addSelectedToClass = async () => {
+    if (!selectedClassroom || selectedStudents.length === 0) return;
+
+    setIsAddingToClass(true);
+    try {
+      await Promise.all(
+        selectedStudents.map((sid) =>
+          fetch(`${API_BASE}/api/classroom/add-student`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ student_id: sid, classroom_name: selectedClassroom }),
+          })
+        )
+      );
+
+      alert(`Added ${selectedStudents.length} student(s) to ${selectedClassroom}`);
+      setSelectedStudents([]);
+      // refresh list to keep data up-to-date
+      await loadClassroomsAndStudents();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to add selected students to class");
+    } finally {
+      setIsAddingToClass(false);
+    }
+  };
 
   // ==== Case Management state (DB cases + merge mock) ====
   const [casesFromApi, setCasesFromApi] = useState<CaseFromApi[]>([]);
@@ -219,6 +290,7 @@ export default function InstructorDashboard() {
 
   useEffect(() => {
     if (activeView === "cases") loadCases();
+    if (activeView === "class") loadClassroomsAndStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
@@ -273,7 +345,7 @@ export default function InstructorDashboard() {
       const ta = parseTime(a.createdAt);
       const tb = parseTime(b.createdAt);
       if (caseSort === "oldest") return ta - tb;
-      return tb - ta; // newest
+      return tb - ta;
     });
 
     return list;
@@ -385,6 +457,7 @@ export default function InstructorDashboard() {
     setDraftFeedback(selected?.feedback ?? "");
   }, [selected?.id]);
 
+  // ==== Effects ====
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
@@ -408,6 +481,7 @@ export default function InstructorDashboard() {
     }
   }, [user, isLoading, setLocation]);
 
+  // load submissions from backend
   useEffect(() => {
     const load = async () => {
       try {
@@ -442,7 +516,6 @@ export default function InstructorDashboard() {
   }, []);
 
   // ==== API actions ====
-
   const saveDraft = async (subId: string, score: number) => {
     setIsSaving(true);
     try {
@@ -550,6 +623,7 @@ export default function InstructorDashboard() {
     { id: "grading", label: t("grading"), icon: ClipboardCheck },
     { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
     { id: "cases", label: t("caseManagement"), icon: FolderOpen },
+    { id: "class", label: "Class", icon: Users },
   ];
 
   const handleLogout = () => {
@@ -657,9 +731,7 @@ export default function InstructorDashboard() {
             <div className="p-6" data-testid="view-overview">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold mb-2">Welcome, Dr. {user.lastName}!</h2>
-                <p className="text-muted-foreground">
-                  Monitor student progress and provide feedback
-                </p>
+                <p className="text-muted-foreground">Monitor student progress and provide feedback</p>
               </div>
 
               <Card className="mb-8">
@@ -681,11 +753,7 @@ export default function InstructorDashboard() {
                         className="p-4 border border-red-500/30 rounded-lg hover:bg-muted transition"
                       >
                         <div className="flex items-start space-x-4">
-                          <img
-                            src={student.avatar}
-                            alt={student.name}
-                            className="w-12 h-12 rounded-full"
-                          />
+                          <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full" />
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-2">
                               <p className="font-medium">{student.name}</p>
@@ -711,10 +779,7 @@ export default function InstructorDashboard() {
                                   <Mail className="h-3 w-3 mr-1" />
                                   Contact
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
-                                >
+                                <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700">
                                   View Details
                                 </Button>
                               </div>
@@ -735,16 +800,10 @@ export default function InstructorDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold">Grading</h2>
                 <div className="flex gap-2">
-                  <Button
-                    variant={mode === "one" ? "default" : "secondary"}
-                    onClick={() => setMode("one")}
-                  >
+                  <Button variant={mode === "one" ? "default" : "secondary"} onClick={() => setMode("one")}>
                     1–1
                   </Button>
-                  <Button
-                    variant={mode === "group" ? "default" : "secondary"}
-                    onClick={() => setMode("group")}
-                  >
+                  <Button variant={mode === "group" ? "default" : "secondary"} onClick={() => setMode("group")}>
                     Group
                   </Button>
                 </div>
@@ -770,8 +829,7 @@ export default function InstructorDashboard() {
                         className="justify-start"
                         onClick={() => onPick(s.id)}
                       >
-                        {s.studentId} — {s.caseTitle}{" "}
-                        {s.score != null ? `(Score ${s.score})` : `(${s.status})`}
+                        {s.studentId} — {s.caseTitle} {s.score != null ? `(Score ${s.score})` : `(${s.status})`}
                         {s.published ? " • Published" : ""}
                       </Button>
                     ))}
@@ -832,23 +890,13 @@ export default function InstructorDashboard() {
 
                           <Button
                             onClick={() => publish(selected.id)}
-                            disabled={
-                              isPublishing || selected.status !== "graded" || selected.published
-                            }
+                            disabled={isPublishing || selected.status !== "graded" || selected.published}
                           >
-                            {selected.published
-                              ? "Published"
-                              : isPublishing
-                              ? "Publishing..."
-                              : "Publish marks & answers"}
+                            {selected.published ? "Published" : isPublishing ? "Publishing..." : "Publish marks & answers"}
                           </Button>
                         </div>
 
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => returnToStudent(selected.id)}
-                        >
+                        <Button variant="outline" className="w-full" onClick={() => returnToStudent(selected.id)}>
                           Notify / Return to student
                         </Button>
 
@@ -888,26 +936,16 @@ export default function InstructorDashboard() {
               <HomeworkPrepPanel
                 stats={{
                   avgScore,
-                  commonMistakes: [
-                    "Overlapping regions",
-                    "Incorrect boundary",
-                    "Missed edema area",
-                  ],
-                  skillGaps: [
-                    "Anatomical localization",
-                    "Contrast handling",
-                    "Annotation labeling",
-                  ],
+                  commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
+                  skillGaps: ["Anatomical localization", "Contrast handling", "Annotation labeling"],
                 }}
                 onPublish={async (payload: any) => {
-                  // ✅ handler "mềm": không phá code cũ, nhưng support payload mới nếu có
                   try {
                     // Case A: payload có newCase (bản bạn làm mới)
                     if (payload?.newCase?.title && payload?.newCase?.imageFile) {
                       const fd = new FormData();
                       fd.append("title", payload.newCase.title);
-                      if (payload.newCase.description)
-                        fd.append("description", payload.newCase.description);
+                      if (payload.newCase.description) fd.append("description", payload.newCase.description);
                       fd.append("image", payload.newCase.imageFile);
 
                       const createRes = await fetch(`${API_BASE}/api/instructor/cases`, {
@@ -937,8 +975,6 @@ export default function InstructorDashboard() {
                           checklist: payload.autoChecklist,
                           uploads: payload.referenceUploads ?? payload.uploads ?? [],
                           questions: payload.questions ?? [],
-
-                          // optional meta fields (nếu panel có)
                           requirement_id: payload.requirementId,
                           class_name: payload.className,
                           year: payload.year,
@@ -954,13 +990,12 @@ export default function InstructorDashboard() {
                       const data = await res.json();
                       alert(`Homework published with id ${data.homework_id}`);
 
-                      // auto switch + refresh case list
                       setActiveView("cases");
                       await loadCases();
                       return;
                     }
 
-                    // Case B: payload kiểu cũ (chỉ có caseId)
+                    // Case B: payload kiểu cũ
                     const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -994,25 +1029,12 @@ export default function InstructorDashboard() {
             </div>
           )}
 
-          {/* CASE MANAGEMENT VIEW (DB + MOCK + search/filter/sort + delete DB) */}
+          {/* CASE MANAGEMENT */}
           {activeView === "cases" && (
             <div className="p-6 space-y-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Case Management</h2>
                 <div className="flex gap-2">
-                  <Button
-                    onClick={() => setShowCreateClassModal(true)}
-                    className="bg-green-600 text-white hover:bg-green-700"
-                  >
-                    Create Class
-                  </Button>
-                  <Button
-                    onClick={() => setShowAddStudentModal(true)}
-                    className="bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    Add People to Class
-                  </Button>
-
                   <Button variant="outline" onClick={loadCases}>
                     Refresh
                   </Button>
@@ -1027,7 +1049,6 @@ export default function InstructorDashboard() {
                 </div>
               </div>
 
-              {/* Controls */}
               <Card>
                 <CardContent className="p-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1079,7 +1100,6 @@ export default function InstructorDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {loadingCases ? (
                   <div className="text-sm text-muted-foreground">Loading cases…</div>
@@ -1100,8 +1120,6 @@ export default function InstructorDashboard() {
                           alt={c.title}
                           className="w-full h-48 object-cover bg-muted"
                         />
-
-                        {/* ✅ Delete only for DB cases */}
                         {c.source === "db" && (
                           <button
                             className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border bg-background/90 hover:bg-background"
@@ -1122,9 +1140,7 @@ export default function InstructorDashboard() {
                             {c.source === "db" ? "NEW" : "DEMO"}
                           </span>
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {c.description}
-                        </p>
+                        <p className="text-sm text-muted-foreground line-clamp-2">{c.description}</p>
                       </CardContent>
                     </Card>
                   ))
@@ -1132,6 +1148,135 @@ export default function InstructorDashboard() {
               </div>
 
               <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
+            </div>
+          )}
+
+          {/* CLASS (NEW TAB) */}
+          {activeView === "class" && (
+            <div className="p-6 space-y-6" data-testid="view-class">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">Class</h2>
+                  <p className="text-muted-foreground">Create classes and add students to a class.</p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => setShowCreateClassModal(true)}
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  >
+                    Create Class
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      // chỉ UX: auto focus dropdown
+                      const el = document.getElementById("class-select");
+                      if (el) (el as HTMLSelectElement).focus();
+                    }}
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Add People to Class
+                  </Button>
+                </div>
+              </div>
+
+              {/* Top control bar */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Select class</label>
+                      <select
+                        id="class-select"
+                        value={selectedClassroom}
+                        onChange={(e) => setSelectedClassroom(e.target.value)}
+                        className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      >
+                        <option value="">Choose a class...</option>
+                        {classrooms.map((cls) => (
+                          <option key={cls} value={cls}>
+                            {cls}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Search student</label>
+                      <Input
+                        placeholder="name / email / id..."
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <div className="text-sm text-muted-foreground">
+                        Selected: <span className="font-medium">{selectedStudents.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Student grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visibleStudents.map((s) => {
+                  const fullName = `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() || "Student";
+                  const initials = getInitials(fullName);
+                  const isSel = selectedStudents.includes(s.id);
+
+                  return (
+                    <Card key={s.id} className="border border-border">
+                      <CardContent className="p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center font-semibold">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold truncate">{fullName}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {s.email ? s.email : "No email"} • ID: {s.id}
+                            </div>
+                          </div>
+                        </div>
+
+                        <Button
+                          variant={isSel ? "default" : "outline"}
+                          onClick={() => toggleSelectStudent(s.id)}
+                        >
+                          {isSel ? "Selected" : "Select"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+
+                {visibleStudents.length === 0 && (
+                  <div className="text-sm text-muted-foreground">No students found.</div>
+                )}
+              </div>
+
+              {/* Bottom actions */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={clearSelection}
+                  disabled={selectedStudents.length === 0}
+                  className="min-w-[140px]"
+                >
+                  Clear selection
+                </Button>
+
+                <Button
+                  onClick={addSelectedToClass}
+                  disabled={!selectedClassroom || selectedStudents.length === 0 || isAddingToClass}
+                  className="bg-blue-600 text-white hover:bg-blue-700 min-w-[220px]"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  {isAddingToClass ? "Adding..." : "Add selected to class"}
+                </Button>
+              </div>
 
               {/* Create Class Modal */}
               {showCreateClassModal && (
@@ -1139,14 +1284,16 @@ export default function InstructorDashboard() {
                   <Card className="w-full max-w-md">
                     <CardContent className="p-6 space-y-4">
                       <h3 className="text-lg font-semibold">Create New Class</h3>
+
                       <div>
                         <label className="text-sm font-medium mb-2 block">Class Name</label>
                         <Input
                           value={newClassName}
                           onChange={(e) => setNewClassName(e.target.value)}
-                          placeholder="e.g., Class A, Period 1, etc."
+                          placeholder="e.g., COS40005, Class A, Period 1..."
                         />
                       </div>
+
                       <div className="flex gap-2 justify-end">
                         <Button
                           onClick={() => {
@@ -1157,6 +1304,7 @@ export default function InstructorDashboard() {
                         >
                           Cancel
                         </Button>
+
                         <Button
                           onClick={async () => {
                             if (!newClassName.trim()) return;
@@ -1166,15 +1314,14 @@ export default function InstructorDashboard() {
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ name: newClassName.trim() }),
                               });
+
                               if (!res.ok) {
-                                const err = await res.json();
+                                const err = await res.json().catch(() => ({}));
                                 throw new Error(err.detail || "Failed to create class");
                               }
 
-                              setClassrooms((prev) =>
-                                Array.from(new Set([...prev, newClassName.trim()]))
-                              );
-                              alert(`Class "${newClassName}" created successfully!`);
+                              setClassrooms((prev) => Array.from(new Set([...prev, newClassName.trim()])));
+                              alert(`Class "${newClassName.trim()}" created successfully!`);
                               setShowCreateClassModal(false);
                               setNewClassName("");
                             } catch (e: any) {
@@ -1184,127 +1331,6 @@ export default function InstructorDashboard() {
                           className="bg-green-600 text-white hover:bg-green-700"
                         >
                           Create
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Add Student to Class Modal */}
-              {showAddStudentModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                  <Card className="w-full max-w-md max-h-96 overflow-y-auto">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="text-lg font-semibold">Add Student to Class</h3>
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">Select Class</label>
-                        <select
-                          value={selectedClassroom}
-                          onChange={(e) => setSelectedClassroom(e.target.value)}
-                          className="w-full border rounded px-3 py-2"
-                        >
-                          <option value="">Choose a class...</option>
-                          {classrooms.map((cls) => (
-                            <option key={cls} value={cls}>
-                              {cls}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">
-                          Select Students
-                        </label>
-                        <div className="border rounded p-3 space-y-2 max-h-40 overflow-y-auto">
-                          {availableStudents.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                              No students available. Create students first.
-                            </p>
-                          ) : (
-                            availableStudents.map((student) => (
-                              <label key={student.id} className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedStudents.includes(student.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedStudents([...selectedStudents, student.id]);
-                                    } else {
-                                      setSelectedStudents(
-                                        selectedStudents.filter((id) => id !== student.id)
-                                      );
-                                    }
-                                  }}
-                                  className="rounded"
-                                />
-                                <span className="text-sm">
-                                  {student.firstName} {student.lastName}
-                                </span>
-                              </label>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          onClick={() => {
-                            setShowAddStudentModal(false);
-                            setSelectedClassroom("");
-                            setSelectedStudents([]);
-                          }}
-                          variant="outline"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={async () => {
-                            if (!selectedClassroom || selectedStudents.length === 0) return;
-                            try {
-                              await Promise.all(
-                                selectedStudents.map((sid) =>
-                                  fetch(`${API_BASE}/api/classroom/add-student`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      student_id: sid,
-                                      classroom_name: selectedClassroom,
-                                    }),
-                                  })
-                                )
-                              );
-
-                              const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
-                              if (resS.ok) {
-                                const d = await resS.json();
-                                setAvailableStudents(
-                                  d.students.map((s: any) => ({
-                                    id: s.id,
-                                    firstName: s.firstName,
-                                    lastName: s.lastName,
-                                  }))
-                                );
-                              }
-
-                              const resC = await fetch(`${API_BASE}/api/classroom/all`);
-                              if (resC.ok) {
-                                const data = await resC.json();
-                                setClassrooms(data.classrooms.map((c: any) => c.name));
-                              }
-
-                              alert(
-                                `Added ${selectedStudents.length} student(s) to ${selectedClassroom}`
-                              );
-                              setShowAddStudentModal(false);
-                              setSelectedClassroom("");
-                              setSelectedStudents([]);
-                            } catch (e: any) {
-                              alert(e.message || "Failed to add students to class");
-                            }
-                          }}
-                          className="bg-blue-600 text-white hover:bg-blue-700"
-                        >
-                          Add to Class
                         </Button>
                       </div>
                     </CardContent>
