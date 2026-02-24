@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useI18n } from "@/i18n";
+import { useToast } from "@/hooks/use-toast";
 import { mockAtRiskStudents, mockCases } from "@/lib/mock-data";
 import UploadModal from "@/components/upload-modal";
 import {
@@ -103,6 +104,7 @@ type StudentLite = {
   firstName?: string;
   lastName?: string;
   email?: string | null;
+  classroom?: string | null;
 };
 
 function getInitials(name: string) {
@@ -162,6 +164,7 @@ export default function InstructorDashboard() {
   const { user, logout, isLoading } = useAuth();
   const { t } = useI18n();
   useHeartbeat(user?.user_id);
+  const { toast } = useToast();
 
   // ==== UI state ====
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -201,6 +204,7 @@ export default function InstructorDashboard() {
             firstName: s.firstName,
             lastName: s.lastName,
             email: s.email ?? null,
+            classroom: s.classroom ?? "Unassigned",
           }))
         );
       }
@@ -249,13 +253,18 @@ export default function InstructorDashboard() {
         )
       );
 
-      alert(`Added ${selectedStudents.length} student(s) to ${selectedClassroom}`);
+      toast({
+        title: `Added ${selectedStudents.length} student(s) to ${selectedClassroom}`,
+      });
       setSelectedStudents([]);
       // refresh list to keep data up-to-date
       await loadClassroomsAndStudents();
     } catch (e) {
       console.error(e);
-      alert("Failed to add selected students to class");
+      toast({
+        title: "Failed to add selected students to class",
+        variant: "destructive",
+      });
     } finally {
       setIsAddingToClass(false);
     }
@@ -1167,16 +1176,6 @@ export default function InstructorDashboard() {
                   >
                     Create Class
                   </Button>
-                  <Button
-                    onClick={() => {
-                      // chỉ UX: auto focus dropdown
-                      const el = document.getElementById("class-select");
-                      if (el) (el as HTMLSelectElement).focus();
-                    }}
-                    className="bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    Add People to Class
-                  </Button>
                 </div>
               </div>
 
@@ -1236,7 +1235,7 @@ export default function InstructorDashboard() {
                           <div className="min-w-0">
                             <div className="font-semibold truncate">{fullName}</div>
                             <div className="text-xs text-muted-foreground truncate">
-                              {s.email ? s.email : "No email"} • ID: {s.id}
+                              {s.email ? s.email : "No email"} • Class: {s.classroom ?? "Unassigned"} • ID: {s.id}
                             </div>
                           </div>
                         </div>
