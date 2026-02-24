@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useAnnotation } from "@/hooks/use-annotation";
@@ -19,7 +20,7 @@ import AIChatAssistant from "@/components/ai-chat-assistant";
 import AIAnnotationSuggestions from "@/components/ai-annotation-suggestions";
 import SubmissionPanel from "@/components/submission-panel";
 import AssignmentRequirements from "@/components/assignment-requirements";
-import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, Info, Lock, LockOpen, Eye as EyeIcon } from "lucide-react";
+import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, Info, Lock, LockOpen, Eye as EyeIcon, Edit2, X, Plus } from "lucide-react";
 
 // Collaborative imports
 import { useVersions } from "@/hooks/use-versions";
@@ -85,11 +86,23 @@ export default function AnnotationView() {
   const [showAIChat, setShowAIChat] = useState(false);
   const [showAIVision, setShowAIVision] = useState(false);
   const [showAssignmentDetails, setShowAssignmentDetails] = useState(false);
+  const [showCaseEditor, setShowCaseEditor] = useState(false);
   const [caseLocked, setCaseLocked] = useState(false);
   const [aiChatMinimized, setAIChatMinimized] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [compare, setCompare] = useState<{ peer?: any; alpha?: number }>({});
   const [showClosedCaseNotification, setShowClosedCaseNotification] = useState(false);
+
+  // Case editor state
+  const [editCaseTitle, setEditCaseTitle] = useState(case_?.title || "");
+  const [editCaseDesc, setEditCaseDesc] = useState(case_?.description || "");
+  const [editCaseCategory, setEditCaseCategory] = useState(case_?.category || "");
+  const [caseTags, setCaseTags] = useState<Array<{ label: string; highlighted: boolean }>>([
+    { label: "Fix: Overlapping regions", highlighted: true },
+    { label: "Fix: Incorrect boundary", highlighted: true },
+    { label: "Practice: Anatomical localization", highlighted: true }
+  ]);
+  const [newTagInput, setNewTagInput] = useState("");
   
   // Sidebar tab state: "annotate" | "collaborate" | "ai-assistant" | "homework"
   const [activeSidebarTab, setActiveSidebarTab] = useState<"annotate" | "collaborate" | "ai-assistant" | "homework">("collaborate");
@@ -360,11 +373,11 @@ export default function AnnotationView() {
       )}
 
       {/* Main layout */}
-      <div className="flex h-[calc(100vh-8rem)]">
+      <div className="flex h-[calc(100vh-7rem)]">
         {/* Canvas area */}
         <main className="flex-1 flex overflow-hidden">
           {/* Canvas */}
-          <div className="flex-1 p-2 overflow-auto">
+          <div className="flex-1 p-0 overflow-auto">
             <AnnotationCanvas
               imageUrl={case_.imageUrl}
               annotation={annotation}
@@ -402,9 +415,19 @@ export default function AnnotationView() {
 
           {user?.role === 'instructor' && (
             <aside className="w-72 bg-card border-l border-border overflow-y-auto flex flex-col">
-              <div className="p-4 border-b border-border space-y-3">
-                <h3 className="font-semibold">Case Management</h3>
+              {/* Case Management Header with Buttons */}
+              <div className="p-3 border-b border-border space-y-2">
+                <h3 className="font-semibold text-sm">Case Management</h3>
                 <div className="space-y-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="w-full" 
+                    onClick={() => setShowCaseEditor(!showCaseEditor)}
+                  >
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    Edit Case
+                  </Button>
                   <Button 
                     size="sm" 
                     variant="outline"
@@ -426,7 +449,7 @@ export default function AnnotationView() {
                     {caseLocked ? (
                       <>
                         <Lock className="h-4 w-4 mr-2" />
-                        Unlock Case
+                        Lock Case
                       </>
                     ) : (
                       <>
@@ -437,33 +460,223 @@ export default function AnnotationView() {
                   </Button>
                   <Button 
                     size="sm" 
-                    className="w-full" 
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                     onClick={() => setLocation('/instructor')}
                   >
+                    <Eye className="h-4 w-4 mr-2" />
                     Open Dashboard
                   </Button>
                 </div>
               </div>
-              
-              {/* Homework Builder Assignments for this case */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <h4 className="text-sm font-medium mb-3">Homework Assignments</h4>
-                <InstructorCaseManager
-                  homeworks={[
-                    // This would be fetched from API in real implementation
-                    // Example structure shown for reference
-                  ]}
-                  cases={[case_]}
-                  onUpdate={async (id, data) => {
-                    console.log("Update homework:", id, data);
-                    // API call would go here
-                  }}
-                  onDelete={async (id) => {
-                    console.log("Delete homework:", id);
-                    // API call would go here
-                  }}
-                />
+
+              {/* Case Information Section */}
+              <div className="p-3 border-b border-border space-y-2">
+                <h4 className="font-semibold text-sm">Case Information</h4>
+                <div className="space-y-1 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">ID:</p>
+                    <p className="font-medium text-blue-600 dark:text-blue-400">{case_.category || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Class:</p>
+                    <p className="font-medium">COS40005</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Due Date:</p>
+                    <p className="font-medium">{hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Classes Saved:</p>
+                    <p className="font-medium">0/0</p>
+                  </div>
+                </div>
               </div>
+
+              {/* Description Section */}
+              <div className="p-3 border-b border-border space-y-2 flex-1 overflow-y-auto">
+                <h4 className="font-semibold text-sm">Description</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {case_.description || "No description available."}
+                </p>
+              </div>
+              
+              {/* Case Editor Modal Dialog */}
+              <Dialog open={showCaseEditor} onOpenChange={setShowCaseEditor}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <div className="flex items-center justify-between w-full">
+                      <DialogTitle>Edit Case</DialogTitle>
+                    </div>
+                  </DialogHeader>
+
+                  <div className="space-y-3">
+                    {/* Case Information Section */}
+                    <div className="space-y-2 pb-3 border-b border-border">
+                      <h4 className="text-xs font-medium text-muted-foreground">CASE DETAILS</h4>
+                      <div>
+                        <label htmlFor="edit-case-title" className="block text-xs font-medium mb-1">Case Title</label>
+                        <input
+                          id="edit-case-title"
+                          type="text"
+                          value={editCaseTitle}
+                          onChange={(e) => setEditCaseTitle(e.target.value)}
+                          placeholder="Case title"
+                          title="Case Title"
+                          className="w-full px-3 py-1.5 text-sm border border-border rounded-md bg-background"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="edit-case-desc" className="block text-xs font-medium mb-1">Description</label>
+                        <textarea
+                          id="edit-case-desc"
+                          value={editCaseDesc}
+                          onChange={(e) => setEditCaseDesc(e.target.value)}
+                          placeholder="Case description"
+                          title="Case Description"
+                          className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
+                          rows={2}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="edit-case-category" className="block text-xs font-medium mb-1">Category</label>
+                        <input
+                          id="edit-case-category"
+                          type="text"
+                          value={editCaseCategory}
+                          onChange={(e) => setEditCaseCategory(e.target.value)}
+                          placeholder="Case category"
+                          title="Case Category"
+                          className="w-full px-3 py-1.5 text-sm border border-border rounded-md bg-background"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Suggested Focus Tags Section */}
+                    <div className="space-y-2 pb-3 border-b border-border">
+                      <h4 className="text-xs font-medium text-muted-foreground">SUGGESTED FOCUS</h4>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          {caseTags.map((tag, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setCaseTags(caseTags.map((t, i) => 
+                                  i === idx ? { ...t, highlighted: !t.highlighted } : t
+                                ));
+                              }}
+                              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                                tag.highlighted
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 ring-1 ring-blue-300'
+                                  : 'bg-muted text-muted-foreground opacity-50'
+                              } hover:ring-1 hover:ring-blue-300 cursor-pointer`}
+                              title={`Click to ${tag.highlighted ? 'remove highlight' : 'highlight'}`}
+                            >
+                              {tag.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newTagInput}
+                            onChange={(e) => setNewTagInput(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter' && newTagInput.trim()) {
+                                setCaseTags([...caseTags, { label: newTagInput.trim(), highlighted: true }]);
+                                setNewTagInput("");
+                              }
+                            }}
+                            placeholder="Add new focus area (press Enter)"
+                            className="flex-1 px-3 py-1.5 text-xs border border-border rounded-md bg-background"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (newTagInput.trim()) {
+                                setCaseTags([...caseTags, { label: newTagInput.trim(), highlighted: true }]);
+                                setNewTagInput("");
+                              }
+                            }}
+                            className="px-2"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Homework Assignment Section */}
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-medium text-muted-foreground">HOMEWORK ASSIGNMENT</h4>
+                      
+                      {hw ? (
+                        <div className="space-y-2 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-2 rounded-lg">
+                          <div>
+                            <label htmlFor="hw-description" className="block text-xs font-medium mb-1">Description</label>
+                            <textarea
+                              id="hw-description"
+                              value={hw.description}
+                              title="Homework Description"
+                              readOnly
+                              className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background opacity-75"
+                              rows={2}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label htmlFor="hw-points" className="block text-xs font-medium mb-1">Total Points</label>
+                              <input
+                                id="hw-points"
+                                type="number"
+                                value={hw.points}
+                                title="Total Points"
+                                readOnly
+                                className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background opacity-75"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor="hw-duedate" className="block text-xs font-medium mb-1">Due Date</label>
+                              <input
+                                id="hw-duedate"
+                                type="date"
+                                value={new Date(hw.dueAt).toISOString().split('T')[0]}
+                                title="Due Date"
+                                readOnly
+                                className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background opacity-75"
+                              />
+                            </div>
+                          </div>
+                          
+                          
+                        </div>
+                      ) : (
+                        <div className="bg-muted p-2 rounded-lg border border-border">
+                          <p className="text-xs text-muted-foreground">
+                            No homework assignment created yet. Create one in the instructor dashboard.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-2\">
+                      
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          toast({ description: "Case changes saved" });
+                          setShowCaseEditor(false);
+                        }}
+                      >
+                        <Save className="h-3 w-3 mr-1" />
+                        Save Changes
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </aside>
           )}
 
@@ -539,7 +752,7 @@ export default function AnnotationView() {
           {user?.role === 'student' && !showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && !showAssignmentDetails && (
             <aside className="w-80 bg-card border-l border-border flex flex-col overflow-hidden">
               {/* Dropdown Tab Selector */}
-              <div className="border-b border-border p-3">
+              <div className="border-b border-border p-2">
                 <div className="relative">
                   <Button
                     variant="outline"
@@ -562,7 +775,7 @@ export default function AnnotationView() {
                   {showTabDropdown && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
                       <button
-                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "annotate" ? "bg-primary/10" : ""
                         }`}
                         onClick={() => {
@@ -574,7 +787,7 @@ export default function AnnotationView() {
                         <span>Annotate</span>
                       </button>
                       <button
-                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "collaborate" ? "bg-primary/10" : ""
                         }`}
                         onClick={() => {
@@ -586,7 +799,7 @@ export default function AnnotationView() {
                         <span>Collaborate</span>
                       </button>
                       <button
-                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "ai-assistant" ? "bg-primary/10" : ""
                         }`}
                         onClick={() => {
@@ -598,7 +811,7 @@ export default function AnnotationView() {
                         <span>AI Assistant</span>
                       </button>
                       <button
-                        className={`w-full text-left px-4 py-3 flex items-center gap-2 hover:bg-muted transition-colors ${
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "homework" ? "bg-primary/10" : ""
                         }`}
                         onClick={() => {
@@ -616,16 +829,16 @@ export default function AnnotationView() {
 
               {/* Tab Content - Annotate */}
               {activeSidebarTab === "annotate" && (
-                <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                  <div className="border rounded-lg p-3 bg-muted/50">
-                    <h4 className="font-semibold text-sm mb-2">Current Annotations</h4>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  <div className="border rounded-lg p-2 bg-muted/50">
+                    <h4 className="font-semibold text-xs mb-1">Current Annotations</h4>
                     <p className="text-xs text-muted-foreground">
                       {annotation.annotations.length} annotation{annotation.annotations.length !== 1 ? 's' : ''} created
                     </p>
                   </div>
                   {annotation.selectedAnnotationIds.length > 0 && (
-                    <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950">
-                      <h4 className="font-semibold text-sm mb-2">Properties</h4>
+                    <div className="border rounded-lg p-2 bg-blue-50 dark:bg-blue-950">
+                      <h4 className="font-semibold text-xs mb-1">Properties</h4>
                       <div className="text-xs text-muted-foreground">
                         {annotation.selectedAnnotationIds.length} selected
                       </div>
@@ -642,7 +855,7 @@ export default function AnnotationView() {
 
               {/* Tab Content - Collaborate */}
               {activeSidebarTab === "collaborate" && (
-                <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   <VersionList
                     title="My versions"
                     items={mine}
@@ -659,7 +872,7 @@ export default function AnnotationView() {
                   />
 
                   {/* Replace Collaboration Chat with Create Discussion button for this case */}
-                  <div className="flex items-center justify-center py-4">
+                  <div className="flex items-center justify-center py-2">
                     <Button
                       size="sm"
                       variant="outline"
@@ -719,12 +932,12 @@ export default function AnnotationView() {
 
               {/* Tab Content - Assignment Requirements */}
               {activeSidebarTab === "homework" && (
-                <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   {hw && (
-                    <div className="border rounded-lg p-4 bg-card space-y-4">
+                    <div className="border rounded-lg p-2 bg-card space-y-2">
                       <div>
-                        <h3 className="font-semibold text-sm mb-2">Assignment Details</h3>
-                        <p className="text-xs text-muted-foreground mb-3">{hw.description}</p>
+                        <h3 className="font-semibold text-xs mb-1">Assignment Details</h3>
+                        <p className="text-xs text-muted-foreground mb-2">{hw.description}</p>
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-xs font-medium">Total Points</span>
                           <Badge variant="outline" className="text-lg font-bold">{hw.points}</Badge>
