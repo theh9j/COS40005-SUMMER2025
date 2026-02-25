@@ -2,154 +2,164 @@ from fastapi import APIRouter, HTTPException
 from bson import ObjectId
 from db.connection import users_collection, classrooms_collection
 from datetime import datetime
-from typing import List
 
 router = APIRouter(prefix="/api/classroom", tags=["Classroom"])
 
 
-# Create a new classroom
+# ===============================
+# Create Classroom (with year)
+# ===============================
+
 @router.post("/create")
 async def create_classroom(data: dict):
-    """Create a new classroom"""
-    classroom_name = data.get("name")
-    
-    if not classroom_name:
-        raise HTTPException(status_code=400, detail="Classroom name is required")
-    
-    # ensure classroom doesn't already exist
-    existing = await classrooms_collection.find_one({"name": classroom_name})
+    name = data.get("name")
+    year = data.get("year")
+
+    if not name or not year:
+        raise HTTPException(status_code=400, detail="name and year are required")
+
+    # ensure (name + year) unique
+    existing = await classrooms_collection.find_one({
+        "name": name,
+        "year": year
+    })
+
     if existing:
-        raise HTTPException(status_code=400, detail="Classroom already exists")
+        raise HTTPException(status_code=400, detail="Classroom already exists for this year")
 
     classroom = {
-        "name": classroom_name,
-        "created_at": datetime.now(),
-        "members": [],
+        "name": name,
+        "year": year,
+        "created_at": datetime.utcnow(),
+        "members": []
     }
 
     result = await classrooms_collection.insert_one(classroom)
-    return {"message": "Classroom created", "classroom": classroom_name, "id": str(result.inserted_id)}
+
+    return {
+        "message": "Classroom created",
+        "id": str(result.inserted_id),
+        "display": f"Class {name} ({year})"
+    }
 
 
-# Add student to classroom
+# ===============================
+# Add Student To Classroom
+# ===============================
+
 @router.post("/add-student")
 async def add_student_to_classroom(data: dict):
-    """Add a student to a classroom"""
     student_id = data.get("student_id")
-    classroom_name = data.get("classroom_name")
-    
-    if not student_id or not classroom_name:
-        raise HTTPException(status_code=400, detail="Student ID and classroom name are required")
-    
-    try:
-        # verify classroom exists
-        cls = await classrooms_collection.find_one({"name": classroom_name})
-        if not cls:
-            raise HTTPException(status_code=404, detail="Classroom not found")
+    classroom_id = data.get("classroom_id")
 
-        result = await users_collection.update_one(
-            {"_id": ObjectId(student_id), "role": "student"},
-            {"$set": {"classroom": classroom_name}}
-        )
+    if not student_id or not classroom_id:
+        raise HTTPException(status_code=400, detail="student_id and classroom_id required")
 
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Student not found")
+    student_obj = ObjectId(student_id)
+    classroom_obj = ObjectId(classroom_id)
 
-        # add to classroom members (avoid duplicates)
-        await classrooms_collection.update_one(
-            {"_id": cls["_id"]},
-            {"$addToSet": {"members": ObjectId(student_id)}}
-        )
+    classroom = await classrooms_collection.find_one({"_id": classroom_obj})
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Classroom not found")
 
-        return {
-            "message": f"Student added to {classroom_name}",
-            "student_id": student_id,
-            "classroom": classroom_name
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    student = await users_collection.find_one({"_id": student_obj, "role": "student"})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    await users_collection.update_one(
+        {"_id": student_obj},
+        {"$addToSet": {"classrooms": classroom_obj}}
+    )
+
+    await classrooms_collection.update_one(
+        {"_id": classroom_obj},
+        {"$addToSet": {"members": student_obj}}
+    )
+
+    return {
+        "message": "Student added",
+        "classroom": f"Class {classroom['name']} ({classroom['year']})"
+    }
 
 
-# Get all classrooms (unique classroom names from users)
+# ===============================
+# Get All Classrooms
+# ===============================
+
 @router.get("/all")
 async def get_all_classrooms():
-    """Get all classrooms"""
-    try:
-        classrooms_cursor = classrooms_collection.find({})
-        out = []
-        async for cls in classrooms_cursor:
-            out.append({"id": str(cls["_id"]), "name": cls.get("name"), "members": [str(m) for m in cls.get("members", [])]})
-        return {"classrooms": out}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    cursor = classrooms_collection.find({})
+    result = []
+
+    async for cls in cursor:
+        result.append({
+            "id": str(cls["_id"]),
+            "name": cls.get("name"),
+            "year": cls.get("year"),
+            "display": f"Class {cls.get('name')} ({cls.get('year')})",
+            "members_count": len(cls.get("members", []))
+        })
+
+    return {"classrooms": result}
 
 
-# Get students in a classroom
-@router.get("/students/{classroom_name}")
-async def get_classroom_students(classroom_name: str):
-    """Get all students in a classroom"""
-    try:
-        users_cursor = users_collection.find(
-            {"classroom": classroom_name, "role": "student"}
-        )
-        students = []
+# ===============================
+# Get Students In Classroom
+# ===============================
 
-        async for user in users_cursor:
-            students.append({
-                "id": str(user["_id"]),
-                "firstName": user.get("firstName", ""),
-                "lastName": user.get("lastName", ""),
-                "email": user.get("email", ""),
-            })
+@router.get("/students/{classroom_id}")
+async def get_classroom_students(classroom_id: str):
+    classroom = await classrooms_collection.find_one(
+        {"_id": ObjectId(classroom_id)}
+    )
 
-        return {"classroom": classroom_name, "students": students}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    member_ids = classroom.get("members", [])
+
+    students = []
+    cursor = users_collection.find({
+        "_id": {"$in": member_ids}
+    })
+
+    async for user in cursor:
+        students.append({
+            "id": str(user["_id"]),
+            "firstName": user.get("firstName"),
+            "lastName": user.get("lastName"),
+            "email": user.get("email"),
+        })
+
+    return {
+        "classroom": f"Class {classroom['name']} ({classroom['year']})",
+        "students": students
+    }
 
 
-# Remove student from classroom
+# ===============================
+# Remove Student From Classroom
+# ===============================
+
 @router.post("/remove-student")
 async def remove_student_from_classroom(data: dict):
-    """Remove a student from classroom (set back to Unassigned)"""
     student_id = data.get("student_id")
-    
-    if not student_id:
-        raise HTTPException(status_code=400, detail="Student ID is required")
-    
-    try:
-        result = await users_collection.update_one(
-            {"_id": ObjectId(student_id)},
-            {"$set": {"classroom": "Unassigned"}}
-        )
-        
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Student not found")
-        
-        return {
-            "message": "Student removed from classroom",
-            "student_id": student_id,
-            "classroom": "Unassigned"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    classroom_id = data.get("classroom_id")
 
+    if not student_id or not classroom_id:
+        raise HTTPException(status_code=400, detail="student_id and classroom_id required")
 
-# Get all students (role=student)
-@router.get("/students-all")
-async def get_all_students():
-    try:
-        users_cursor = users_collection.find({"role": "student"})
-        students = []
-        async for user in users_cursor:
-            students.append({
-                "id": str(user["_id"]),
-                "firstName": user.get("firstName", ""),
-                "lastName": user.get("lastName", ""),
-                "email": user.get("email", ""),
-                "classroom": user.get("classroom", "Unassigned"),
-            })
-        return {"students": students}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    student_obj = ObjectId(student_id)
+    classroom_obj = ObjectId(classroom_id)
+
+    await users_collection.update_one(
+        {"_id": student_obj},
+        {"$pull": {"classrooms": classroom_obj}}
+    )
+
+    await classrooms_collection.update_one(
+        {"_id": classroom_obj},
+        {"$pull": {"members": student_obj}}
+    )
+
+    return {"message": "Student removed"}

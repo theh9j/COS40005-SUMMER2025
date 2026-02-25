@@ -58,34 +58,18 @@ export default function SettingsPage() {
     }
 
     setSaving(true);
+
     try {
-      if (avatarFile) {
-        const formData = new FormData();
-        formData.append("firstName", firstName);
-        formData.append("lastName", lastName);
-        formData.append("dob", dob);
-        formData.append("avatar", avatarFile);
-
-        const res = await fetch(
-          `http://127.0.0.1:8000/api/user/update?token=${user?.token}`,
-          {
-            method: "PATCH",
-            body: formData,
-          }
-        );
-
-        if (!res.ok) throw new Error();
-
-        const { token: newToken } = await res.json();
-        localStorage.setItem("session_token", newToken);
-      } else {
-        await updateUser({ firstName, lastName, dob });
-      }
+      await updateUser(
+        { firstName, lastName, dob },
+        avatarFile || undefined
+      );
 
       toast({
         title: t("profileUpdated"),
         description: t("yourInfoSaved"),
       });
+
     } catch {
       toast({
         variant: "destructive",
@@ -117,8 +101,11 @@ export default function SettingsPage() {
               <div className="relative">
                 <img
                   src={
-                    avatarPreview ||
-                    "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png"
+                    avatarPreview
+                      ? avatarPreview.startsWith("blob:")
+                        ? avatarPreview
+                        : `http://127.0.0.1:8000/${avatarPreview}`
+                      : "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png"
                   }
                   className="w-20 h-20 rounded-full border object-cover"
                 />
