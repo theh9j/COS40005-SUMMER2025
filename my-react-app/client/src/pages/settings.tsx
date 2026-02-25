@@ -27,7 +27,9 @@ export default function SettingsPage() {
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
   const [dob, setDob] = useState(user?.dob || "");
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(
+  user?.profile_photo || null
+);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -36,7 +38,7 @@ export default function SettingsPage() {
       setFirstName(user.firstName || "");
       setLastName(user.lastName || "");
       setDob(user.dob || "");
-      setAvatarPreview(user.avatar || null);
+      setAvatarPreview(user.profile_photo || null);
     }
   }, [user]);
 
@@ -104,7 +106,9 @@ export default function SettingsPage() {
                     avatarPreview
                       ? avatarPreview.startsWith("blob:")
                         ? avatarPreview
-                        : `http://127.0.0.1:8000/${avatarPreview}`
+                        : `http://127.0.0.1:8000${avatarPreview.startsWith("/api")
+                            ? avatarPreview
+                            : `/api/user/profile-photo/${avatarPreview}`}`
                       : "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png"
                   }
                   className="w-20 h-20 rounded-full border object-cover"

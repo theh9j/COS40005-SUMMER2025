@@ -16,7 +16,8 @@ router = APIRouter(prefix="/api/user", tags=["User"])
 # Constants
 # ===============================
 
-UPLOAD_ROOT = "uploads"
+BASE_DIR = Path(__file__).resolve().parent.parent
+UPLOAD_ROOT = BASE_DIR / "uploads"
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
 MAX_FILE_SIZE_MB = 5
 
@@ -160,9 +161,10 @@ async def upload_profile_photo(token: str, file: UploadFile = File(...)):
 
 @router.get("/profile-photo/{path:path}")
 async def serve_profile_photo(path: str):
-    file_path = os.path.join(UPLOAD_ROOT, path)
+    file_path = UPLOAD_ROOT / path
 
-    if not os.path.exists(file_path):
+    if not file_path.exists():
+        print("DEBUG PATH:", file_path)  # optional debug
         raise HTTPException(status_code=404, detail="Image not found")
 
-    return FileResponse(file_path)
+    return FileResponse(str(file_path))

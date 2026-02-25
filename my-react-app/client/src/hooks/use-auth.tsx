@@ -10,10 +10,9 @@ interface AuthUser {
   email?: string;
   role?: "student" | "instructor" | "admin";
   token?: string;
-  password?: string;
   approval_status?: string;
-  avatar?: string;
-  dob?: string;  
+  profile_photo?: string;  // ✅ change to this
+  dob?: string;
 }
 
 interface AuthContextType {
