@@ -147,6 +147,7 @@ async def get_all_students():
                 "id": str(user["_id"]),
                 "firstName": user.get("firstName", ""),
                 "lastName": user.get("lastName", ""),
+                "email": user.get("email", ""),
                 "classroom": user.get("classroom", "Unassigned"),
             })
         return {"students": students}

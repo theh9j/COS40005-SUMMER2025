@@ -1234,8 +1234,10 @@ export default function InstructorDashboard() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-semibold truncate">{fullName}</div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              {s.email ? s.email : "No email"} • Class: {s.classroom ?? "Unassigned"} • ID: {s.id}
+                            <div className="text-xs text-muted-foreground">
+                              <div className="truncate">Email: {s.email ? s.email : "No email"}</div>
+                              <div className="truncate">Class: {s.classroom ?? "Unassigned"}</div>
+                              <div className="truncate">ID: {s.id}</div>
                             </div>
                           </div>
                         </div>
