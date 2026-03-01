@@ -8,14 +8,12 @@ import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useI18n } from "@/i18n";
 import { useToast } from "@/hooks/use-toast";
 import { mockAtRiskStudents, mockCases } from "@/lib/mock-data";
-import UploadModal from "@/components/upload-modal";
 import {
   Presentation,
   Gauge,
   GraduationCap,
   ClipboardCheck,
   FolderOpen,
-  Upload as UploadIcon,
   AlertTriangle,
   TrendingDown,
   Mail,
@@ -166,8 +164,6 @@ export default function InstructorDashboard() {
   useHeartbeat(user?.user_id);
   const { toast } = useToast();
 
-  // ==== UI state ====
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const [activeView, setActiveView] = useState<InstructorView>(() => {
@@ -1048,13 +1044,7 @@ export default function InstructorDashboard() {
                     Refresh
                   </Button>
 
-                  <Button
-                    onClick={() => setShowUploadModal(true)}
-                    className="bg-primary text-primary-foreground hover:opacity-90"
-                  >
-                    <UploadIcon className="h-4 w-4 mr-2" />
-                    Upload Case
-                  </Button>
+                  {/* Upload removed for case management */}
                 </div>
               </div>
 
@@ -1156,7 +1146,7 @@ export default function InstructorDashboard() {
                 )}
               </div>
 
-              <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
+              {/* Upload modal removed for instructors in case management */}
             </div>
           )}
 
