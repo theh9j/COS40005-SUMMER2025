@@ -27,7 +27,9 @@ export default function SettingsPage() {
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
   const [dob, setDob] = useState(user?.dob || "");
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(
+  user?.profile_photo || null
+);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -36,7 +38,7 @@ export default function SettingsPage() {
       setFirstName(user.firstName || "");
       setLastName(user.lastName || "");
       setDob(user.dob || "");
-      setAvatarPreview(user.avatar || null);
+      setAvatarPreview(user.profile_photo || null);
     }
   }, [user]);
 
@@ -58,34 +60,18 @@ export default function SettingsPage() {
     }
 
     setSaving(true);
+
     try {
-      if (avatarFile) {
-        const formData = new FormData();
-        formData.append("firstName", firstName);
-        formData.append("lastName", lastName);
-        formData.append("dob", dob);
-        formData.append("avatar", avatarFile);
-
-        const res = await fetch(
-          `http://127.0.0.1:8000/api/user/update?token=${user?.token}`,
-          {
-            method: "PATCH",
-            body: formData,
-          }
-        );
-
-        if (!res.ok) throw new Error();
-
-        const { token: newToken } = await res.json();
-        localStorage.setItem("session_token", newToken);
-      } else {
-        await updateUser({ firstName, lastName, dob });
-      }
+      await updateUser(
+        { firstName, lastName, dob },
+        avatarFile || undefined
+      );
 
       toast({
         title: t("profileUpdated"),
         description: t("yourInfoSaved"),
       });
+
     } catch {
       toast({
         variant: "destructive",
@@ -114,24 +100,29 @@ export default function SettingsPage() {
           <CardContent className="p-6 space-y-6">
             {/* Profile Picture */}
             <div className="flex items-center space-x-4">
-              <div className="relative">
+              <label className="relative cursor-pointer">
                 <img
                   src={
-                    avatarPreview ||
-                    "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png"
+                    avatarPreview
+                      ? avatarPreview.startsWith("blob:")
+                        ? avatarPreview
+                        : `http://127.0.0.1:8000${avatarPreview.startsWith("/api")
+                            ? avatarPreview
+                            : `/api/user/profile-photo/${avatarPreview}`}`
+                      : "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png"
                   }
                   className="w-20 h-20 rounded-full border object-cover"
                 />
-                <label className="absolute bottom-0 right-0 bg-primary text-white p-1 rounded-full cursor-pointer">
+                <div className="absolute bottom-0 right-0 bg-primary text-white p-1 rounded-full">
                   <Camera className="w-4 h-4" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarChange}
-                  />
-                </label>
-              </div>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+              </label>
               <p className="text-sm text-muted-foreground">
                 {t("uploadNewProfilePicture")}
               </p>

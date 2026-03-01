@@ -12,7 +12,7 @@ class User(BaseModel):
     role: str
     suspension: bool = "0"
     last_active: datetime | None = None
-    classroom: str = "Unassigned"
+    classrooms: List[str] = []
 
 class Approval(BaseModel):
     id: str
