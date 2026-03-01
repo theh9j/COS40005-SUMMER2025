@@ -3,6 +3,8 @@ import { useAnnotation } from "@/hooks/use-annotation";
 import { Annotation } from "@shared/schema";
 import InlineTextEditor from "./inline-text-editor";
 import { ZoomIn, ZoomOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Minus, Plus, Maximize2 } from "lucide-react";
 
 interface AnnotationCanvasProps {
   // imageUrl may be undefined in some callers; accept optional string
