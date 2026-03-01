@@ -28,6 +28,10 @@ import { useAnnotation } from "@/hooks/use-annotation";
 import RubricPanel from "@/components/grading/RubricPanel";
 import HomeworkPrepPanel from "@/components/grading/HomeworkPrepPanel";
 
+// ✅ added
+import AnnotationToolbar from "@/components/annotation-toolbar";
+import AnnotationInspector from "@/components/grading/AnnotationInspector";
+
 type InstructorView =
   | "overview"
   | "students"
@@ -261,7 +265,6 @@ export default function InstructorDashboard() {
       setClassroomStudents([]);
     }
   }, [selectedClassroomId]);
-
 
   const visibleStudents = useMemo(() => {
     const q = studentSearch.trim().toLowerCase();
@@ -580,7 +583,13 @@ export default function InstructorDashboard() {
   }, []);
 
   // ==== API actions ====
-  const saveDraft = async (subId: string, score: number) => {
+
+  // ✅ UPDATED: saveDraft now supports rubric + updates updatedAt + keeps rubric in state
+  const saveDraft = async (
+    subId: string,
+    score: number,
+    rubric: { id: string; points: number; comment?: string }[] = []
+  ) => {
     setIsSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/submissions/${encodeURIComponent(subId)}/grade`, {
@@ -588,7 +597,7 @@ export default function InstructorDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           score,
-          rubric: [],
+          rubric, // ✅ keep rubric (not [])
           feedback: draftFeedback ?? "",
           published: false,
         }),
@@ -601,6 +610,8 @@ export default function InstructorDashboard() {
       }
 
       const data = await res.json();
+      const nowIso = new Date().toISOString();
+
       setSubmissions((prev) =>
         prev.map((s) =>
           s.id === subId
@@ -609,8 +620,10 @@ export default function InstructorDashboard() {
                 score: data.score ?? score,
                 status: "graded",
                 feedback: data.feedback ?? draftFeedback,
+                rubric: data.rubric ?? rubric,
                 published: false,
                 publishedAt: undefined,
+                updatedAt: data.updated_at ?? nowIso,
               }
             : s
         )
@@ -893,7 +906,8 @@ export default function InstructorDashboard() {
                         className="justify-start"
                         onClick={() => onPick(s.id)}
                       >
-                        {s.studentId} — {s.caseTitle} {s.score != null ? `(Score ${s.score})` : `(${s.status})`}
+                        {s.studentId} — {s.caseTitle}{" "}
+                        {s.score != null ? `(Score ${s.score})` : `(${s.status})`}
                         {s.published ? " • Published" : ""}
                       </Button>
                     ))}
@@ -907,22 +921,46 @@ export default function InstructorDashboard() {
 
               {mode === "one" && selected && (
                 <div className="grid md:grid-cols-3 gap-4">
+                  {/* ✅ upgraded left workspace (toolbar + inspector) */}
                   <Card className="md:col-span-2">
-                    <CardContent className="p-4 space-y-2">
-                      <div className="text-sm text-muted-foreground">
-                        {selected.studentId} • {selected.caseTitle}
+                    <CardContent className="p-0">
+                      <div className="p-4 border-b">
+                        <div className="text-sm text-muted-foreground">
+                          {selected.studentId} • {selected.caseTitle}
+                        </div>
+                        <div className="text-[12px] text-muted-foreground mt-1">
+                          Use toolbar to annotate • wheel/controls to zoom • select shapes to manage in list
+                        </div>
                       </div>
 
-                      <AnnotationCanvas
-                        imageUrl={selectedCase?.imageUrl ?? ""}
-                        annotation={selectedAnn}
-                        peerAnnotations={selectedAnn.peerAnnotations}
-                      />
+                      <div className="px-4 pt-3">
+                        <AnnotationToolbar annotation={selectedAnn} />
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 p-4">
+                        <div className="min-h-[560px]">
+                          <AnnotationCanvas
+                            imageUrl={selectedCase?.imageUrl ?? ""}
+                            annotation={selectedAnn}
+                            peerAnnotations={selectedAnn.peerAnnotations}
+                          />
+                        </div>
+
+                        <div className="space-y-3">
+                          <AnnotationInspector annotation={selectedAnn} />
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 
                   <div className="space-y-3">
-                    <RubricPanel onSubmit={(score: number) => saveDraft(selected.id, score)} />
+                    {/* ✅ RubricPanel now saves rubric + comment */}
+                    <RubricPanel
+                      disabled={isSaving}
+                      initialRubric={selected.rubric ?? []}
+                      lastSavedAt={selected.updatedAt}
+                      onSubmit={(score: number, rubric: any[]) => saveDraft(selected.id, score, rubric)}
+                    />
 
                     <Card>
                       <CardContent className="p-4 space-y-2">
@@ -945,7 +983,8 @@ export default function InstructorDashboard() {
                             variant="secondary"
                             onClick={() => {
                               const scoreToSave = selected.score ?? 0;
-                              saveDraft(selected.id, scoreToSave);
+                              // ✅ don't wipe rubric on save
+                              saveDraft(selected.id, scoreToSave, selected.rubric ?? []);
                             }}
                             disabled={isSaving}
                           >
@@ -1102,8 +1141,6 @@ export default function InstructorDashboard() {
                   <Button variant="outline" onClick={loadCases}>
                     Refresh
                   </Button>
-
-                  {/* Upload removed for case management */}
                 </div>
               </div>
 
@@ -1204,8 +1241,6 @@ export default function InstructorDashboard() {
                   ))
                 )}
               </div>
-
-              {/* Upload modal removed for instructors in case management */}
             </div>
           )}
 
