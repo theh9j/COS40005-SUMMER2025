@@ -100,7 +100,7 @@ export default function SettingsPage() {
           <CardContent className="p-6 space-y-6">
             {/* Profile Picture */}
             <div className="flex items-center space-x-4">
-              <div className="relative">
+              <label className="relative cursor-pointer">
                 <img
                   src={
                     avatarPreview
@@ -113,16 +113,16 @@ export default function SettingsPage() {
                   }
                   className="w-20 h-20 rounded-full border object-cover"
                 />
-                <label className="absolute bottom-0 right-0 bg-primary text-white p-1 rounded-full cursor-pointer">
+                <div className="absolute bottom-0 right-0 bg-primary text-white p-1 rounded-full">
                   <Camera className="w-4 h-4" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarChange}
-                  />
-                </label>
-              </div>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+              </label>
               <p className="text-sm text-muted-foreground">
                 {t("uploadNewProfilePicture")}
               </p>
