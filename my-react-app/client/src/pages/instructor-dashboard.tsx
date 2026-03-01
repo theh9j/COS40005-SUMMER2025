@@ -172,28 +172,46 @@ export default function InstructorDashboard() {
   });
 
   // ==== Class state (used in Class tab) ====
-  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
-  const [newClassName, setNewClassName] = useState("");
+  type Classroom = {
+    id: string;
+    name: string;
+    year: string;
+    display: string;
+    members_count: number;
+  };
 
-  const [classrooms, setClassrooms] = useState<string[]>([]);
-  const [selectedClassroom, setSelectedClassroom] = useState("");
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [showEditClassModal, setShowEditClassModal] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const [newClassYear, setNewClassYear] = useState("");
+  const [editClassData, setEditClassData] = useState<null | Classroom>(null);
+
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string>("");
 
   const [availableStudents, setAvailableStudents] = useState<StudentLite[]>([]);
+  const [classroomStudents, setClassroomStudents] = useState<StudentLite[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
-  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]); // used for adding
   const [isAddingToClass, setIsAddingToClass] = useState(false);
 
-  const loadClassroomsAndStudents = async () => {
+  const loadClassrooms = async () => {
     try {
-      const resC = await fetch(`${API_BASE}/api/classroom/all`);
-      if (resC.ok) {
-        const data = await resC.json();
-        setClassrooms((data.classrooms ?? []).map((c: any) => c.name));
+      const res = await fetch(`${API_BASE}/api/classroom/all`);
+      if (res.ok) {
+        const data = await res.json();
+        setClassrooms(data.classrooms ?? []);
       }
+    } catch (e) {
+      console.error("Failed to load classrooms", e);
+    }
+  };
 
-      const resS = await fetch(`${API_BASE}/api/classroom/students-all`);
-      if (resS.ok) {
-        const d = await resS.json();
+  const loadAvailableStudents = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/classroom/students-all`);
+      if (res.ok) {
+        const d = await res.json();
         setAvailableStudents(
           (d.students ?? []).map((s: any) => ({
             id: s.id,
@@ -205,26 +223,63 @@ export default function InstructorDashboard() {
         );
       }
     } catch (e) {
-      console.error("Failed to load classrooms/students", e);
+      console.error("Failed to load available students", e);
+    }
+  };
+
+  const loadClassroomStudents = async (classroomId: string) => {
+    if (!classroomId) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/classroom/students/${classroomId}`);
+      if (res.ok) {
+        const d = await res.json();
+        setClassroomStudents(
+          (d.students ?? []).map((s: any) => ({
+            id: s.id,
+            firstName: s.firstName,
+            lastName: s.lastName,
+            email: s.email ?? null,
+            classroom: d.classroom,
+          }))
+        );
+      }
+    } catch (e) {
+      console.error("Failed to load classroom students", e);
     }
   };
 
   useEffect(() => {
-    loadClassroomsAndStudents();
+    loadClassrooms();
+    loadAvailableStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (selectedClassroomId) {
+      loadClassroomStudents(selectedClassroomId);
+    } else {
+      setClassroomStudents([]);
+    }
+  }, [selectedClassroomId]);
+
+
   const visibleStudents = useMemo(() => {
     const q = studentSearch.trim().toLowerCase();
-    if (!q) return availableStudents;
+    let list = availableStudents;
+    // when a class is selected, filter out students already in that class (so we only add new ones)
+    if (selectedClassroomId) {
+      const memberIds = new Set(classroomStudents.map((s) => s.id));
+      list = list.filter((s) => !memberIds.has(s.id));
+    }
+    if (!q) return list;
 
-    return availableStudents.filter((s) => {
+    return list.filter((s) => {
       const name = `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim().toLowerCase();
       const email = (s.email ?? "").toLowerCase();
       const id = (s.id ?? "").toLowerCase();
       return name.includes(q) || email.includes(q) || id.includes(q);
     });
-  }, [availableStudents, studentSearch]);
+  }, [availableStudents, studentSearch, selectedClassroomId, classroomStudents]);
 
   const toggleSelectStudent = (sid: string) => {
     setSelectedStudents((prev) =>
@@ -235,7 +290,7 @@ export default function InstructorDashboard() {
   const clearSelection = () => setSelectedStudents([]);
 
   const addSelectedToClass = async () => {
-    if (!selectedClassroom || selectedStudents.length === 0) return;
+    if (!selectedClassroomId || selectedStudents.length === 0) return;
 
     setIsAddingToClass(true);
     try {
@@ -244,17 +299,18 @@ export default function InstructorDashboard() {
           fetch(`${API_BASE}/api/classroom/add-student`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ student_id: sid, classroom_name: selectedClassroom }),
+            body: JSON.stringify({ student_id: sid, classroom_id: selectedClassroomId }),
           })
         )
       );
 
+      const display = classrooms.find((c) => c.id === selectedClassroomId)?.display;
       toast({
-        title: `Added ${selectedStudents.length} student(s) to ${selectedClassroom}`,
+        title: `Added ${selectedStudents.length} student(s) to ${display}`,
       });
       setSelectedStudents([]);
-      // refresh list to keep data up-to-date
-      await loadClassroomsAndStudents();
+      await loadClassroomStudents(selectedClassroomId);
+      await loadAvailableStudents();
     } catch (e) {
       console.error(e);
       toast({
@@ -295,7 +351,10 @@ export default function InstructorDashboard() {
 
   useEffect(() => {
     if (activeView === "cases") loadCases();
-    if (activeView === "class") loadClassroomsAndStudents();
+    if (activeView === "class") {
+      loadClassrooms();
+      loadAvailableStudents();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
@@ -1155,13 +1214,17 @@ export default function InstructorDashboard() {
             <div className="p-6 space-y-6" data-testid="view-class">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold">Class</h2>
-                  <p className="text-muted-foreground">Create classes and add students to a class.</p>
+                  <h2 className="text-2xl font-bold">Classes</h2>
+                  <p className="text-muted-foreground">Create, edit, delete classes. Click a class to manage students.</p>
                 </div>
 
                 <div className="flex gap-2">
                   <Button
-                    onClick={() => setShowCreateClassModal(true)}
+                    onClick={() => {
+                      setShowCreateClassModal(true);
+                      setNewClassName("");
+                      setNewClassYear("");
+                    }}
                     className="bg-green-600 text-white hover:bg-green-700"
                   >
                     Create Class
@@ -1169,105 +1232,216 @@ export default function InstructorDashboard() {
                 </div>
               </div>
 
-              {/* Top control bar */}
-              <Card>
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Select class</label>
-                      <select
-                        id="class-select"
-                        value={selectedClassroom}
-                        onChange={(e) => setSelectedClassroom(e.target.value)}
-                        className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
-                      >
-                        <option value="">Choose a class...</option>
-                        {classrooms.map((cls) => (
-                          <option key={cls} value={cls}>
-                            {cls}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Search student</label>
-                      <Input
-                        placeholder="name / email / id..."
-                        value={studentSearch}
-                        onChange={(e) => setStudentSearch(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="flex justify-end">
-                      <div className="text-sm text-muted-foreground">
-                        Selected: <span className="font-medium">{selectedStudents.length}</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Student grid */}
+              {/* Class list */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {visibleStudents.map((s) => {
-                  const fullName = `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() || "Student";
-                  const initials = getInitials(fullName);
-                  const isSel = selectedStudents.includes(s.id);
-
-                  return (
-                    <Card key={s.id} className="border border-border">
-                      <CardContent className="p-4 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center font-semibold">
-                            {initials}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold truncate">{fullName}</div>
-                            <div className="text-xs text-muted-foreground">
-                              <div className="truncate">Email: {s.email ? s.email : "No email"}</div>
-                              <div className="truncate">Class: {s.classroom ?? "Unassigned"}</div>
-                              <div className="truncate">ID: {s.id}</div>
-                            </div>
+                {classrooms.map((cls) => (
+                  <Card
+                    key={cls.id}
+                    className="border cursor-pointer hover:shadow"
+                    onClick={() => setSelectedClassroomId(cls.id)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-semibold">{cls.display}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {cls.members_count} student{cls.members_count === 1 ? "" : "s"}
                           </div>
                         </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditClassData(cls);
+                              setShowEditClassModal(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const yes = window.confirm(`Delete ${cls.display}?`);
+                              if (!yes) return;
+                              try {
+                                const res = await fetch(`${API_BASE}/api/classroom/${cls.id}`, { method: "DELETE" });
+                                if (!res.ok) throw new Error(await res.text());
+                                await loadClassrooms();
+                                if (selectedClassroomId === cls.id) setSelectedClassroomId("");
+                              } catch (err) {
+                                console.error(err);
+                                toast({ title: "Failed to delete class", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
 
-                        <Button
-                          variant={isSel ? "default" : "outline"}
-                          onClick={() => toggleSelectStudent(s.id)}
-                        >
-                          {isSel ? "Selected" : "Select"}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-
-                {visibleStudents.length === 0 && (
-                  <div className="text-sm text-muted-foreground">No students found.</div>
+                {classrooms.length === 0 && (
+                  <div className="text-sm text-muted-foreground">No classes created yet.</div>
                 )}
               </div>
 
-              {/* Bottom actions */}
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={clearSelection}
-                  disabled={selectedStudents.length === 0}
-                  className="min-w-[140px]"
-                >
-                  Clear selection
-                </Button>
+              {/* Selected class details */}
+              {selectedClassroomId && (
+                <div className="pt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold">
+                      Students in {classrooms.find((c) => c.id === selectedClassroomId)?.display}
+                    </h3>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedClassroomId("")}
+                    >
+                      Back to classes
+                    </Button>
+                  </div>
 
-                <Button
-                  onClick={addSelectedToClass}
-                  disabled={!selectedClassroom || selectedStudents.length === 0 || isAddingToClass}
-                  className="bg-blue-600 text-white hover:bg-blue-700 min-w-[220px]"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  {isAddingToClass ? "Adding..." : "Add selected to class"}
-                </Button>
-              </div>
+                  {/* add students section */}
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Search student</label>
+                          <Input
+                            placeholder="name / email / id..."
+                            value={studentSearch}
+                            onChange={(e) => setStudentSearch(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="flex justify-end">
+                          <div className="text-sm text-muted-foreground">
+                            Selected: <span className="font-medium">{selectedStudents.length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {visibleStudents.map((s) => {
+                      const fullName = `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() || "Student";
+                      const initials = getInitials(fullName);
+                      const isSel = selectedStudents.includes(s.id);
+
+                      return (
+                        <Card key={s.id} className="border border-border">
+                          <CardContent className="p-4 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center font-semibold">
+                                {initials}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold truncate">{fullName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  <div className="truncate">Email: {s.email ? s.email : "No email"}</div>
+                                  <div className="truncate">ID: {s.id}</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <Button
+                              variant={isSel ? "default" : "outline"}
+                              onClick={() => toggleSelectStudent(s.id)}
+                            >
+                              {isSel ? "Selected" : "Select"}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+
+                    {visibleStudents.length === 0 && (
+                      <div className="text-sm text-muted-foreground">No students found.</div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={clearSelection}
+                      disabled={selectedStudents.length === 0}
+                      className="min-w-[140px]"
+                    >
+                      Clear selection
+                    </Button>
+
+                    <Button
+                      onClick={addSelectedToClass}
+                      disabled={
+                        !selectedClassroomId || selectedStudents.length === 0 || isAddingToClass
+                      }
+                      className="bg-blue-600 text-white hover:bg-blue-700 min-w-[220px]"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      {isAddingToClass ? "Adding..." : "Add selected to class"}
+                    </Button>
+                  </div>
+
+                  {/* list current members */}
+                  <div className="pt-4">
+                    <h4 className="font-semibold">Current members</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+                      {classroomStudents.map((s) => {
+                        const fullName = `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() || "Student";
+                        const initials = getInitials(fullName);
+                        return (
+                          <Card key={s.id} className="border border-border">
+                            <CardContent className="p-4 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center font-semibold">
+                                  {initials}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-semibold truncate">{fullName}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    <div className="truncate">Email: {s.email ? s.email : "No email"}</div>
+                                    <div className="truncate">ID: {s.id}</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={async () => {
+                                  try {
+                                    await fetch(`${API_BASE}/api/classroom/remove-student`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ student_id: s.id, classroom_id: selectedClassroomId }),
+                                    });
+                                    await loadClassroomStudents(selectedClassroomId);
+                                    await loadAvailableStudents();
+                                  } catch (err) {
+                                    console.error(err);
+                                    toast({ title: "Failed to remove student", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                      {classroomStudents.length === 0 && (
+                        <div className="text-sm text-muted-foreground">No students in this class.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Create Class Modal */}
               {showCreateClassModal && (
@@ -1284,12 +1458,21 @@ export default function InstructorDashboard() {
                           placeholder="e.g., COS40005, Class A, Period 1..."
                         />
                       </div>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Year</label>
+                        <Input
+                          value={newClassYear}
+                          onChange={(e) => setNewClassYear(e.target.value)}
+                          placeholder="e.g., 2025"
+                        />
+                      </div>
 
                       <div className="flex gap-2 justify-end">
                         <Button
                           onClick={() => {
                             setShowCreateClassModal(false);
                             setNewClassName("");
+                            setNewClassYear("");
                           }}
                           variant="outline"
                         >
@@ -1298,12 +1481,12 @@ export default function InstructorDashboard() {
 
                         <Button
                           onClick={async () => {
-                            if (!newClassName.trim()) return;
+                            if (!newClassName.trim() || !newClassYear.trim()) return;
                             try {
                               const res = await fetch(`${API_BASE}/api/classroom/create`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ name: newClassName.trim() }),
+                                body: JSON.stringify({ name: newClassName.trim(), year: newClassYear.trim() }),
                               });
 
                               if (!res.ok) {
@@ -1311,10 +1494,10 @@ export default function InstructorDashboard() {
                                 throw new Error(err.detail || "Failed to create class");
                               }
 
-                              setClassrooms((prev) => Array.from(new Set([...prev, newClassName.trim()])));
-                              alert(`Class "${newClassName.trim()}" created successfully!`);
+                              await loadClassrooms();
                               setShowCreateClassModal(false);
                               setNewClassName("");
+                              setNewClassYear("");
                             } catch (e: any) {
                               alert(e.message || "Error creating class");
                             }
@@ -1322,6 +1505,81 @@ export default function InstructorDashboard() {
                           className="bg-green-600 text-white hover:bg-green-700"
                         >
                           Create
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Edit Class Modal */}
+              {showEditClassModal && editClassData && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <Card className="w-full max-w-md">
+                    <CardContent className="p-6 space-y-4">
+                      <h3 className="text-lg font-semibold">Edit Class</h3>
+
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Class Name</label>
+                        <Input
+                          value={editClassData.name}
+                          onChange={(e) =>
+                            setEditClassData({ ...editClassData, name: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Year</label>
+                        <Input
+                          value={editClassData.year}
+                          onChange={(e) =>
+                            setEditClassData({ ...editClassData, year: e.target.value })
+                          }
+                        />
+                      </div>
+
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          onClick={() => {
+                            setShowEditClassModal(false);
+                            setEditClassData(null);
+                          }}
+                          variant="outline"
+                        >
+                          Cancel
+                        </Button>
+
+                        <Button
+                          onClick={async () => {
+                            if (!editClassData) return;
+                            try {
+                              const res = await fetch(
+                                `${API_BASE}/api/classroom/update/${editClassData.id}`,
+                                {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    name: editClassData.name.trim(),
+                                    year: editClassData.year.trim(),
+                                  }),
+                                }
+                              );
+
+                              if (!res.ok) {
+                                const err = await res.json().catch(() => ({}));
+                                throw new Error(err.detail || "Failed to update class");
+                              }
+
+                              await loadClassrooms();
+                              setShowEditClassModal(false);
+                              setEditClassData(null);
+                            } catch (e: any) {
+                              alert(e.message || "Error updating class");
+                            }
+                          }}
+                          className="bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          Save
                         </Button>
                       </div>
                     </CardContent>
