@@ -50,7 +50,6 @@ async def startup_event():
             "email": admin_email,
             "password": hash_password("processor123"),
             "role": "admin",
-            "classroom": "Unassigned",
         }
         result = await users_collection.insert_one(admin_user)
         admin_id = result.inserted_id
@@ -75,7 +74,6 @@ async def startup_event():
                 "email": email,
                 "password": hash_password("student123"),
                 "role": "student",
-                "classroom": "Unassigned",
             }
             result = await users_collection.insert_one(student)
             new_user_id = result.inserted_id
@@ -84,11 +82,6 @@ async def startup_event():
             user_storage.mkdir(parents=True, exist_ok=True)
 
         print(f"✅ Added {student_needed} random student accounts")
-
-        # ensure default Unassigned classroom exists
-        existing_class = await classrooms_collection.find_one({"name": "Unassigned"})
-        if not existing_class:
-            await classrooms_collection.insert_one({"name": "Unassigned", "created_at": datetime.now(), "members": []})
 
     instructor_count = await users_collection.count_documents({"role": "instructor"})
     instructor_needed = 6 - instructor_count

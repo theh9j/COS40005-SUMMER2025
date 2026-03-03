@@ -3,7 +3,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { X, ImagePlus } from "lucide-react";
 
 /** ============ Types ============ */
@@ -41,6 +40,7 @@ type PublishPayload = {
   studentIds?: string[];
   instructions?: string;
   autoChecklist?: string[];
+  suggestedFocusTags?: { label: string; highlighted: boolean }[];
   referenceUploads: Upload[]; // optional reference images
   questions: EssayQuestion[];
 
@@ -82,6 +82,12 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
 
   // essay questions only
   const [questions, setQuestions] = useState<EssayQuestion[]>([]);
+
+  // ====== suggested focus tags ======
+  const [homeworkTags, setHomeworkTags] = useState<
+    { label: string; highlighted: boolean }[]
+  >([]);
+  const [newHomeworkTagInput, setNewHomeworkTagInput] = useState("");
 
   const autoChecklist = useMemo(() => {
     const base = [
@@ -178,14 +184,81 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
 
       {/* Suggested focus */}
       <Card>
-        <CardContent className="p-4 space-y-2">
+        <CardContent className="p-4 space-y-3">
           <div className="text-xs font-medium text-muted-foreground">Suggested focus</div>
+          
+          {/* Editable tags */}
           <div className="flex flex-wrap gap-2">
-            {autoChecklist.map((c, i) => (
-              <Badge key={i} variant="secondary">
-                {c}
-              </Badge>
-            ))}
+            {/* Add default suggestions if no custom tags set */}
+            {homeworkTags.length === 0
+              ? autoChecklist.map((c, i) => (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      setHomeworkTags([
+                        ...homeworkTags,
+                        { label: c, highlighted: true },
+                      ]);
+                    }}
+                    className="px-2.5 py-1 text-xs rounded-full cursor-pointer transition border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                  >
+                    {c}
+                  </div>
+                ))
+              : homeworkTags.map((tag, i) => (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      setHomeworkTags((prev) =>
+                        prev.map((t, idx) =>
+                          idx === i ? { ...t, highlighted: !t.highlighted } : t
+                        )
+                      );
+                    }}
+                    className={[
+                      "px-2.5 py-1 text-xs rounded-full cursor-pointer transition border",
+                      tag.highlighted
+                        ? "bg-blue-500 border-blue-500 text-white"
+                        : "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-300",
+                    ].join(" ")}
+                  >
+                    {tag.label}
+                  </div>
+                ))}
+          </div>
+
+          {/* Add new tag */}
+          <div className="flex gap-2 pt-2">
+            <Input
+              placeholder="Add focus area…"
+              value={newHomeworkTagInput}
+              onChange={(e) => setNewHomeworkTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newHomeworkTagInput.trim()) {
+                  setHomeworkTags((prev) => [
+                    ...prev,
+                    { label: newHomeworkTagInput.trim(), highlighted: true },
+                  ]);
+                  setNewHomeworkTagInput("");
+                }
+              }}
+              className="text-xs"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (newHomeworkTagInput.trim()) {
+                  setHomeworkTags((prev) => [
+                    ...prev,
+                    { label: newHomeworkTagInput.trim(), highlighted: true },
+                  ]);
+                  setNewHomeworkTagInput("");
+                }
+              }}
+            >
+              +
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -500,6 +573,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                       : undefined,
                   instructions: instructions || undefined,
                   autoChecklist,
+                  suggestedFocusTags: homeworkTags.length > 0 ? homeworkTags : undefined,
                   referenceUploads,
                   questions,
                   requirementId: requirementId.trim(),

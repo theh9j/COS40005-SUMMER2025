@@ -3,6 +3,8 @@ import { useAnnotation } from "@/hooks/use-annotation";
 import { Annotation } from "@shared/schema";
 import InlineTextEditor from "./inline-text-editor";
 import { ZoomIn, ZoomOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Minus, Plus, Maximize2 } from "lucide-react";
 
 interface AnnotationCanvasProps {
   // imageUrl may be undefined in some callers; accept optional string
@@ -469,6 +471,53 @@ export default function AnnotationCanvas({
           onCancel={cancelTextInput}
         />
       )}
+
+       {/* Floating Zoom Controls */}
+      <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2">
+        <div className="rounded-xl border bg-background/95 backdrop-blur px-2 py-1 flex items-center gap-1 shadow-sm">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={handleZoomOut}
+            title="Zoom out"
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+
+          <div className="text-[12px] text-muted-foreground w-14 text-center select-none">
+            {Math.round(canvasZoom * 100)}%
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={handleZoomIn}
+            title="Zoom in"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={handleResetZoom}
+            title="Reset zoom"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Small hint (only when zoom = 1) */}
+      {canvasZoom === 1 && (
+        <div className="absolute bottom-3 left-3 z-20 text-[11px] text-muted-foreground bg-background/80 border rounded-lg px-2 py-1">
+          Tip: scroll to zoom • shift+click to multi-select
+        </div>
+      )}
+      
     </div>
   );
 }

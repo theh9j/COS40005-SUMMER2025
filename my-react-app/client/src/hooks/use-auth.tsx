@@ -10,9 +10,9 @@ interface AuthUser {
   email?: string;
   role?: "student" | "instructor" | "admin";
   token?: string;
-  password?: string;
   approval_status?: string;
-  avatar?: string;
+  profile_photo?: string;  // ✅ change to this
+  dob?: string;
 }
 
 interface AuthContextType {
@@ -27,7 +27,7 @@ interface AuthContextType {
     role: "student" | "instructor";
   }) => Promise<void>;
   logout: () => void;
-  updateUser: (data: { firstName: string, lastName: string }) => Promise<AuthUser>;
+  updateUser: (data: { firstName: string; lastName: string; dob?: string }) => Promise<AuthUser>;
 }
 
 const SESSION_KEY = "session_token";
@@ -168,11 +168,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
   
-  const updateUser = async (data: { firstName: string, lastName: string }): Promise<AuthUser> => {
+  const updateUser = async (
+    data: { firstName: string; lastName: string; dob?: string },
+    avatarFile?: File
+  ): Promise<AuthUser> => {
+
     if (!user || !user.token) throw new Error("No user or token found");
 
     setIsLoading(true);
+
     try {
+      // 1️⃣ Update text fields
       const response = await fetch(`${API_URL}/update?token=${user.token}`, {
         method: "PATCH",
         headers: {
@@ -187,31 +193,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { token: newToken } = await response.json();
-      if (!newToken) throw new Error("Update failed — missing new token");
+      if (!newToken) throw new Error("Missing new token");
 
-      // Decode the new token to get the updated user data
       let decoded: AuthUser = jwtDecode(newToken);
       decoded.token = newToken;
-      
-      // Re-check approval status if instructor (mirroring login/signup logic)
+
+      // 2️⃣ Upload avatar if provided
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+
+        const photoRes = await fetch(
+          `${API_URL}/upload-profile-photo?token=${newToken}`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+        if (photoRes.ok) {
+          const photoData = await photoRes.json();
+          decoded.avatar = photoData.profile_photo_url;
+        }
+      }
+
+      // 3️⃣ Instructor approval refresh (keep your logic)
       if (decoded.role === "instructor") {
         const res = await fetch(`${API_URL}/approval-status?token=${newToken}`);
         if (res.ok) {
           const statusData = await res.json();
           decoded.approval_status = statusData.approval_status;
-        } else {
-          decoded.approval_status = "pending"; // Default or error state
         }
       }
 
-      // Update local storage and app state
       localStorage.setItem(SESSION_KEY, newToken);
       setUser(decoded);
 
       return decoded;
+
     } catch (error) {
       console.error("Update user error:", error);
-      // Don't nullify user, just throw the error
       throw error;
     } finally {
       setIsLoading(false);
