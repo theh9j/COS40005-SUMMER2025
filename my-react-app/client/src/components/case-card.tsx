@@ -12,9 +12,10 @@ interface CaseCardProps {
   onClick: () => void;
   homework?: { dueAt: string; closed: boolean };
   daysLeft?: number;
+  homeworkType?: "Q&A" | "Annotate";
 }
 
-export default function CaseCard({ case: medicalCase, onClick, homework, daysLeft: daysLeftProp }: CaseCardProps) {
+export default function CaseCard({ case: medicalCase, onClick, homework, daysLeft: daysLeftProp, homeworkType }: CaseCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isCreating, setIsCreating] = React.useState(false);
@@ -30,6 +31,17 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
         return "bg-red-100 text-red-800";
       default:
         return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getHomeworkTypeColor = (type: "Q&A" | "Annotate") => {
+    switch (type) {
+      case "Annotate":
+        return "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200";
+      case "Q&A":
+        return "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200";
+      default:
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -56,7 +68,11 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
               12 annotations
             </span>
           </div>
-
+          {homeworkType && (
+            <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${getHomeworkTypeColor(homeworkType)}`}>
+              {homeworkType}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>

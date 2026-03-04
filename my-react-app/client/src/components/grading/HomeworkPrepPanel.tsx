@@ -28,6 +28,7 @@ type PublishPayload = {
   newCase: {
     title: string;
     description?: string;
+    type?: string;
     // main image for annotation (student)
     imageFile?: File | null;
     // preview URL for UI
@@ -41,6 +42,7 @@ type PublishPayload = {
   instructions?: string;
   autoChecklist?: string[];
   suggestedFocusTags?: { label: string; highlighted: boolean }[];
+  homeworkType?: "Q&A" | "Annotate";
   referenceUploads: Upload[]; // optional reference images
   questions: EssayQuestion[];
 
@@ -58,6 +60,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
   // ====== Create Case fields ======
   const [caseTitle, setCaseTitle] = useState("");
   const [caseDesc, setCaseDesc] = useState("");
+  const [caseType, setCaseType] = useState<string>("Cardiology");
   const [caseImageFile, setCaseImageFile] = useState<File | null>(null);
   const [caseImagePreview, setCaseImagePreview] = useState<string>("");
 
@@ -82,6 +85,9 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
 
   // essay questions only
   const [questions, setQuestions] = useState<EssayQuestion[]>([]);
+
+  // ====== homework type ======
+  const [homeworkType, setHomeworkType] = useState<"Q&A" | "Annotate">("Annotate");
 
   // ====== suggested focus tags ======
   const [homeworkTags, setHomeworkTags] = useState<
@@ -293,6 +299,23 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                   onChange={(e) => setCaseDesc(e.target.value)}
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Case Type (Specialty)</label>
+                <select
+                  className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                  value={caseType}
+                  onChange={(e) => setCaseType(e.target.value)}
+                >
+                  <option value="Neurology">Neurology</option>
+                  <option value="Pulmonology">Pulmonology</option>
+                  <option value="Cardiology">Cardiology</option>
+                  <option value="Gastroenterology">Gastroenterology</option>
+                  <option value="Oncology">Oncology</option>
+                  <option value="Radiology">Radiology</option>
+                  <option value="Orthopedics">Orthopedics</option>
+                </select>
+              </div>
             </div>
 
             {/* Right: square upload - this is the ACTUAL annotation image */}
@@ -437,6 +460,18 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                   />
                 </div>
               )}
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Homework Type</label>
+                <select
+                  className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                  value={homeworkType}
+                  onChange={(e) => setHomeworkType(e.target.value as "Q&A" | "Annotate")}
+                >
+                  <option value="Annotate">Annotate</option>
+                  <option value="Q&A">Q&A</option>
+                </select>
+              </div>
             </CardContent>
           </Card>
 
@@ -561,6 +596,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                   newCase: {
                     title: caseTitle.trim(),
                     description: caseDesc.trim() || undefined,
+                    type: caseType,
                     imageFile: caseImageFile,
                     imagePreviewUrl: caseImagePreview || undefined,
                   },
@@ -574,6 +610,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                   instructions: instructions || undefined,
                   autoChecklist,
                   suggestedFocusTags: homeworkTags.length > 0 ? homeworkTags : undefined,
+                  homeworkType,
                   referenceUploads,
                   questions,
                   requirementId: requirementId.trim(),
