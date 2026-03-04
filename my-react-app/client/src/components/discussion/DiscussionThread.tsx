@@ -55,6 +55,23 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
     }
   }, [initialPost]);
 
+  // when starting a new post, auto-fill with previously used tags if none selected
+  useEffect(() => {
+    if (isCreatingPost && newPostTags.length === 0) {
+      try {
+        const saved = sessionStorage.getItem('lastTags');
+        if (saved) {
+          const arr = JSON.parse(saved);
+          if (Array.isArray(arr)) {
+            setNewPostTags(arr);
+          }
+        }
+      } catch (e) {
+        console.warn('could not restore lastTags', e);
+      }
+    }
+  }, [isCreatingPost]);
+
   useEffect(() => {
     if (initialPost) return;
     try {
@@ -75,6 +92,13 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
 
   const handleCreatePost = async () => {
     if (!newPostTitle || !newPostMessage || !user) return;
+
+    // remember tags for next time (auto-select prev tags)
+    try {
+      sessionStorage.setItem('lastTags', JSON.stringify(newPostTags));
+    } catch (e) {
+      console.warn('could not persist lastTags', e);
+    }
 
     const formData = new FormData();
     formData.append("user_id", user.user_id!);
