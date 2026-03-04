@@ -98,7 +98,7 @@ export default function AIGradingPanel({
               <div>
                 <div className="text-sm font-semibold">AI Grading Assistant</div>
                 <div className="text-[11px] text-muted-foreground">
-                  {result ? `Analyzed • ${result.modelUsed}` : "Analyze student submissions with AI"}
+                  {result ? "Analyzed" : "Analyze student submissions with AI"}
                 </div>
               </div>
             </div>
@@ -416,7 +416,7 @@ export default function AIGradingPanel({
               {/* Metadata */}
               <div className="text-[10px] text-muted-foreground text-center">
                 Generated {new Date(result.generatedAt).toLocaleTimeString()} •{" "}
-                {result.latencyMs}ms • {result.modelUsed}
+                {result.latencyMs}ms
               </div>
             </>
           )}

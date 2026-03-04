@@ -69,7 +69,7 @@ export function useAIGrading() {
       })),
       total: currentResult.totalScore,
       confidence: currentResult.overallConfidence,
-      note: `AI suggested (${currentResult.modelUsed}). Review and adjust.`,
+      note: `AI suggested. Review and adjust.`,
     };
   }, [currentResult]);
 
