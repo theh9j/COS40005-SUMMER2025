@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from bson import ObjectId
 from datetime import datetime
 from typing import Optional
 from pathlib import Path
+import shutil
 
 from db.connection import (
     homeworks_collection,
@@ -146,14 +147,6 @@ async def homework_by_case(
         uploads=uploads,
         questions=questions
     )
-
-from fastapi import UploadFile, File, Query
-from pathlib import Path
-import shutil
-
-HOMEWORK_UPLOAD_ROOT = Path("uploads") / "homeworks"
-HOMEWORK_UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-
 
 @router.post("/upload")
 async def upload_homework_file(
