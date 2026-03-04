@@ -21,7 +21,11 @@ import {
   LineChart,
   Users,
   UserPlus,
+  Upload,
 } from "lucide-react";
+
+import UploadModal from "@/components/upload-modal";
+import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 import { Input } from "@/components/ui/input";
 import AnnotationCanvas from "@/components/annotation-canvas";
@@ -39,6 +43,7 @@ type InstructorView =
   | "grading"
   | "analytics"
   | "cases"
+  | "collaboration"  // forums
   | "class"
   | "settings";
 
@@ -49,6 +54,7 @@ const VALID_TABS: InstructorView[] = [
   "grading",
   "analytics",
   "cases",
+  "collaboration",
   "class",
   "settings",
 ];
@@ -146,6 +152,42 @@ function GroupCompareCard({ submission }: { submission: Submission }) {
 export default function InstructorDashboard() {
   const [onlineCount, setOnlineCount] = useState<number>(0);
 
+  // handle discussion prefill from outside events or query params
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('openDiscussion')) {
+        const raw = sessionStorage.getItem('discussionPrefill');
+        if (raw) {
+          setDiscussionPrefill(JSON.parse(raw));
+          setActiveView('collaboration');
+          params.delete('openDiscussion');
+          const qs = params.toString();
+          const newPath = window.location.pathname + (qs ? `?${qs}` : '');
+          window.history.replaceState({}, '', newPath);
+        }
+      }
+    } catch (err) {
+      console.error('Error reading discussion prefill', err);
+    }
+
+    const handler = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail;
+        const prefill = detail || JSON.parse(sessionStorage.getItem('discussionPrefill') || 'null');
+        if (prefill) {
+          setDiscussionPrefill(prefill);
+          setActiveView('collaboration');
+        }
+      } catch (e) {
+        console.error('discussion-prefill handler error', e);
+      }
+    };
+    window.addEventListener('discussion-prefill', handler as EventListener);
+    return () => window.removeEventListener('discussion-prefill', handler as EventListener);
+  }, []);
+
+  // periodically fetch online user count for header badge
   useEffect(() => {
     async function fetchOnlineUsers() {
       try {
@@ -158,7 +200,6 @@ export default function InstructorDashboard() {
         setOnlineCount(0);
       }
     }
-
     fetchOnlineUsers();
   }, []);
 
@@ -170,6 +211,9 @@ export default function InstructorDashboard() {
   const { toast } = useToast();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [discussionPrefill, setDiscussionPrefill] = useState<null | { title?: string; message?: string; tags?: string[]; caseId?: string }>(null);
 
   const [activeView, setActiveView] = useState<InstructorView>(() => {
     const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
@@ -701,6 +745,7 @@ export default function InstructorDashboard() {
     { id: "grading", label: t("grading"), icon: ClipboardCheck },
     { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
     { id: "cases", label: t("caseManagement"), icon: FolderOpen },
+    { id: "collaboration", label: "Forums", icon: Users },
     { id: "class", label: "Class", icon: Users },
   ];
 
@@ -771,6 +816,7 @@ export default function InstructorDashboard() {
           </div>
         </div>
       </header>
+      <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
 
       <div className="flex">
         {/* Sidebar */}
@@ -1137,6 +1183,10 @@ export default function InstructorDashboard() {
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={loadCases}>
                     Refresh
+                  </Button>
+                  <Button onClick={() => setShowUploadModal(true)} className="bg-primary text-primary-foreground hover:opacity-90" data-testid="button-upload-case">
+                    <Upload className="h-4 w-4 mr-2" />
+                    {t("uploadCase")}
                   </Button>
                 </div>
               </div>
