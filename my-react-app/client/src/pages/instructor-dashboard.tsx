@@ -1303,6 +1303,12 @@ export default function InstructorDashboard() {
             </div>
           )}
 
+          {activeView === "collaboration" && (
+            <div className="p-6" data-testid="view-collaboration">
+              <DiscussionThread initialPost={discussionPrefill || undefined} />
+            </div>
+          )}
+
           {/* CLASS (NEW TAB) */}
           {activeView === "class" && (
             <div className="p-6 space-y-6" data-testid="view-class">
