@@ -173,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     avatarFile?: File
   ): Promise<AuthUser> => {
 
-    if (!user || !user.token) throw new Error("No user or token found");
+    if (!user?.token) throw new Error("No user token found");
 
     setIsLoading(true);
 
@@ -181,9 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 1️⃣ Update text fields
       const response = await fetch(`${API_URL}/update?token=${user.token}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
@@ -192,11 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(errorData.detail || "Failed to update user");
       }
 
-      const { token: newToken } = await response.json();
-      if (!newToken) throw new Error("Missing new token");
-
-      let decoded: AuthUser = jwtDecode(newToken);
-      decoded.token = newToken;
+      let { token: currentToken } = await response.json();
+      if (!currentToken) throw new Error("Missing token after update");
 
       // 2️⃣ Upload avatar if provided
       if (avatarFile) {
@@ -204,36 +199,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         formData.append("file", avatarFile);
 
         const photoRes = await fetch(
-          `${API_URL}/upload-profile-photo?token=${newToken}`,
+          `${API_URL}/upload-profile-photo?token=${currentToken}`,
           {
             method: "POST",
             body: formData,
           }
         );
 
-        if (photoRes.ok) {
-          const photoData = await photoRes.json();
-          decoded.avatar = photoData.profile_photo_url;
+        if (!photoRes.ok) {
+          // don't overwrite the token if upload failed – keep the existing one
+          throw new Error("Avatar upload failed");
+        }
+
+        const photoData = await photoRes.json().catch(() => ({}));
+        if (photoData.token) {
+          currentToken = photoData.token; // 🔥 overwrite with newest token
+        } else {
+          console.warn("[updateUser] upload response did not include token, preserving previous token");
         }
       }
 
-      // 3️⃣ Instructor approval refresh (keep your logic)
-      if (decoded.role === "instructor") {
-        const res = await fetch(`${API_URL}/approval-status?token=${newToken}`);
-        if (res.ok) {
-          const statusData = await res.json();
-          decoded.approval_status = statusData.approval_status;
+      // 3️⃣ Decode final token (ONLY ONCE) and guard against nonsense
+      let finalDecoded: AuthUser;
+      try {
+        finalDecoded = jwtDecode(currentToken) as AuthUser;
+      } catch (err) {
+        console.error("[updateUser] failed to decode token", err);
+        // if decoding fails, fall back to existing user without changing session
+        if (user) {
+          localStorage.setItem(SESSION_KEY, user.token || "");
+          return user;
         }
+        throw new Error("Invalid token returned by server");
       }
 
-      localStorage.setItem(SESSION_KEY, newToken);
-      setUser(decoded);
+      if (!finalDecoded || typeof finalDecoded !== "object") {
+        console.error("[updateUser] jwtDecode returned unexpected value", finalDecoded);
+        if (user) {
+          localStorage.setItem(SESSION_KEY, user.token || "");
+          return user;
+        }
+        throw new Error("Invalid token returned by server");
+      }
 
-      return decoded;
+      // Merge with existing user so we don't drop fields that aren't encoded
+      if (user) {
+        finalDecoded = { ...user, ...finalDecoded };
+      }
 
-    } catch (error) {
-      console.error("Update user error:", error);
-      throw error;
+      // ensure role stays defined
+      if (!finalDecoded.role && user?.role) {
+        finalDecoded.role = user.role;
+      }
+      if (user?.role && finalDecoded.role !== user.role) {
+        console.warn(
+          `[updateUser] role changed from ${user.role} to ${finalDecoded.role}, preserving old value`
+        );
+        finalDecoded.role = user.role;
+      }
+
+      finalDecoded.token = currentToken;
+
+      localStorage.setItem(SESSION_KEY, currentToken);
+      setUser(finalDecoded);
+
+      return finalDecoded;
+
     } finally {
       setIsLoading(false);
     }

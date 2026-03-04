@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import ProfileMenu from "@/components/profile-menu";
+import Avatar from "@/components/Avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,7 +21,11 @@ import {
   LineChart,
   Users,
   UserPlus,
+  Upload,
 } from "lucide-react";
+
+import UploadModal from "@/components/upload-modal";
+import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 import { Input } from "@/components/ui/input";
 import AnnotationCanvas from "@/components/annotation-canvas";
@@ -38,6 +43,7 @@ type InstructorView =
   | "grading"
   | "analytics"
   | "cases"
+  | "collaboration"  // forums
   | "class"
   | "settings";
 
@@ -48,6 +54,7 @@ const VALID_TABS: InstructorView[] = [
   "grading",
   "analytics",
   "cases",
+  "collaboration",
   "class",
   "settings",
 ];
@@ -94,6 +101,8 @@ type CaseCard = {
   description: string;
   imageUrl: string;
   source: "db" | "mock";
+  homeworkType?: "Q&A" | "Annotate";
+  caseType?: string;
   createdAt?: string;
 };
 
@@ -142,9 +151,77 @@ function GroupCompareCard({ submission }: { submission: Submission }) {
   );
 }
 
+function getHomeworkTypeColor(type: "Q&A" | "Annotate" = "Annotate") {
+  switch (type) {
+    case "Annotate":
+      return "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200";
+    case "Q&A":
+      return "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function getCaseTypeColor(caseType?: string) {
+  switch (caseType?.toLowerCase()) {
+    case "neurology":
+      return "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200";
+    case "pulmonology":
+      return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200";
+    case "cardiology":
+      return "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200";
+    case "gastroenterology":
+      return "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200";
+    case "oncology":
+      return "bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200";
+    case "radiology":
+      return "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200";
+    case "orthopedics":
+      return "bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
 export default function InstructorDashboard() {
   const [onlineCount, setOnlineCount] = useState<number>(0);
 
+  // handle discussion prefill from outside events or query params
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('openDiscussion')) {
+        const raw = sessionStorage.getItem('discussionPrefill');
+        if (raw) {
+          setDiscussionPrefill(JSON.parse(raw));
+          setActiveView('collaboration');
+          params.delete('openDiscussion');
+          const qs = params.toString();
+          const newPath = window.location.pathname + (qs ? `?${qs}` : '');
+          window.history.replaceState({}, '', newPath);
+        }
+      }
+    } catch (err) {
+      console.error('Error reading discussion prefill', err);
+    }
+
+    const handler = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail;
+        const prefill = detail || JSON.parse(sessionStorage.getItem('discussionPrefill') || 'null');
+        if (prefill) {
+          setDiscussionPrefill(prefill);
+          setActiveView('collaboration');
+        }
+      } catch (e) {
+        console.error('discussion-prefill handler error', e);
+      }
+    };
+    window.addEventListener('discussion-prefill', handler as EventListener);
+    return () => window.removeEventListener('discussion-prefill', handler as EventListener);
+  }, []);
+
+  // periodically fetch online user count for header badge
   useEffect(() => {
     async function fetchOnlineUsers() {
       try {
@@ -157,7 +234,6 @@ export default function InstructorDashboard() {
         setOnlineCount(0);
       }
     }
-
     fetchOnlineUsers();
   }, []);
 
@@ -169,6 +245,9 @@ export default function InstructorDashboard() {
   const { toast } = useToast();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [discussionPrefill, setDiscussionPrefill] = useState<null | { title?: string; message?: string; tags?: string[]; caseId?: string }>(null);
 
   const [activeView, setActiveView] = useState<InstructorView>(() => {
     const saved = (localStorage.getItem(VIEW_STORAGE_KEY) || "") as InstructorView;
@@ -377,6 +456,7 @@ export default function InstructorDashboard() {
       description: c.description ?? "No description",
       imageUrl: c.imageUrl,
       source: "mock",
+      caseType: c.category,
       createdAt: undefined,
     }));
 
@@ -543,7 +623,9 @@ export default function InstructorDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "instructor")) {
+    const noUser = !user;
+    const wrongRole = user?.role !== undefined && user?.role !== "instructor";
+    if (!isLoading && (noUser || wrongRole)) {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
@@ -700,6 +782,7 @@ export default function InstructorDashboard() {
     { id: "grading", label: t("grading"), icon: ClipboardCheck },
     { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
     { id: "cases", label: t("caseManagement"), icon: FolderOpen },
+    { id: "collaboration", label: "Forums", icon: Users },
     { id: "class", label: "Class", icon: Users },
   ];
 
@@ -741,11 +824,7 @@ export default function InstructorDashboard() {
                 }}
                 className="focus:outline-none"
               >
-                <img
-                  src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
-                  alt="Instructor Avatar"
-                  className="w-8 h-8 rounded-full border-2 border-primary"
-                />
+                <Avatar size={32} className="border-2 border-primary" />
               </button>
 
               <button
@@ -774,6 +853,7 @@ export default function InstructorDashboard() {
           </div>
         </div>
       </header>
+      <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
 
       <div className="flex">
         {/* Sidebar */}
@@ -1141,6 +1221,10 @@ export default function InstructorDashboard() {
                   <Button variant="outline" onClick={loadCases}>
                     Refresh
                   </Button>
+                  <Button onClick={() => setShowUploadModal(true)} className="bg-primary text-primary-foreground hover:opacity-90" data-testid="button-upload-case">
+                    <Upload className="h-4 w-4 mr-2" />
+                    {t("uploadCase")}
+                  </Button>
                 </div>
               </div>
 
@@ -1229,18 +1313,31 @@ export default function InstructorDashboard() {
                       </div>
 
                       <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <h3 className="font-semibold mb-1 truncate">{c.title}</h3>
-                          <span className="text-[10px] px-2 py-1 rounded-full border border-border text-muted-foreground shrink-0">
-                            {c.source === "db" ? "NEW" : "DEMO"}
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <h3 className="font-semibold truncate">{c.title}</h3>
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${getHomeworkTypeColor(c.homeworkType)}`}>
+                            {c.homeworkType || "Annotate"}
                           </span>
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2">{c.description}</p>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{c.description}</p>
+                        {c.caseType && (
+                          <div className="flex items-center gap-1">
+                            <span className={`text-xs px-2 py-1 rounded font-medium ${getCaseTypeColor(c.caseType)}`}>
+                              {c.caseType}
+                            </span>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))
                 )}
               </div>
+            </div>
+          )}
+
+          {activeView === "collaboration" && (
+            <div className="p-6" data-testid="view-collaboration">
+              <DiscussionThread initialPost={discussionPrefill || undefined} />
             </div>
           )}
 

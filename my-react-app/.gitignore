@@ -29,6 +29,7 @@ Thumbs.db
 server/public
 vite.config.ts.*
 *.tar.gz
+server/backend/uploads
 
 # Logs
 logs

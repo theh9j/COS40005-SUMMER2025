@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import ProfileMenu from "@/components/profile-menu";
+import Avatar from "@/components/Avatar";
 import { useI18n } from "@/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,12 @@ const homeworkByCase: Record<string, HomeworkMeta> = {
   "case-1": { dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false },
   "case-2": { dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false },
   "case-3": { dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true },
+};
+
+const homeworkTypeByCase: Record<string, "Q&A" | "Annotate"> = {
+  "case-1": "Annotate",
+  "case-2": "Annotate",
+  "case-3": "Q&A",
 };
 
 // === Trạng thái bài nộp của riêng học sinh 
@@ -128,7 +135,13 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     console.log("Current user in dashboard:", user);
-    if (!isLoading && (!user || user.role !== "student")) {
+    // guard: only redirect if we definitely know the user isn't a student
+    // sometimes the token returned after an update may temporarily omit the
+    // role field; the auth hook fixes that, but we don't want the UI to flip
+    // out if `user.role` is undefined for a moment.
+    const noUser = !user;
+    const wrongRole = user?.role !== undefined && user?.role !== "student";
+    if (!isLoading && (noUser || wrongRole)) {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
@@ -311,11 +324,7 @@ export default function StudentDashboard() {
                 aria-haspopup="menu"
                 aria-expanded={showProfileMenu}
               >
-                <img
-                  src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
-                  alt="Student Avatar"
-                  className="w-8 h-8 rounded-full border-2 border-primary"
-                />
+                <Avatar size={32} className="border-2 border-primary" />
                 <span className="text-sm font-medium" data-testid="text-username">
                   {user.firstName} {user.lastName}
                 </span>
@@ -466,13 +475,13 @@ export default function StudentDashboard() {
                     <div className="space-y-4">
                       <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
                         <div className="flex items-start space-x-3">
-                          <img src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" alt="Dr. Smith" className="w-8 h-8 rounded-full" />
+                          <Avatar src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" size={32} />
                           <div><p className="font-medium text-sm">Dr. Smith</p><p className="text-sm text-muted-foreground">Great work on identifying the lesion. Consider the surrounding tissue changes.</p></div>
                         </div>
                       </div>
                       <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
                         <div className="flex items-start space-x-3">
-                          <img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" alt="Dr. Johnson" className="w-8 h-8 rounded-full" />
+                          <Avatar src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" size={32} />
                           <div><p className="font-medium text-sm">Dr. Johnson</p><p className="text-sm text-muted-foreground">Excellent annotation accuracy. Your diagnostic skills are improving!</p></div>
                         </div>
                       </div>
@@ -566,6 +575,7 @@ export default function StudentDashboard() {
                 {mockCases.map((case_) => {
                   const hw = homeworkByCase[case_.id];
                   const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
+                  const hwType = homeworkTypeByCase[case_.id];
 
                   return (
                     <div key={case_.id} className="space-y-2">
@@ -573,6 +583,7 @@ export default function StudentDashboard() {
                       <CaseCard
                         case={case_}
                         onClick={() => setLocation(`/annotation/${case_.id}`)}
+                        homeworkType={hwType}
                       />
 
                       {/* Meta bar cho Assignment */}

@@ -10,7 +10,7 @@ class User(BaseModel):
     created_at: datetime = "if this is missing, it's probably bugged. Uh oh."
     dob: str = "None"
     role: str
-    suspension: bool = "0"
+    suspension: bool = 0
     last_active: datetime | None = None
     classrooms: List[str] = []
 
@@ -97,7 +97,7 @@ class SubmissionOut(BaseModel):
 
 class GradeRequest(BaseModel):
     score: int
-    rubric: List[dict]
+    rubric: List[Dict[str, Any]]
     feedback: str | None = None
 
 #                      HOMEWORK
@@ -160,7 +160,7 @@ class HomeworkOut(BaseModel):
     homework_id: str
     case_id: str
     status: Literal["active", "closed"]
-    due_at: str
+    due_at: datetime
     assigned: bool
     instructions: Optional[str] = None
     uploads: List[HWUpload] = Field(default_factory=list)

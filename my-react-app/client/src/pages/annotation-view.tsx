@@ -20,7 +20,7 @@ import AIChatAssistant from "@/components/ai-chat-assistant";
 import AIAnnotationSuggestions from "@/components/ai-annotation-suggestions";
 import SubmissionPanel from "@/components/submission-panel";
 import AssignmentRequirements from "@/components/assignment-requirements";
-import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, Info, Lock, LockOpen, Eye as EyeIcon, Edit2, X, Plus } from "lucide-react";
+import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, Info, Lock, LockOpen, Edit2, X, Plus } from "lucide-react";
 
 // Collaborative imports
 import { useVersions } from "@/hooks/use-versions";
@@ -107,6 +107,10 @@ export default function AnnotationView() {
   const [editCaseTitle, setEditCaseTitle] = useState(case_?.title || "");
   const [editCaseDesc, setEditCaseDesc] = useState(case_?.description || "");
   const [editCaseCategory, setEditCaseCategory] = useState(case_?.category || "");
+  const [editCaseImageFile, setEditCaseImageFile] = useState<File | null>(null);
+  const [editCaseImagePreview, setEditCaseImagePreview] = useState<string>("");
+  const [editHomeworkType, setEditHomeworkType] = useState<"Q&A" | "Annotate">("Annotate");
+  const [editCaseClasses, setEditCaseClasses] = useState<string[]>(["COS40005"]);
   const [caseTags, setCaseTags] = useState<Array<{ label: string; highlighted: boolean }>>([
     { label: "Fix: Overlapping regions", highlighted: true },
     { label: "Fix: Incorrect boundary", highlighted: true },
@@ -153,6 +157,19 @@ export default function AnnotationView() {
       loadClassrooms();
     }
   }, [showAddClassesModal]);
+
+  // Case image upload handler
+  const handleEditCaseImageUpload = (file: File | null) => {
+    if (!file) return;
+    setEditCaseImageFile(file);
+    const url = URL.createObjectURL(file);
+    setEditCaseImagePreview(url);
+  };
+
+  const clearEditCaseImage = () => {
+    setEditCaseImageFile(null);
+    setEditCaseImagePreview("");
+  };
   
   // Sidebar tab state: "annotate" | "collaborate" | "ai-assistant" | "homework"
   const [activeSidebarTab, setActiveSidebarTab] = useState<"annotate" | "collaborate" | "ai-assistant" | "homework">("collaborate");
@@ -494,18 +511,6 @@ export default function AnnotationView() {
                     size="sm" 
                     variant="outline"
                     className="w-full" 
-                    onClick={() => {
-                      // View case details modal would open here
-                      console.log("View case details:", case_.id);
-                    }}
-                  >
-                    <EyeIcon className="h-4 w-4 mr-2" />
-                    View Details
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    className="w-full" 
                     onClick={() => setCaseLocked(!caseLocked)}
                   >
                     {caseLocked ? (
@@ -519,26 +524,6 @@ export default function AnnotationView() {
                         Lock Case
                       </>
                     )}
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    className="w-full" 
-                    onClick={() => {
-                      setSelectedClassesInModal([]);
-                      setShowAddClassesModal(true);
-                    }}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Class
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => setLocation('/instructor')}
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Open Dashboard
                   </Button>
                 </div>
               </div>
@@ -590,6 +575,50 @@ export default function AnnotationView() {
                   </DialogHeader>
 
                   <div className="space-y-3">
+                    {/* Case Image Upload */}
+                    <div className="space-y-2 pb-3 border-b border-border">
+                      <h4 className="text-xs font-medium text-muted-foreground">CASE IMAGE</h4>
+                      <label className="block">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleEditCaseImageUpload(e.target.files?.[0] ?? null)}
+                        />
+                        <div
+                          className={[
+                            "aspect-video w-full rounded-lg border-2 border-dashed",
+                            "flex items-center justify-center text-center cursor-pointer transition",
+                            editCaseImagePreview ? "border-border bg-background" : "border-border hover:bg-muted/50",
+                          ].join(" ")}
+                        >
+                          {editCaseImagePreview ? (
+                            <div className="relative w-full h-full">
+                              <img
+                                src={editCaseImagePreview}
+                                alt="Case preview"
+                                className="w-full h-full object-cover rounded-lg"
+                              />
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  clearEditCaseImage();
+                                }}
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                title="Remove image"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="p-4">
+                              <p className="text-xs text-muted-foreground">Click to upload case image</p>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </div>
+
                     {/* Case Information Section */}
                     <div className="space-y-2 pb-3 border-b border-border">
                       <h4 className="text-xs font-medium text-muted-foreground">CASE DETAILS</h4>
@@ -737,6 +766,65 @@ export default function AnnotationView() {
                       )}
                     </div>
 
+                    {/* Homework Type Section */}
+                    <div className="space-y-2 pb-3 border-b border-border">
+                      <h4 className="text-xs font-medium text-muted-foreground">HOMEWORK TYPE</h4>
+                      <div className="flex gap-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            checked={editHomeworkType === "Q&A"}
+                            onChange={() => setEditHomeworkType("Q&A")}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm">Q&A</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            checked={editHomeworkType === "Annotate"}
+                            onChange={() => setEditHomeworkType("Annotate")}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm">Annotate</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Class Tags Section */}
+                    <div className="space-y-2 pb-3 border-b border-border">
+                      <h4 className="text-xs font-medium text-muted-foreground">ASSIGNED CLASSES</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {editCaseClasses.map((classId) => (
+                          <div
+                            key={classId}
+                            className="flex items-center gap-2 bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-100 px-3 py-1 rounded-full text-xs"
+                          >
+                            <span>{classId}</span>
+                            <button
+                              onClick={() => setEditCaseClasses(editCaseClasses.filter(c => c !== classId))}
+                              className="hover:opacity-70"
+                              title="Remove class"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {editCaseClasses.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No classes assigned yet</p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowAddClassesModal(true)}
+                        className="mt-2"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Classes
+                      </Button>
+                    </div>
+
                     {/* Action Buttons */}
                     <div className="flex gap-2 pt-2\">
                       
@@ -797,7 +885,7 @@ export default function AnnotationView() {
                               <div className="text-sm font-medium">{cls.name}</div>
                               <div className="text-xs text-muted-foreground">{cls.year} • {cls.members_count} students</div>
                             </div>
-                            {assignedClasses.includes(cls.id) && (
+                            {editCaseClasses.includes(cls.id) && (
                               <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950 dark:text-green-300">
                                 Added
                               </div>
@@ -828,10 +916,10 @@ export default function AnnotationView() {
                         disabled={loadingClasses || selectedClassesInModal.length === 0}
                         onClick={() => {
                           const newClasses = selectedClassesInModal.filter(
-                            cls => !assignedClasses.includes(cls)
+                            cls => !editCaseClasses.includes(cls)
                           );
                           if (newClasses.length > 0) {
-                            setAssignedClasses([...assignedClasses, ...newClasses]);
+                            setEditCaseClasses([...editCaseClasses, ...newClasses]);
                             toast({ 
                               description: `Added ${newClasses.length} class(es) to the case`
                             });

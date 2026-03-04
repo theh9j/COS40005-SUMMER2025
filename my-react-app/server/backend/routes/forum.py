@@ -118,18 +118,9 @@ async def create_thread(
 
     tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
-    if not tags_list:
-        trending = await get_trending_tags(limit=5)
-
-        if trending:
-            tags_list = trending
-        else:
-            # fallback: random tags from all existing threads
-            cursor = forum_collection.find({}, {"tags": 1})
-            all_tags = set()
-            async for doc in cursor:
-                all_tags.update(doc.get("tags", []))
-            tags_list = random.sample(list(all_tags), min(5, len(all_tags)))
+    # if user didn't specify tags there should be none on the thread
+    # previous behaviour automatically populated trending/random tags;
+    # remove that so posts can be tagless when user chooses none.
 
 
     author = ForumAuthor(

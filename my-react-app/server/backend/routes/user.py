@@ -149,9 +149,25 @@ async def upload_profile_photo(token: str, file: UploadFile = File(...)):
         }}
     )
 
+    # After updating DB
+
+    updated_user = await users_collection.find_one({"_id": user_id})
+
+    new_token_data = {
+        "user_id": str(updated_user["_id"]),
+        "firstName": updated_user["firstName"],
+        "lastName": updated_user["lastName"],
+        "email": updated_user["email"],
+        "role": updated_user.get("role", "student"),
+        "profile_photo": updated_user.get("profile_photo"),
+    }
+
+    new_token = create_access_token(new_token_data)
+
     return {
         "message": "Profile photo uploaded",
-        "profile_photo_url": f"/api/user/profile-photo/{relative_path}"
+        "profile_photo_url": f"/api/user/profile-photo/{relative_path}",
+        "token": new_token
     }
 
 

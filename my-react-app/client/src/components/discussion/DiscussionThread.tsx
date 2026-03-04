@@ -36,6 +36,7 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
 
   const [trendingTags, setTrendingTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [customCreatedTags, setCustomCreatedTags] = useState<string[]>([]);
 
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newCustomTag, setNewCustomTag] = useState('');
@@ -53,6 +54,23 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
       } catch (e) {}
     }
   }, [initialPost]);
+
+  // when starting a new post, auto-fill with previously used tags if none selected
+  useEffect(() => {
+    if (isCreatingPost && newPostTags.length === 0) {
+      try {
+        const saved = sessionStorage.getItem('lastTags');
+        if (saved) {
+          const arr = JSON.parse(saved);
+          if (Array.isArray(arr)) {
+            setNewPostTags(arr);
+          }
+        }
+      } catch (e) {
+        console.warn('could not restore lastTags', e);
+      }
+    }
+  }, [isCreatingPost]);
 
   useEffect(() => {
     if (initialPost) return;
@@ -75,6 +93,13 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
   const handleCreatePost = async () => {
     if (!newPostTitle || !newPostMessage || !user) return;
 
+    // remember tags for next time (auto-select prev tags)
+    try {
+      sessionStorage.setItem('lastTags', JSON.stringify(newPostTags));
+    } catch (e) {
+      console.warn('could not persist lastTags', e);
+    }
+
     const formData = new FormData();
     formData.append("user_id", user.user_id!);
     formData.append("title", newPostTitle);
@@ -94,6 +119,17 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
         if (result.thread) {
           setThreads((prev) => [result.thread, ...prev]);
         }
+        // Refetch tags to include any newly created tags
+        try {
+          const [allRes, trendingRes] = await Promise.all([
+            fetch("http://127.0.0.1:8000/forum/tags"),
+            fetch("http://127.0.0.1:8000/forum/tags/trending"),
+          ]);
+          setAvailableTags(await allRes.json());
+          setTrendingTags(await trendingRes.json());
+        } catch (err) {
+          console.error("Failed to refetch tags", err);
+        }
       }
     } catch (err) {
       console.error("Error creating thread:", err);
@@ -106,6 +142,7 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
     setIsCreatingPost(false);
     setIsAddingTag(false);
     setNewCustomTag('');
+    setCustomCreatedTags([]);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,6 +206,9 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
     if (trimmedTag && trimmedTag.length <= 10) {
       if (!availableTags.includes(trimmedTag)) {
         setAvailableTags((prev) => [...prev, trimmedTag]);
+      }
+      if (!customCreatedTags.includes(trimmedTag)) {
+        setCustomCreatedTags((prev) => [...prev, trimmedTag]);
       }
       if (!newPostTags.includes(trimmedTag)) {
         setNewPostTags((prev) => [...prev, trimmedTag]);
@@ -361,10 +401,36 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
                       {trendingTags.map((tag) => (
                         <Button
                           key={tag}
-                          variant={selectedTag === tag ? 'default' : 'outline'}
-                          onClick={() => setSelectedTag(tag)}
+                          variant={newPostTags.includes(tag) ? 'default' : 'outline'}
+                          onClick={() => handleTagToggle(tag)}
                           size="sm"
                           className="rounded-full"
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+
+                      {customCreatedTags.map((tag) => (
+                        <Button
+                          key={tag}
+                          variant={newPostTags.includes(tag) ? 'default' : 'outline'}
+                          onClick={() => handleTagToggle(tag)}
+                          size="sm"
+                          className="rounded-full"
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+
+                      {availableTags
+                        .filter((tag) => !trendingTags.includes(tag) && !customCreatedTags.includes(tag) && !newPostTags.includes(tag))
+                        .map((tag) => (
+                        <Button
+                          key={tag}
+                          variant="outline"
+                          onClick={() => handleTagToggle(tag)}
+                          size="sm"
+                          className="rounded-full opacity-70"
                         >
                           {tag}
                         </Button>
@@ -403,6 +469,7 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
                     setNewPostImagePreview(null);
                     setIsAddingTag(false);
                     setNewCustomTag('');
+                    setCustomCreatedTags([]);
                   }}>
                     Cancel
                   </Button>

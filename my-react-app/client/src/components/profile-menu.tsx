@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LogOut, Settings, Palette, UserRound } from "lucide-react";
+import Avatar from "@/components/Avatar";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter"; // Added this import for redirect
@@ -36,7 +37,11 @@ export default function ProfileMenu() {
     }
 
     try {
-      await updateUser({ firstName, lastName });
+      const updated = await updateUser({ firstName, lastName });
+      // keep local inputs in sync with what the server returned
+      setFirstName(updated.firstName || firstName);
+      setLastName(updated.lastName || lastName);
+
       toast({
         title: "Success",
         description: "Your account settings have been updated.",
@@ -61,8 +66,8 @@ export default function ProfileMenu() {
         <CardContent className="p-4 space-y-4">
           {/* Header */}
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <UserRound className="h-6 w-6 text-primary" />
+            <div className="w-12 h-12">
+              <Avatar size={48} />
             </div>
             <div>
               <p className="font-semibold text-sm">
