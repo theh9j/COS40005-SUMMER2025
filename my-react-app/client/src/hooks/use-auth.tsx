@@ -51,12 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // If the user is an instructor, fetch their latest approval status
           if (decoded.role === "instructor") {
-            const res = await fetch(`${API_URL}/approval-status?token=${token}`);
-            if (res.ok) {
-              const data = await res.json();
-              decoded.approval_status = data.approval_status;
-            } else {
-              decoded.approval_status = "pending"; // Default or error state
+            try {
+              const res = await fetch(`${API_URL}/approval-status?token=${token}`);
+              if (res.ok) {
+                const data = await res.json();
+                decoded.approval_status = data.approval_status;
+              } else {
+                decoded.approval_status = "pending"; // Default or error state
+              }
+            } catch {
+              decoded.approval_status = "pending"; // Network error fallback
             }
           }
           setUser(decoded);
