@@ -101,6 +101,7 @@ type CaseCard = {
   description: string;
   imageUrl: string;
   source: "db" | "mock";
+  homeworkType?: "Q&A" | "Annotate";
   createdAt?: string;
 };
 
@@ -147,6 +148,17 @@ function GroupCompareCard({ submission }: { submission: Submission }) {
       </CardContent>
     </Card>
   );
+}
+
+function getHomeworkTypeColor(type: "Q&A" | "Annotate" = "Annotate") {
+  switch (type) {
+    case "Annotate":
+      return "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200";
+    case "Q&A":
+      return "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
 }
 
 export default function InstructorDashboard() {
@@ -1278,8 +1290,8 @@ export default function InstructorDashboard() {
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between gap-2">
                           <h3 className="font-semibold mb-1 truncate">{c.title}</h3>
-                          <span className="text-[10px] px-2 py-1 rounded-full border border-border text-muted-foreground shrink-0">
-                            {c.source === "db" ? "NEW" : "DEMO"}
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${getHomeworkTypeColor(c.homeworkType)}`}>
+                            {c.homeworkType || "Annotate"}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground line-clamp-2">{c.description}</p>
