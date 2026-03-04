@@ -29,7 +29,8 @@ async def signup(user: User):
         "firstName": new_user["firstName"],
         "lastName": new_user["lastName"],
         "email": new_user["email"],
-        "role": new_user["role"]
+        "role": new_user["role"],
+        "profile_photo": new_user.get("profile_photo")
     }
 
     if new_user["role"] == "instructor":
@@ -62,7 +63,8 @@ async def login(data: dict):
         "firstName": user["firstName"],
         "lastName": user["lastName"],
         "email": user["email"],
-        "role": user.get("role", "student")
+        "role": user.get("role", "student"),
+        "profile_photo": user.get("profile_photo")
     }
 
     token = create_access_token(token_data)
