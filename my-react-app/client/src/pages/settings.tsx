@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import Avatar from "@/components/Avatar"; // add avatar import
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
@@ -101,17 +102,10 @@ export default function SettingsPage() {
             {/* Profile Picture */}
             <div className="flex items-center space-x-4">
               <label className="relative cursor-pointer">
-                <img
-                  src={
-                    avatarPreview
-                      ? avatarPreview.startsWith("blob:")
-                        ? avatarPreview
-                        : `http://127.0.0.1:8000${avatarPreview.startsWith("/api")
-                            ? avatarPreview
-                            : `/api/user/profile-photo/${avatarPreview}`}`
-                      : "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png"
-                  }
-                  className="w-20 h-20 rounded-full border object-cover"
+                <Avatar
+                  src={avatarPreview}
+                  size={80}
+                  className="border object-cover"
                 />
                 <div className="absolute bottom-0 right-0 bg-primary text-white p-1 rounded-full">
                   <Camera className="w-4 h-4" />

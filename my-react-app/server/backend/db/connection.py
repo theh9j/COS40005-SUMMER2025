@@ -11,7 +11,7 @@ annotations_collection = db["annotations"]
 versions_collection = db["annotation_versions"]
 forum_collection = db["forum"]
 
-# ===== NEW collections =====
+# ===== Other collections =====
 homeworks_collection = db["homeworks"]
 homework_targets_collection = db["homework_targets"]
 homework_uploads_collection = db["homework_uploads"]
