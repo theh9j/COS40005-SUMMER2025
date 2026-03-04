@@ -63,10 +63,18 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
-      await updateUser(
+      const updatedUser = await updateUser(
         { firstName, lastName, dob },
         avatarFile || undefined
       );
+
+      // clear the selected file now that it has been uploaded successfully
+      setAvatarFile(null);
+
+      // update preview if backend returned a new photo path
+      if (updatedUser.profile_photo) {
+        setAvatarPreview(updatedUser.profile_photo);
+      }
 
       toast({
         title: t("profileUpdated"),

@@ -37,7 +37,11 @@ export default function ProfileMenu() {
     }
 
     try {
-      await updateUser({ firstName, lastName });
+      const updated = await updateUser({ firstName, lastName });
+      // keep local inputs in sync with what the server returned
+      setFirstName(updated.firstName || firstName);
+      setLastName(updated.lastName || lastName);
+
       toast({
         title: "Success",
         description: "Your account settings have been updated.",
