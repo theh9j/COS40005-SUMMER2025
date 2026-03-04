@@ -7,7 +7,7 @@ import type {
 } from "@/types/ai-grading";
 
 // AI Provider types
-export type AIProvider = "openai" | "anthropic" | "google";
+export type AIProvider = "openai" | "anthropic" | "google" | "default";
 
 export interface AIConfig {
   provider: AIProvider;
@@ -127,8 +127,8 @@ class AIService {
     const visionPrompt = this.buildVisionPrompt(analysisType, context);
     
     const payload = {
-      provider: "google",
-      model: "gemini-2.5-flash",
+      provider: this.config.provider,
+      model: this.config.model,
       messages: [
         { role: "system", content: visionPrompt },
         { role: "user", content: "Please analyze this medical image for educational purposes." }
@@ -668,7 +668,6 @@ Evaluate against the rubric and return JSON.`;
   }
 }
 
-// Back to Gemini with new API key
 export const aiService = new AIService({
   provider: "google",
   model: "gemini-2.5-flash",
