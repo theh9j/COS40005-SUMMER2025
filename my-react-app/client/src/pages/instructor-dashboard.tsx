@@ -102,6 +102,7 @@ type CaseCard = {
   imageUrl: string;
   source: "db" | "mock";
   homeworkType?: "Q&A" | "Annotate";
+  caseType?: string;
   createdAt?: string;
 };
 
@@ -156,6 +157,27 @@ function getHomeworkTypeColor(type: "Q&A" | "Annotate" = "Annotate") {
       return "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200";
     case "Q&A":
       return "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function getCaseTypeColor(caseType?: string) {
+  switch (caseType?.toLowerCase()) {
+    case "neurology":
+      return "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200";
+    case "pulmonology":
+      return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200";
+    case "cardiology":
+      return "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200";
+    case "gastroenterology":
+      return "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200";
+    case "oncology":
+      return "bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200";
+    case "radiology":
+      return "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200";
+    case "orthopedics":
+      return "bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -434,6 +456,7 @@ export default function InstructorDashboard() {
       description: c.description ?? "No description",
       imageUrl: c.imageUrl,
       source: "mock",
+      caseType: c.category,
       createdAt: undefined,
     }));
 
@@ -1288,13 +1311,20 @@ export default function InstructorDashboard() {
                       </div>
 
                       <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <h3 className="font-semibold mb-1 truncate">{c.title}</h3>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <h3 className="font-semibold truncate">{c.title}</h3>
                           <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${getHomeworkTypeColor(c.homeworkType)}`}>
                             {c.homeworkType || "Annotate"}
                           </span>
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2">{c.description}</p>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{c.description}</p>
+                        {c.caseType && (
+                          <div className="flex items-center gap-1">
+                            <span className={`text-xs px-2 py-1 rounded font-medium ${getCaseTypeColor(c.caseType)}`}>
+                              {c.caseType}
+                            </span>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))
