@@ -32,6 +32,12 @@ const homeworkByCase: Record<string, HomeworkMeta> = {
   "case-3": { dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true },
 };
 
+const homeworkTypeByCase: Record<string, "Q&A" | "Annotate"> = {
+  "case-1": "Annotate",
+  "case-2": "Annotate",
+  "case-3": "Q&A",
+};
+
 // === Trạng thái bài nộp của riêng học sinh 
 type MySubmissionStatus = { score?: number; status: "grading" | "graded" | "none" };
 const mySubmissionByCase: Record<string, MySubmissionStatus> = {
@@ -566,6 +572,7 @@ export default function StudentDashboard() {
                 {mockCases.map((case_) => {
                   const hw = homeworkByCase[case_.id];
                   const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
+                  const hwType = homeworkTypeByCase[case_.id];
 
                   return (
                     <div key={case_.id} className="space-y-2">
@@ -573,6 +580,7 @@ export default function StudentDashboard() {
                       <CaseCard
                         case={case_}
                         onClick={() => setLocation(`/annotation/${case_.id}`)}
+                        homeworkType={hwType}
                       />
 
                       {/* Meta bar cho Assignment */}
