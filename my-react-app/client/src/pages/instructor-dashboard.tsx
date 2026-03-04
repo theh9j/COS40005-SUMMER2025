@@ -623,7 +623,9 @@ export default function InstructorDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "instructor")) {
+    const noUser = !user;
+    const wrongRole = user?.role !== undefined && user?.role !== "instructor";
+    if (!isLoading && (noUser || wrongRole)) {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);

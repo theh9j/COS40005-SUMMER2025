@@ -207,15 +207,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
 
         if (!photoRes.ok) {
+          // don't overwrite the token if upload failed – keep the existing one
           throw new Error("Avatar upload failed");
         }
 
-        const photoData = await photoRes.json();
-        currentToken = photoData.token; // 🔥 overwrite with newest token
+        const photoData = await photoRes.json().catch(() => ({}));
+        if (photoData.token) {
+          currentToken = photoData.token; // 🔥 overwrite with newest token
+        } else {
+          console.warn("[updateUser] upload response did not include token, preserving previous token");
+        }
       }
 
-      // 3️⃣ Decode final token (ONLY ONCE)
-      const finalDecoded: AuthUser = jwtDecode(currentToken);
+      // 3️⃣ Decode final token (ONLY ONCE) and guard against nonsense
+      let finalDecoded: AuthUser;
+      try {
+        finalDecoded = jwtDecode(currentToken) as AuthUser;
+      } catch (err) {
+        console.error("[updateUser] failed to decode token", err);
+        // if decoding fails, fall back to existing user without changing session
+        if (user) {
+          localStorage.setItem(SESSION_KEY, user.token || "");
+          return user;
+        }
+        throw new Error("Invalid token returned by server");
+      }
+
+      if (!finalDecoded || typeof finalDecoded !== "object") {
+        console.error("[updateUser] jwtDecode returned unexpected value", finalDecoded);
+        if (user) {
+          localStorage.setItem(SESSION_KEY, user.token || "");
+          return user;
+        }
+        throw new Error("Invalid token returned by server");
+      }
+
+      // Merge with existing user so we don't drop fields that aren't encoded
+      if (user) {
+        finalDecoded = { ...user, ...finalDecoded };
+      }
+
+      // ensure role stays defined
+      if (!finalDecoded.role && user?.role) {
+        finalDecoded.role = user.role;
+      }
+      if (user?.role && finalDecoded.role !== user.role) {
+        console.warn(
+          `[updateUser] role changed from ${user.role} to ${finalDecoded.role}, preserving old value`
+        );
+        finalDecoded.role = user.role;
+      }
+
       finalDecoded.token = currentToken;
 
       localStorage.setItem(SESSION_KEY, currentToken);

@@ -135,7 +135,13 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     console.log("Current user in dashboard:", user);
-    if (!isLoading && (!user || user.role !== "student")) {
+    // guard: only redirect if we definitely know the user isn't a student
+    // sometimes the token returned after an update may temporarily omit the
+    // role field; the auth hook fixes that, but we don't want the UI to flip
+    // out if `user.role` is undefined for a moment.
+    const noUser = !user;
+    const wrongRole = user?.role !== undefined && user?.role !== "student";
+    if (!isLoading && (noUser || wrongRole)) {
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
