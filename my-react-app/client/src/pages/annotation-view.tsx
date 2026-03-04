@@ -36,6 +36,16 @@ import { Badge } from "@/components/ui/badge";
 import InstructorCaseManager from "@/components/grading/InstructorCaseManager";
 import AssignmentDetailsPanel from "@/components/assignment-details-panel";
 
+const API_BASE = "http://127.0.0.1:8000";
+
+type Classroom = {
+  id: string;
+  name: string;
+  year: string;
+  display: string;
+  members_count: number;
+};
+
 export default function AnnotationView() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute<{ caseId: string }>("/annotation/:caseId");
@@ -103,6 +113,46 @@ export default function AnnotationView() {
     { label: "Practice: Anatomical localization", highlighted: true }
   ]);
   const [newTagInput, setNewTagInput] = useState("");
+  
+  // Homework editor state
+  const [editHwDescription, setEditHwDescription] = useState(hw?.description || "");
+  const [editHwPoints, setEditHwPoints] = useState(hw?.points || 0);
+  const [editHwDueDate, setEditHwDueDate] = useState(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
+  const [homeworkTags, setHomeworkTags] = useState<Array<{ label: string; highlighted: boolean }>>([
+    { label: "Identify structures", highlighted: true },
+    { label: "Note abnormalities", highlighted: true }
+  ]);
+  const [newHomeworkTagInput, setNewHomeworkTagInput] = useState("");
+  const [assignedClasses, setAssignedClasses] = useState<string[]>(["COS40005"]);
+  
+  // Add Classes modal state
+  const [showAddClassesModal, setShowAddClassesModal] = useState(false);
+  const [availableClasses, setAvailableClasses] = useState<Classroom[]>([]);
+  const [selectedClassesInModal, setSelectedClassesInModal] = useState<string[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+
+  // Load classrooms from API
+  const loadClassrooms = async () => {
+    try {
+      setLoadingClasses(true);
+      const res = await fetch(`${API_BASE}/api/classroom/all`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableClasses(data.classrooms ?? []);
+      }
+    } catch (e) {
+      console.error("Failed to load classrooms", e);
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
+
+  // Load classrooms when modal opens
+  useEffect(() => {
+    if (showAddClassesModal) {
+      loadClassrooms();
+    }
+  }, [showAddClassesModal]);
   
   // Sidebar tab state: "annotate" | "collaborate" | "ai-assistant" | "homework"
   const [activeSidebarTab, setActiveSidebarTab] = useState<"annotate" | "collaborate" | "ai-assistant" | "homework">("collaborate");
@@ -289,6 +339,18 @@ export default function AnnotationView() {
 
   return (
     <div className="h-screen bg-background flex flex-col" data-testid="annotation-view">
+      {/* Case Locked Notification (students only) */}
+      {caseLocked && user?.role === 'student' && (
+        <div className="bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 px-6 py-3">
+          <div className="flex items-center gap-3">
+            <Lock className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <div>
+              <p className="font-semibold text-sm text-red-800 dark:text-red-200">Case Locked</p>
+              <p className="text-xs text-red-700 dark:text-red-300">This case is currently locked by the instructor. You cannot make changes at this time.</p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-card border-b border-border px-6 py-3">
         <div className="flex items-center justify-between">
@@ -449,7 +511,7 @@ export default function AnnotationView() {
                     {caseLocked ? (
                       <>
                         <Lock className="h-4 w-4 mr-2" />
-                        Lock Case
+                        Unlock Case
                       </>
                     ) : (
                       <>
@@ -457,6 +519,18 @@ export default function AnnotationView() {
                         Lock Case
                       </>
                     )}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="w-full" 
+                    onClick={() => {
+                      setSelectedClassesInModal([]);
+                      setShowAddClassesModal(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Class
                   </Button>
                   <Button 
                     size="sm" 
@@ -478,16 +552,22 @@ export default function AnnotationView() {
                     <p className="font-medium text-blue-600 dark:text-blue-400">{case_.category || "N/A"}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Class:</p>
-                    <p className="font-medium">COS40005</p>
+                    <p className="text-muted-foreground">Classes:</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {assignedClasses.map((cls) => (
+                        <Badge key={cls} variant="outline" className="text-xs">
+                          {cls}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Due Date:</p>
                     <p className="font-medium">{hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "N/A"}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Classes Saved:</p>
-                    <p className="font-medium">0/0</p>
+                    <p className="text-muted-foreground">Status:</p>
+                    <p className="font-medium">{caseLocked ? "🔒 Locked" : "🔓 Active"}</p>
                   </div>
                 </div>
               </div>
@@ -616,10 +696,10 @@ export default function AnnotationView() {
                             <label htmlFor="hw-description" className="block text-xs font-medium mb-1">Description</label>
                             <textarea
                               id="hw-description"
-                              value={hw.description}
+                              value={editHwDescription}
+                              onChange={(e) => setEditHwDescription(e.target.value)}
                               title="Homework Description"
-                              readOnly
-                              className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background opacity-75"
+                              className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
                               rows={2}
                             />
                           </div>
@@ -629,10 +709,10 @@ export default function AnnotationView() {
                               <input
                                 id="hw-points"
                                 type="number"
-                                value={hw.points}
+                                value={editHwPoints}
+                                onChange={(e) => setEditHwPoints(parseInt(e.target.value) || 0)}
                                 title="Total Points"
-                                readOnly
-                                className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background opacity-75"
+                                className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
                               />
                             </div>
                             <div>
@@ -640,15 +720,13 @@ export default function AnnotationView() {
                               <input
                                 id="hw-duedate"
                                 type="date"
-                                value={new Date(hw.dueAt).toISOString().split('T')[0]}
+                                value={editHwDueDate}
+                                onChange={(e) => setEditHwDueDate(e.target.value)}
                                 title="Due Date"
-                                readOnly
-                                className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background opacity-75"
+                                className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
                               />
                             </div>
                           </div>
-                          
-                          
                         </div>
                       ) : (
                         <div className="bg-muted p-2 rounded-lg border border-border">
@@ -672,6 +750,101 @@ export default function AnnotationView() {
                       >
                         <Save className="h-3 w-3 mr-1" />
                         Save Changes
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Add Classes Modal */}
+              <Dialog open={showAddClassesModal} onOpenChange={setShowAddClassesModal}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Add Classes to Case</DialogTitle>
+                  </DialogHeader>
+
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Select one or more classes to publish this case and homework to:
+                    </p>
+
+                    {/* Class List with Checkboxes */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto border border-border rounded-md p-3">
+                      {loadingClasses ? (
+                        <div className="text-center py-6 text-sm text-muted-foreground">
+                          Loading classes...
+                        </div>
+                      ) : availableClasses.length === 0 ? (
+                        <div className="text-center py-6 text-sm text-muted-foreground">
+                          No classes available
+                        </div>
+                      ) : (
+                        availableClasses.map((cls) => (
+                          <label key={cls.id} className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                            <input
+                              type="checkbox"
+                              checked={selectedClassesInModal.includes(cls.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedClassesInModal([...selectedClassesInModal, cls.id]);
+                                } else {
+                                  setSelectedClassesInModal(selectedClassesInModal.filter(c => c !== cls.id));
+                                }
+                              }}
+                              className="w-4 h-4 rounded"
+                            />
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">{cls.name}</div>
+                              <div className="text-xs text-muted-foreground">{cls.year} • {cls.members_count} students</div>
+                            </div>
+                            {assignedClasses.includes(cls.id) && (
+                              <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950 dark:text-green-300">
+                                Added
+                              </div>
+                            )}
+                          </label>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Selected Count */}
+                    <div className="text-sm text-muted-foreground">
+                      {selectedClassesInModal.length > 0 
+                        ? `${selectedClassesInModal.length} class(es) selected`
+                        : "No classes selected"
+                      }
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowAddClassesModal(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        disabled={loadingClasses || selectedClassesInModal.length === 0}
+                        onClick={() => {
+                          const newClasses = selectedClassesInModal.filter(
+                            cls => !assignedClasses.includes(cls)
+                          );
+                          if (newClasses.length > 0) {
+                            setAssignedClasses([...assignedClasses, ...newClasses]);
+                            toast({ 
+                              description: `Added ${newClasses.length} class(es) to the case`
+                            });
+                          } else {
+                            toast({ 
+                              description: "All selected classes are already added"
+                            });
+                          }
+                          setShowAddClassesModal(false);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Selected Classes
                       </Button>
                     </div>
                   </div>

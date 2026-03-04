@@ -138,6 +138,92 @@ async def get_classroom_students(classroom_id: str):
 
 
 # ===============================
+# Update Classroom
+# ===============================
+
+@router.put("/update/{classroom_id}")
+async def update_classroom(classroom_id: str, data: dict):
+    name = data.get("name")
+    year = data.get("year")
+
+    if not name and not year:
+        raise HTTPException(status_code=400, detail="name or year must be provided")
+
+    update_doc: dict = {}
+    if name:
+        update_doc["name"] = name
+    if year:
+        update_doc["year"] = year
+
+    # ensure uniqueness if both present
+    if name and year:
+        existing = await classrooms_collection.find_one({
+            "name": name,
+            "year": year,
+            "_id": {"$ne": ObjectId(classroom_id)}
+        })
+        if existing:
+            raise HTTPException(status_code=400, detail="Classroom already exists for this year")
+
+    result = await classrooms_collection.update_one(
+        {"_id": ObjectId(classroom_id)},
+        {"$set": update_doc}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    return {"message": "Classroom updated"}
+
+
+# ===============================
+# Delete Classroom
+# ===============================
+
+@router.delete("/{classroom_id}")
+async def delete_classroom(classroom_id: str):
+    obj = ObjectId(classroom_id)
+    # remove classroom reference from users first
+    await users_collection.update_many(
+        {"classrooms": obj},
+        {"$pull": {"classrooms": obj}}
+    )
+    # then delete the classroom document
+    result = await classrooms_collection.delete_one({"_id": obj})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+    return {"message": "Classroom deleted"}
+
+
+# ===============================
+# Get All Students (with current classroom label)
+# ===============================
+
+@router.get("/students-all")
+async def get_all_students():
+    cursor = users_collection.find({"role": "student"})
+    students = []
+
+    async for u in cursor:
+        label = "Unassigned"
+        cls_ids = u.get("classrooms", [])
+        if cls_ids:
+            # grab the first classroom name/year
+            cls = await classrooms_collection.find_one({"_id": {"$in": cls_ids}})
+            if cls:
+                label = f"Class {cls.get('name')} ({cls.get('year')})"
+        students.append({
+            "id": str(u["_id"]),
+            "firstName": u.get("firstName"),
+            "lastName": u.get("lastName"),
+            "email": u.get("email"),
+            "classroom": label,
+        })
+
+    return {"students": students}
+
+
+# ===============================
 # Remove Student From Classroom
 # ===============================
 
