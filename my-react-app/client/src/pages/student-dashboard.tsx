@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import ProfileMenu from "@/components/profile-menu";
+import Avatar from "@/components/Avatar";
 import { useI18n } from "@/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -311,11 +312,7 @@ export default function StudentDashboard() {
                 aria-haspopup="menu"
                 aria-expanded={showProfileMenu}
               >
-                <img
-                  src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
-                  alt="Student Avatar"
-                  className="w-8 h-8 rounded-full border-2 border-primary"
-                />
+                <Avatar size={32} className="border-2 border-primary" />
                 <span className="text-sm font-medium" data-testid="text-username">
                   {user.firstName} {user.lastName}
                 </span>
@@ -466,13 +463,13 @@ export default function StudentDashboard() {
                     <div className="space-y-4">
                       <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
                         <div className="flex items-start space-x-3">
-                          <img src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" alt="Dr. Smith" className="w-8 h-8 rounded-full" />
+                          <Avatar src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" size={32} />
                           <div><p className="font-medium text-sm">Dr. Smith</p><p className="text-sm text-muted-foreground">Great work on identifying the lesion. Consider the surrounding tissue changes.</p></div>
                         </div>
                       </div>
                       <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
                         <div className="flex items-start space-x-3">
-                          <img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" alt="Dr. Johnson" className="w-8 h-8 rounded-full" />
+                          <Avatar src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" size={32} />
                           <div><p className="font-medium text-sm">Dr. Johnson</p><p className="text-sm text-muted-foreground">Excellent annotation accuracy. Your diagnostic skills are improving!</p></div>
                         </div>
                       </div>

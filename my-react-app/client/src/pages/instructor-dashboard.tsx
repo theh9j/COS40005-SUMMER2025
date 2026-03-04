@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import ProfileMenu from "@/components/profile-menu";
+import Avatar from "@/components/Avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -741,11 +742,7 @@ export default function InstructorDashboard() {
                 }}
                 className="focus:outline-none"
               >
-                <img
-                  src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40"
-                  alt="Instructor Avatar"
-                  className="w-8 h-8 rounded-full border-2 border-primary"
-                />
+                <Avatar size={32} className="border-2 border-primary" />
               </button>
 
               <button
