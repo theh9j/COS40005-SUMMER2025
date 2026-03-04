@@ -20,7 +20,7 @@ import AIChatAssistant from "@/components/ai-chat-assistant";
 import AIAnnotationSuggestions from "@/components/ai-annotation-suggestions";
 import SubmissionPanel from "@/components/submission-panel";
 import AssignmentRequirements from "@/components/assignment-requirements";
-import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, Info, Lock, LockOpen, Eye as EyeIcon, Edit2, X, Plus } from "lucide-react";
+import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, Info, Lock, LockOpen, Edit2, X, Plus } from "lucide-react";
 
 // Collaborative imports
 import { useVersions } from "@/hooks/use-versions";
@@ -511,18 +511,6 @@ export default function AnnotationView() {
                     size="sm" 
                     variant="outline"
                     className="w-full" 
-                    onClick={() => {
-                      // View case details modal would open here
-                      console.log("View case details:", case_.id);
-                    }}
-                  >
-                    <EyeIcon className="h-4 w-4 mr-2" />
-                    View Details
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    className="w-full" 
                     onClick={() => setCaseLocked(!caseLocked)}
                   >
                     {caseLocked ? (
@@ -536,14 +524,6 @@ export default function AnnotationView() {
                         Lock Case
                       </>
                     )}
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => setLocation('/instructor')}
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Open Dashboard
                   </Button>
                 </div>
               </div>
