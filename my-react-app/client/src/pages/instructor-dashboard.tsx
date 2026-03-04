@@ -1065,7 +1065,7 @@ export default function InstructorDashboard() {
                       const caseData = await createRes.json();
                       const createdCaseId = caseData.case_id ?? caseData.id;
 
-                      const res = await fetch(`${API_BASE}/api/instructor/cases`, {
+                      const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
@@ -1091,7 +1091,7 @@ export default function InstructorDashboard() {
                       }
 
                       const data = await res.json();
-                      alert(`Homework published with id ${data.case_id}`);
+                      alert(`Homework published with id ${data.homework_id}`);
 
                       setActiveView("cases");
                       await loadCases();
@@ -1099,7 +1099,7 @@ export default function InstructorDashboard() {
                     }
 
                     // Case B: payload kiểu cũ
-                    const res = await fetch(`${API_BASE}/api/instructor/cases`, {
+                    const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
@@ -1122,7 +1122,7 @@ export default function InstructorDashboard() {
                     }
 
                     const data = await res.json();
-                    alert(`Homework published with id ${data.case_id}`);
+                    alert(`Homework published with id ${data.homework_id}`);
                   } catch (err) {
                     console.error("Error publishing homework", err);
                     alert("Error publishing homework");
