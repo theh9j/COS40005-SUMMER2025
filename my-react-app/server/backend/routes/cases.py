@@ -21,10 +21,14 @@ async def create_case(
     title: str = Form(...),
     description: Optional[str] = Form(None),
     image: UploadFile = Form(...),
+    case_type: Optional[str] = Form(None),
+    homework_type: Optional[str] = Form("Annotate"),
 ):
     """
     Create a new Case (title + optional description + image).
     Save image to uploads/cases/ and return case_id + image_url.
+    - case_type: Medical specialty (Neurology, Cardiology, etc.)
+    - homework_type: Type of homework (Q&A or Annotate). Defaults to Annotate.
     """
     if not title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
@@ -55,10 +59,11 @@ async def create_case(
         "title": title.strip(),
         "description": (description.strip() if description else None),
         "image_url": image_url,
+        "case_type": (case_type.strip() if case_type else None),
+        "homework_type": (homework_type.strip() if homework_type else "Annotate"),
         "created_at": now_iso(),
         "updated_at": now_iso(),
         "image_filename": filename,
-
     }
 
     await cases_collection.insert_one(doc)
@@ -68,6 +73,8 @@ async def create_case(
         "image_url": image_url,
         "title": doc["title"],
         "description": doc["description"],
+        "case_type": doc["case_type"],
+        "homework_type": doc["homework_type"],
     }
 
 @router.get("/cases")
@@ -83,6 +90,8 @@ async def list_cases(limit: int = 50):
             "title": c.get("title"),
             "description": c.get("description"),
             "image_url": c.get("image_url"),
+            "case_type": c.get("case_type"),
+            "homework_type": c.get("homework_type", "Annotate"),
             "created_at": c.get("created_at"),
         })
     return out

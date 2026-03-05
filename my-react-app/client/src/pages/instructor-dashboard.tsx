@@ -112,7 +112,6 @@ type CaseCard = {
   createdAt?: string;
 };
 
-type CaseFilter = "all" | "db" | "mock";
 type CaseSort = "newest" | "oldest" | "az" | "za";
 
 // ===== Class types =====
@@ -415,7 +414,8 @@ export default function InstructorDashboard() {
   const [loadingCases, setLoadingCases] = useState(false);
 
   const [caseSearch, setCaseSearch] = useState("");
-  const [caseFilter, setCaseFilter] = useState<CaseFilter>("all");
+  const [caseFilterClass, setCaseFilterClass] = useState("");
+  const [caseFilterHomeworkType, setCaseFilterHomeworkType] = useState("");
   const [caseSort, setCaseSort] = useState<CaseSort>("newest");
 
   const loadCases = async () => {
@@ -474,8 +474,8 @@ export default function InstructorDashboard() {
 
     let list = mergedCases;
 
-    if (caseFilter !== "all") {
-      list = list.filter((c) => c.source === caseFilter);
+    if (caseFilterHomeworkType) {
+      list = list.filter((c) => c.homeworkType === caseFilterHomeworkType);
     }
 
     if (q) {
@@ -502,7 +502,7 @@ export default function InstructorDashboard() {
     });
 
     return list;
-  }, [mergedCases, caseSearch, caseFilter, caseSort]);
+  }, [mergedCases, caseSearch, caseFilterHomeworkType, caseSort]);
 
   const deleteDbCase = async (caseId: string, title: string) => {
     const yes = window.confirm(`Delete case "${title}"?\nThis cannot be undone.`);
@@ -1356,7 +1356,7 @@ export default function InstructorDashboard() {
 
               <Card>
                 <CardContent className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <Input
                       placeholder="Search cases by title/description..."
                       value={caseSearch}
@@ -1365,12 +1365,25 @@ export default function InstructorDashboard() {
 
                     <select
                       className="h-10 rounded-md border border-border bg-background px-3 text-sm"
-                      value={caseFilter}
-                      onChange={(e) => setCaseFilter(e.target.value as CaseFilter)}
+                      value={caseFilterClass}
+                      onChange={(e) => setCaseFilterClass(e.target.value)}
                     >
-                      <option value="all">All</option>
-                      <option value="db">NEW (DB)</option>
-                      <option value="mock">DEMO (Mock)</option>
+                      <option value="">All Classes</option>
+                      {classrooms.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.display}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      value={caseFilterHomeworkType}
+                      onChange={(e) => setCaseFilterHomeworkType(e.target.value)}
+                    >
+                      <option value="">All Homework Types</option>
+                      <option value="Annotate">Annotate</option>
+                      <option value="Q&A">Q&A</option>
                     </select>
 
                     <select
@@ -1388,14 +1401,16 @@ export default function InstructorDashboard() {
                   <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                     <div>
                       Showing <span className="font-medium">{visibleCases.length}</span> cases
-                      {caseFilter !== "all" ? ` • Filter: ${caseFilter}` : ""}
+                      {caseFilterClass ? ` • Class: ${classrooms.find((c) => c.id === caseFilterClass)?.display || caseFilterClass}` : ""}
+                      {caseFilterHomeworkType ? ` • Type: ${caseFilterHomeworkType}` : ""}
                       {caseSearch.trim() ? ` • Search: "${caseSearch.trim()}"` : ""}
                     </div>
                     <button
                       className="hover:underline"
                       onClick={() => {
                         setCaseSearch("");
-                        setCaseFilter("all");
+                        setCaseFilterClass("");
+                        setCaseFilterHomeworkType("");
                         setCaseSort("newest");
                       }}
                     >
