@@ -30,12 +30,18 @@ import DiscussionThread from "@/components/discussion/DiscussionThread";
 import { Input } from "@/components/ui/input";
 import AnnotationCanvas from "@/components/annotation-canvas";
 import { useAnnotation } from "@/hooks/use-annotation";
-import RubricPanel from "@/components/grading/RubricPanel";
+import RubricPanel, { buildDefaultCriteria } from "@/components/grading/RubricPanel";
 import HomeworkPrepPanel from "@/components/grading/HomeworkPrepPanel";
 
 // ✅ added
 import AnnotationToolbar from "@/components/annotation-toolbar";
 import AnnotationInspector from "@/components/grading/AnnotationInspector";
+
+// ✅ AI Grading
+import AIGradingPanel from "@/components/grading/AIGradingPanel";
+import BatchGradingDialog from "@/components/grading/BatchGradingDialog";
+import { useAIGrading } from "@/hooks/use-ai-grading";
+import { Sparkles } from "lucide-react";
 
 type InstructorView =
   | "overview"
@@ -566,6 +572,11 @@ export default function InstructorDashboard() {
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
+  // ✅ AI Grading
+  const aiGrading = useAIGrading();
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [applyAiTrigger, setApplyAiTrigger] = useState(0);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return submissions.filter(
@@ -963,6 +974,10 @@ export default function InstructorDashboard() {
                   <Button variant={mode === "group" ? "default" : "secondary"} onClick={() => setMode("group")}>
                     Group
                   </Button>
+                  <Button variant="outline" className="gap-2" onClick={() => setShowBatchDialog(true)}>
+                    <Sparkles className="h-4 w-4" />
+                    Batch AI Grade
+                  </Button>
                 </div>
               </div>
 
@@ -1040,6 +1055,63 @@ export default function InstructorDashboard() {
                       initialRubric={selected.rubric ?? []}
                       lastSavedAt={selected.updatedAt}
                       onSubmit={(score: number, rubric: any[]) => saveDraft(selected.id, score, rubric)}
+                      externalAiSuggestion={aiGrading.rubricSuggestion}
+                      externalAiLoading={aiGrading.isAnalyzing}
+                      applyAiTrigger={applyAiTrigger}
+                      onRequestExternalAi={() => {
+                        const rubricDef = buildDefaultCriteria().map((c) => ({
+                          id: c.id,
+                          title: c.title,
+                          max: c.max,
+                          levels: c.levels.map((l) => ({
+                            key: l.key,
+                            label: l.label,
+                            points: l.points,
+                            desc: l.desc,
+                          })),
+                        }));
+                        aiGrading.analyzeSubmission(
+                          selected.id,
+                          selectedAnn.annotations ?? [],
+                          draftFeedback || selected.feedback,
+                          rubricDef,
+                          selected.caseTitle
+                        );
+                      }}
+                    />
+
+                    {/* ✅ AI Grading Panel */}
+                    <AIGradingPanel
+                      isAnalyzing={aiGrading.isAnalyzing}
+                      result={aiGrading.currentResult}
+                      error={aiGrading.error}
+                      disabled={isSaving}
+                      onAnalyze={() => {
+                        const rubricDef = buildDefaultCriteria().map((c) => ({
+                          id: c.id,
+                          title: c.title,
+                          max: c.max,
+                          levels: c.levels.map((l) => ({
+                            key: l.key,
+                            label: l.label,
+                            points: l.points,
+                            desc: l.desc,
+                          })),
+                        }));
+                        aiGrading.analyzeSubmission(
+                          selected.id,
+                          selectedAnn.annotations ?? [],
+                          draftFeedback || selected.feedback,
+                          rubricDef,
+                          selected.caseTitle
+                        );
+                      }}
+                      onApplyScores={() => {
+                        setApplyAiTrigger((n) => n + 1);
+                      }}
+                      onApplyFeedback={(feedback) => {
+                        setDraftFeedback(feedback);
+                      }}
                     />
 
                     <Card>
@@ -1103,6 +1175,60 @@ export default function InstructorDashboard() {
                   )}
                 </div>
               )}
+
+              {/* ✅ Batch AI Grading Dialog */}
+              <BatchGradingDialog
+                open={showBatchDialog}
+                onClose={() => setShowBatchDialog(false)}
+                submissions={filtered.map((s) => ({
+                  id: s.id,
+                  caseTitle: s.caseTitle,
+                  studentId: s.studentId,
+                  status: s.status,
+                  score: s.score,
+                }))}
+                batchJob={aiGrading.batchJob}
+                onStartBatch={(ids) => {
+                  const rubricDef = buildDefaultCriteria().map((c) => ({
+                    id: c.id,
+                    title: c.title,
+                    max: c.max,
+                    levels: c.levels.map((l) => ({
+                      key: l.key,
+                      label: l.label,
+                      points: l.points,
+                      desc: l.desc,
+                    })),
+                  }));
+                  const subs = ids.map((id) => {
+                    const sub = submissions.find((s) => s.id === id);
+                    return {
+                      id,
+                      annotations: [],
+                      studentAnswer: sub?.feedback,
+                      caseTitle: sub?.caseTitle,
+                    };
+                  });
+                  aiGrading.startBatchGrading(subs, rubricDef);
+                }}
+                onCancelBatch={aiGrading.cancelBatchGrading}
+                onApplyResult={(subId, result) => {
+                  setSubmissions((prev) =>
+                    prev.map((s) =>
+                      s.id === subId
+                        ? {
+                            ...s,
+                            score: result.totalScore,
+                            status: "graded" as SubmissionStatus,
+                            feedback: result.feedbackSuggestion,
+                            updatedAt: new Date().toISOString(),
+                          }
+                        : s
+                    )
+                  );
+                }}
+                getBatchResult={aiGrading.getBatchResult}
+              />
             </div>
           )}
 

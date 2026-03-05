@@ -123,10 +123,14 @@ async def create_thread(
     # remove that so posts can be tagless when user chooses none.
 
 
+    avatar_url = None
+    if user.get("profile_photo"):
+        avatar_url = f"http://127.0.0.1:8000/api/user/profile-photo/{user['profile_photo']}"
+
     author = ForumAuthor(
         user_id=str(user["_id"]),
         name=f"{user.get('firstName', '')} {user.get('lastName', '')}".strip(),
-        avatarUrl=None,
+        avatarUrl=avatar_url,
     )
 
     thread = ForumThread(
@@ -169,10 +173,14 @@ async def add_reply(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    avatar_url = None
+    if user.get("profile_photo"):
+        avatar_url = f"http://127.0.0.1:8000/api/user/profile-photo/{user['profile_photo']}"
+
     reply_author = ForumAuthor(
         user_id=str(user["_id"]),
         name=f"{user.get('firstName', '')} {user.get('lastName', '')}".strip(),
-        avatarUrl=None,
+        avatarUrl=avatar_url,
     )
 
     reply = ForumReply(

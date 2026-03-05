@@ -57,9 +57,9 @@ async def startup_event():
         user_storage = uploads_root / str(admin_id)
         user_storage.mkdir(parents=True, exist_ok=True)
 
-        print(f"✅ Admin account created: {admin_email}")
+        print(f"[OK] Admin account created: {admin_email}")
     else:
-        print(f"ℹ️ Admin account already exists: {admin_email}")
+        print(f"[INFO] Admin account already exists: {admin_email}")
 
     student_count = await users_collection.count_documents({"role": "student"})
     student_needed = 3 - student_count
@@ -81,7 +81,7 @@ async def startup_event():
             user_storage = uploads_root / str(new_user_id)
             user_storage.mkdir(parents=True, exist_ok=True)
 
-        print(f"✅ Added {student_needed} random student accounts")
+        print(f"[OK] Added {student_needed} random student accounts")
 
     instructor_count = await users_collection.count_documents({"role": "instructor"})
     instructor_needed = 6 - instructor_count
@@ -111,9 +111,9 @@ async def startup_event():
             if not existing_approval:
                 await approvals_collection.insert_one({"id": str(new_user_id), "status": status})
 
-        print(f"✅ Added {instructor_needed} instructor accounts (pending & verified)")
+        print(f"[OK] Added {instructor_needed} instructor accounts (pending & verified)")
 
-    print("✅ Database seeding complete.")
+    print("[OK] Database seeding complete.")
 
 @app.get("/")
 def home():
