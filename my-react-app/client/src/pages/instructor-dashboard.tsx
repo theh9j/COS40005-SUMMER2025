@@ -21,10 +21,8 @@ import {
   LineChart,
   Users,
   UserPlus,
-  Upload,
 } from "lucide-react";
 
-import UploadModal from "@/components/upload-modal";
 import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 import { Input } from "@/components/ui/input";
@@ -251,7 +249,6 @@ export default function InstructorDashboard() {
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [discussionPrefill, setDiscussionPrefill] = useState<null | { title?: string; message?: string; tags?: string[]; caseId?: string }>(null);
 
   const [activeView, setActiveView] = useState<InstructorView>(() => {
@@ -864,7 +861,6 @@ export default function InstructorDashboard() {
           </div>
         </div>
       </header>
-      <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
 
       <div className="flex">
         {/* Sidebar */}
@@ -1346,10 +1342,6 @@ export default function InstructorDashboard() {
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={loadCases}>
                     Refresh
-                  </Button>
-                  <Button onClick={() => setShowUploadModal(true)} className="bg-primary text-primary-foreground hover:opacity-90" data-testid="button-upload-case">
-                    <Upload className="h-4 w-4 mr-2" />
-                    {t("uploadCase")}
                   </Button>
                 </div>
               </div>
