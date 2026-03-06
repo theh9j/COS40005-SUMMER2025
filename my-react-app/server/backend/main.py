@@ -37,10 +37,19 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.on_event("startup")
 async def startup_event():
+
+
+    #UPLOADS STARTUP
+
+
     uploads_root = Path("uploads")
     uploads_root.mkdir(parents=True, exist_ok=True)
 
-    admin_email = "nothingnoteworthy@gmail.com"
+
+    #ADMIN STARTUP
+
+
+    admin_email = "you@admin.com"
     existing_admin = await users_collection.find_one({"email": admin_email})
 
     if not existing_admin:
@@ -60,6 +69,10 @@ async def startup_event():
         print(f"✅ Admin account created: {admin_email}")
     else:
         print(f"ℹ️ Admin account already exists: {admin_email}")
+
+
+    #STUDENT STARTUP
+
 
     student_count = await users_collection.count_documents({"role": "student"})
     student_needed = 3 - student_count
@@ -82,6 +95,10 @@ async def startup_event():
             user_storage.mkdir(parents=True, exist_ok=True)
 
         print(f"✅ Added {student_needed} random student accounts")
+
+
+    #INSTRUCTOR STARTUP
+
 
     instructor_count = await users_collection.count_documents({"role": "instructor"})
     instructor_needed = 6 - instructor_count
@@ -113,6 +130,11 @@ async def startup_event():
 
         print(f"✅ Added {instructor_needed} instructor accounts (pending & verified)")
 
+
+    #CLASSROOMS STARTUP
+
+
+    # classroom_count = await classrooms_collection.count_documents("")
     print("✅ Database seeding complete.")
 
 @app.get("/")
