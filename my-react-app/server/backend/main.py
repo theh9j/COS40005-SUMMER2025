@@ -130,16 +130,12 @@ async def startup_event():
 
         print(f"[OK] Added {instructor_needed} instructor accounts (pending & verified)")
 
-<<<<<<< HEAD
 
     #CLASSROOMS STARTUP
 
 
     # classroom_count = await classrooms_collection.count_documents("")
     print("✅ Database seeding complete.")
-=======
-    print("[OK] Database seeding complete.")
->>>>>>> c54aaf6682d3d49bbde080eb48a01bc3de126614
 
 @app.get("/")
 def home():
