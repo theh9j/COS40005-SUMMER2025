@@ -104,7 +104,7 @@ async def create_thread(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_folder = BASE_UPLOAD_DIR / str(user_id)
+    user_folder = BASE_UPLOAD_DIR / str(user_id) / "forums"
     user_folder.mkdir(parents=True, exist_ok=True)
 
     image_url = None
@@ -114,7 +114,7 @@ async def create_thread(
         file_path = user_folder / filename
         with open(file_path, "wb") as f:
             f.write(await image.read())
-        image_url = f"http://127.0.0.1:8000/uploads/{user_id}/{filename}"
+        image_url = f"http://127.0.0.1:8000/uploads/{user_id}/forums/{filename}"
 
     tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
 

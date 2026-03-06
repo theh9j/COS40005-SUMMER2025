@@ -11,7 +11,7 @@ from db.connection import cases_collection
 
 router = APIRouter(prefix="/api/instructor", tags=["Cases"])
 
-BASE_UPLOAD_DIR = Path("uploads") / "cases"
+BASE_UPLOAD_DIR = Path("uploads")
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -27,7 +27,7 @@ async def create_case(
 ):
     """
     Create a new Case (title + optional description + image).
-    Save image to uploads/cases/ and return case_id + image_url.
+    Save image to uploads/{author_id}/cases/ and return case_id + image_url.
     - case_type: Medical specialty (Neurology, Cardiology, etc.)
     - homework_type: Type of homework (Q&A or Annotate). Defaults to Annotate.
     """
@@ -38,7 +38,8 @@ async def create_case(
         raise HTTPException(status_code=400, detail="Image file is required")
 
     # ensure folder exists
-    BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    user_cases_dir = BASE_UPLOAD_DIR / author_id / "cases"
+    user_cases_dir.mkdir(parents=True, exist_ok=True)
 
     case_id = str(ObjectId())
 
@@ -47,13 +48,13 @@ async def create_case(
     ext = ext.lower() if ext else ".png"
 
     filename = f"{case_id}{ext}"
-    file_path = BASE_UPLOAD_DIR / filename
+    file_path = user_cases_dir / filename
 
     # save file
     with open(file_path, "wb") as f:
         f.write(await image.read())
 
-    image_url = f"http://127.0.0.1:8000/uploads/cases/{filename}"
+    image_url = f"http://127.0.0.1:8000/uploads/{author_id}/cases/{filename}"
 
     doc = {
         "_id": ObjectId(case_id),
@@ -120,24 +121,29 @@ async def delete_case(case_id: str):
     await cases_collection.delete_one({"_id": oid})
 
     # Try delete image file
-    # Preferred: delete by stored filename
-    filename = case.get("image_filename")
-    if filename:
-        file_path = BASE_UPLOAD_DIR / filename
-        try:
-            if file_path.exists():
-                file_path.unlink()
-        except Exception as e:
-            # Don't fail deletion if file missing
-            print("Warning: failed to delete case image:", e)
-    else:
-        # Fallback: delete any file matching {case_id}.*
-        pattern = str(BASE_UPLOAD_DIR / f"{case_id}.*")
-        for p in glob(pattern):
+    author_id = case.get("author_id")
+    if author_id:
+        user_cases_dir = BASE_UPLOAD_DIR / author_id / "cases"
+        # Preferred: delete by stored filename
+        filename = case.get("image_filename")
+        if filename:
+            file_path = user_cases_dir / filename
             try:
-                Path(p).unlink()
+                if file_path.exists():
+                    file_path.unlink()
             except Exception as e:
-                print("Warning: failed to delete image:", e)
+                # Don't fail deletion if file missing
+                print("Warning: failed to delete case image:", e)
+        else:
+            # Fallback: delete any file matching {case_id}.*
+            pattern = str(user_cases_dir / f"{case_id}.*")
+            for p in glob(pattern):
+                try:
+                    Path(p).unlink()
+                except Exception as e:
+                    print("Warning: failed to delete image:", e)
+    else:
+        print("Warning: no author_id found for case, cannot delete image")
 
     return {"ok": True, "deleted_case_id": case_id}
 
