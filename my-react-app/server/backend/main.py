@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db.connection import users_collection, approvals_collection, classrooms_collection
 import random
+import logging
 from pathlib import Path
 from datetime import datetime
 from core.security import hash_password
@@ -134,8 +135,30 @@ async def startup_event():
     #CLASSROOMS STARTUP
 
 
-    # classroom_count = await classrooms_collection.count_documents("")
-    print("✅ Database seeding complete.")
+    classroom_count = await classrooms_collection.count_documents({})
+    classrooms_needed = 8 - classroom_count
+
+    if classrooms_needed > 0:
+        for _ in range(classrooms_needed):
+
+            y = random.randint(1, 3)
+            xxx = random.randint(0, 999)
+
+            classroom_name = f"COS{y}0{xxx:03d}"
+            year = str(random.randint(2020, 2026))
+
+            classroom = {
+                "name": classroom_name,
+                "year": year,
+                "created_at": datetime.utcnow(),
+                "members": []
+            }
+
+            await classrooms_collection.insert_one(classroom)
+
+        print(f"[OK] Added {classrooms_needed} classrooms")
+    else:
+        print("[INFO] Classrooms already exist")
 
 @app.get("/")
 def home():

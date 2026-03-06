@@ -56,6 +56,8 @@ type Props = {
   onPublish: (payload: PublishPayload) => void;
 };
 
+type FieldErrors = Partial<Record<string, string>>;
+
 export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
   // ====== Create Case fields ======
   const [caseTitle, setCaseTitle] = useState("");
@@ -95,6 +97,8 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
   >([]);
   const [newHomeworkTagInput, setNewHomeworkTagInput] = useState("");
 
+  const [errors, setErrors] = useState<FieldErrors>({});
+
   const autoChecklist = useMemo(() => {
     const base = [
       ...stats.commonMistakes.map((x) => `Fix: ${x}`),
@@ -102,6 +106,19 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
     ];
     return Array.from(new Set(base)).slice(0, 6);
   }, [stats]);
+
+  const validate = () => {
+    const next: FieldErrors = {};
+    if (!caseTitle.trim()) next.caseTitle = "Case title is required.";
+    if (!caseImageFile) next.caseImage = "Annotation image is required.";
+    if (!due) next.due = "Due date is required.";
+    if (!requirementId.trim()) next.requirementId = "Requirement ID is required.";
+    if (!className.trim()) next.className = "Class name is required.";
+    if (!year.trim()) next.year = "Year is required.";
+    if (questions.length === 0) next.questions = "At least one essay question is required.";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
   // ✅ must have: caseTitle + caseImageFile + due + requirement meta + >=1 question
   const canPublish =
@@ -289,6 +306,9 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                   value={caseTitle}
                   onChange={(e) => setCaseTitle(e.target.value)}
                 />
+                {errors.caseTitle && (
+                  <p className="mt-1 text-xs text-red-600">{errors.caseTitle}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -374,6 +394,9 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
               <div className="text-xs text-muted-foreground">
                 Required. Upload 1 image (PNG/JPG).
               </div>
+              {errors.caseImage && (
+                <p className="mt-1 text-xs text-red-600">{errors.caseImage}</p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -395,6 +418,9 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                     value={requirementId}
                     onChange={(e) => setRequirementId(e.target.value)}
                   />
+                  {errors.requirementId && (
+                    <p className="mt-1 text-xs text-red-600">{errors.requirementId}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Class</label>
@@ -403,6 +429,9 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                     value={className}
                     onChange={(e) => setClassName(e.target.value)}
                   />
+                  {errors.className && (
+                    <p className="mt-1 text-xs text-red-600">{errors.className}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Year</label>
@@ -411,6 +440,9 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                     value={year}
                     onChange={(e) => setYear(e.target.value)}
                   />
+                  {errors.year && (
+                    <p className="mt-1 text-xs text-red-600">{errors.year}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -424,6 +456,9 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Due date</label>
                   <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+                  {errors.due && (
+                    <p className="mt-1 text-xs text-red-600">{errors.due}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Audience</label>
@@ -494,6 +529,10 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                 <div className="text-xs text-muted-foreground">
                   No questions yet. Add one to start.
                 </div>
+              )}
+
+              {errors.questions && (
+                <p className="mt-1 text-xs text-red-600">{errors.questions}</p>
               )}
 
               {questions.map((q, qi) => (
@@ -591,7 +630,8 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
 
             <Button
               disabled={!canPublish}
-              onClick={() =>
+              onClick={() => {
+                if (!validate()) return;
                 onPublish({
                   newCase: {
                     title: caseTitle.trim(),
@@ -616,8 +656,8 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                   requirementId: requirementId.trim(),
                   className: className.trim(),
                   year: year.trim(),
-                })
-              }
+                });
+              }}
             >
               Publish homework
             </Button>

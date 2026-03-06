@@ -97,6 +97,8 @@ type CaseFromApi = {
   description?: string | null;
   image_url?: string | null;
   created_at?: string;
+  case_type?: string | null;
+  homework_type?: string;
 };
 
 type CaseCard = {
@@ -450,6 +452,8 @@ export default function InstructorDashboard() {
       description: (c.description as string) ?? "No description",
       imageUrl: c.image_url ?? "",
       source: "db",
+      homeworkType: c.homework_type as "Q&A" | "Annotate" | undefined,
+      caseType: c.case_type ?? undefined,
       createdAt: c.created_at,
     }));
 
@@ -1252,6 +1256,9 @@ export default function InstructorDashboard() {
                       fd.append("title", payload.newCase.title);
                       if (payload.newCase.description) fd.append("description", payload.newCase.description);
                       fd.append("image", payload.newCase.imageFile);
+                      fd.append("case_type", payload.newCase.type || "");
+                      fd.append("homework_type", payload.homeworkType || "Annotate");
+                      fd.append("author_id", user.user_id);
 
                       const createRes = await fetch(`${API_BASE}/api/instructor/cases`, {
                         method: "POST",

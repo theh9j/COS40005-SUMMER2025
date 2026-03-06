@@ -23,6 +23,7 @@ async def create_case(
     image: UploadFile = Form(...),
     case_type: Optional[str] = Form(None),
     homework_type: Optional[str] = Form("Annotate"),
+    author_id: str = Form(...),
 ):
     """
     Create a new Case (title + optional description + image).
@@ -61,6 +62,7 @@ async def create_case(
         "image_url": image_url,
         "case_type": (case_type.strip() if case_type else None),
         "homework_type": (homework_type.strip() if homework_type else "Annotate"),
+        "author_id": author_id,
         "created_at": now_iso(),
         "updated_at": now_iso(),
         "image_filename": filename,
@@ -70,6 +72,7 @@ async def create_case(
 
     return {
         "case_id": case_id,
+        "author_id": author_id,
         "image_url": image_url,
         "title": doc["title"],
         "description": doc["description"],
@@ -88,6 +91,7 @@ async def list_cases(limit: int = 50):
         out.append({
             "case_id": str(c["_id"]),
             "title": c.get("title"),
+            "author_id": c.get("author_id"),
             "description": c.get("description"),
             "image_url": c.get("image_url"),
             "case_type": c.get("case_type"),
