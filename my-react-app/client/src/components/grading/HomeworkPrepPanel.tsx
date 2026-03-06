@@ -648,7 +648,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                       ? studentIds.split(",").map((s) => s.trim()).filter(Boolean)
                       : undefined,
                   instructions: instructions || undefined,
-                  autoChecklist,
+                  autoChecklist: homeworkTags.map(tag => tag.label),
                   suggestedFocusTags: homeworkTags.length > 0 ? homeworkTags : undefined,
                   homeworkType,
                   referenceUploads,
