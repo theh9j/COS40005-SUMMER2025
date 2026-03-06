@@ -21,21 +21,25 @@ import {
   LineChart,
   Users,
   UserPlus,
-  Upload,
 } from "lucide-react";
 
-import UploadModal from "@/components/upload-modal";
 import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 import { Input } from "@/components/ui/input";
 import AnnotationCanvas from "@/components/annotation-canvas";
 import { useAnnotation } from "@/hooks/use-annotation";
-import RubricPanel from "@/components/grading/RubricPanel";
+import RubricPanel, { buildDefaultCriteria } from "@/components/grading/RubricPanel";
 import HomeworkPrepPanel from "@/components/grading/HomeworkPrepPanel";
 
 // ✅ added
 import AnnotationToolbar from "@/components/annotation-toolbar";
 import AnnotationInspector from "@/components/grading/AnnotationInspector";
+
+// ✅ AI Grading
+import AIGradingPanel from "@/components/grading/AIGradingPanel";
+import BatchGradingDialog from "@/components/grading/BatchGradingDialog";
+import { useAIGrading } from "@/hooks/use-ai-grading";
+import { Sparkles } from "lucide-react";
 
 type InstructorView =
   | "overview"
@@ -106,7 +110,6 @@ type CaseCard = {
   createdAt?: string;
 };
 
-type CaseFilter = "all" | "db" | "mock";
 type CaseSort = "newest" | "oldest" | "az" | "za";
 
 // ===== Class types =====
@@ -246,7 +249,6 @@ export default function InstructorDashboard() {
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [discussionPrefill, setDiscussionPrefill] = useState<null | { title?: string; message?: string; tags?: string[]; caseId?: string }>(null);
 
   const [activeView, setActiveView] = useState<InstructorView>(() => {
@@ -409,7 +411,8 @@ export default function InstructorDashboard() {
   const [loadingCases, setLoadingCases] = useState(false);
 
   const [caseSearch, setCaseSearch] = useState("");
-  const [caseFilter, setCaseFilter] = useState<CaseFilter>("all");
+  const [caseFilterClass, setCaseFilterClass] = useState("");
+  const [caseFilterHomeworkType, setCaseFilterHomeworkType] = useState("");
   const [caseSort, setCaseSort] = useState<CaseSort>("newest");
 
   const loadCases = async () => {
@@ -468,8 +471,8 @@ export default function InstructorDashboard() {
 
     let list = mergedCases;
 
-    if (caseFilter !== "all") {
-      list = list.filter((c) => c.source === caseFilter);
+    if (caseFilterHomeworkType) {
+      list = list.filter((c) => c.homeworkType === caseFilterHomeworkType);
     }
 
     if (q) {
@@ -496,7 +499,7 @@ export default function InstructorDashboard() {
     });
 
     return list;
-  }, [mergedCases, caseSearch, caseFilter, caseSort]);
+  }, [mergedCases, caseSearch, caseFilterHomeworkType, caseSort]);
 
   const deleteDbCase = async (caseId: string, title: string) => {
     const yes = window.confirm(`Delete case "${title}"?\nThis cannot be undone.`);
@@ -565,6 +568,11 @@ export default function InstructorDashboard() {
   const [draftFeedback, setDraftFeedback] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+
+  // ✅ AI Grading
+  const aiGrading = useAIGrading();
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [applyAiTrigger, setApplyAiTrigger] = useState(0);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -853,7 +861,6 @@ export default function InstructorDashboard() {
           </div>
         </div>
       </header>
-      <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
 
       <div className="flex">
         {/* Sidebar */}
@@ -963,6 +970,10 @@ export default function InstructorDashboard() {
                   <Button variant={mode === "group" ? "default" : "secondary"} onClick={() => setMode("group")}>
                     Group
                   </Button>
+                  <Button variant="outline" className="gap-2" onClick={() => setShowBatchDialog(true)}>
+                    <Sparkles className="h-4 w-4" />
+                    Batch AI Grade
+                  </Button>
                 </div>
               </div>
 
@@ -1040,6 +1051,63 @@ export default function InstructorDashboard() {
                       initialRubric={selected.rubric ?? []}
                       lastSavedAt={selected.updatedAt}
                       onSubmit={(score: number, rubric: any[]) => saveDraft(selected.id, score, rubric)}
+                      externalAiSuggestion={aiGrading.rubricSuggestion}
+                      externalAiLoading={aiGrading.isAnalyzing}
+                      applyAiTrigger={applyAiTrigger}
+                      onRequestExternalAi={() => {
+                        const rubricDef = buildDefaultCriteria().map((c) => ({
+                          id: c.id,
+                          title: c.title,
+                          max: c.max,
+                          levels: c.levels.map((l) => ({
+                            key: l.key,
+                            label: l.label,
+                            points: l.points,
+                            desc: l.desc,
+                          })),
+                        }));
+                        aiGrading.analyzeSubmission(
+                          selected.id,
+                          selectedAnn.annotations ?? [],
+                          draftFeedback || selected.feedback,
+                          rubricDef,
+                          selected.caseTitle
+                        );
+                      }}
+                    />
+
+                    {/* ✅ AI Grading Panel */}
+                    <AIGradingPanel
+                      isAnalyzing={aiGrading.isAnalyzing}
+                      result={aiGrading.currentResult}
+                      error={aiGrading.error}
+                      disabled={isSaving}
+                      onAnalyze={() => {
+                        const rubricDef = buildDefaultCriteria().map((c) => ({
+                          id: c.id,
+                          title: c.title,
+                          max: c.max,
+                          levels: c.levels.map((l) => ({
+                            key: l.key,
+                            label: l.label,
+                            points: l.points,
+                            desc: l.desc,
+                          })),
+                        }));
+                        aiGrading.analyzeSubmission(
+                          selected.id,
+                          selectedAnn.annotations ?? [],
+                          draftFeedback || selected.feedback,
+                          rubricDef,
+                          selected.caseTitle
+                        );
+                      }}
+                      onApplyScores={() => {
+                        setApplyAiTrigger((n) => n + 1);
+                      }}
+                      onApplyFeedback={(feedback) => {
+                        setDraftFeedback(feedback);
+                      }}
                     />
 
                     <Card>
@@ -1103,6 +1171,60 @@ export default function InstructorDashboard() {
                   )}
                 </div>
               )}
+
+              {/* ✅ Batch AI Grading Dialog */}
+              <BatchGradingDialog
+                open={showBatchDialog}
+                onClose={() => setShowBatchDialog(false)}
+                submissions={filtered.map((s) => ({
+                  id: s.id,
+                  caseTitle: s.caseTitle,
+                  studentId: s.studentId,
+                  status: s.status,
+                  score: s.score,
+                }))}
+                batchJob={aiGrading.batchJob}
+                onStartBatch={(ids) => {
+                  const rubricDef = buildDefaultCriteria().map((c) => ({
+                    id: c.id,
+                    title: c.title,
+                    max: c.max,
+                    levels: c.levels.map((l) => ({
+                      key: l.key,
+                      label: l.label,
+                      points: l.points,
+                      desc: l.desc,
+                    })),
+                  }));
+                  const subs = ids.map((id) => {
+                    const sub = submissions.find((s) => s.id === id);
+                    return {
+                      id,
+                      annotations: [],
+                      studentAnswer: sub?.feedback,
+                      caseTitle: sub?.caseTitle,
+                    };
+                  });
+                  aiGrading.startBatchGrading(subs, rubricDef);
+                }}
+                onCancelBatch={aiGrading.cancelBatchGrading}
+                onApplyResult={(subId, result) => {
+                  setSubmissions((prev) =>
+                    prev.map((s) =>
+                      s.id === subId
+                        ? {
+                            ...s,
+                            score: result.totalScore,
+                            status: "graded" as SubmissionStatus,
+                            feedback: result.feedbackSuggestion,
+                            updatedAt: new Date().toISOString(),
+                          }
+                        : s
+                    )
+                  );
+                }}
+                getBatchResult={aiGrading.getBatchResult}
+              />
             </div>
           )}
 
@@ -1221,16 +1343,12 @@ export default function InstructorDashboard() {
                   <Button variant="outline" onClick={loadCases}>
                     Refresh
                   </Button>
-                  <Button onClick={() => setShowUploadModal(true)} className="bg-primary text-primary-foreground hover:opacity-90" data-testid="button-upload-case">
-                    <Upload className="h-4 w-4 mr-2" />
-                    {t("uploadCase")}
-                  </Button>
                 </div>
               </div>
 
               <Card>
                 <CardContent className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <Input
                       placeholder="Search cases by title/description..."
                       value={caseSearch}
@@ -1239,12 +1357,25 @@ export default function InstructorDashboard() {
 
                     <select
                       className="h-10 rounded-md border border-border bg-background px-3 text-sm"
-                      value={caseFilter}
-                      onChange={(e) => setCaseFilter(e.target.value as CaseFilter)}
+                      value={caseFilterClass}
+                      onChange={(e) => setCaseFilterClass(e.target.value)}
                     >
-                      <option value="all">All</option>
-                      <option value="db">NEW (DB)</option>
-                      <option value="mock">DEMO (Mock)</option>
+                      <option value="">All Classes</option>
+                      {classrooms.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.display}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      value={caseFilterHomeworkType}
+                      onChange={(e) => setCaseFilterHomeworkType(e.target.value)}
+                    >
+                      <option value="">All Homework Types</option>
+                      <option value="Annotate">Annotate</option>
+                      <option value="Q&A">Q&A</option>
                     </select>
 
                     <select
@@ -1262,14 +1393,16 @@ export default function InstructorDashboard() {
                   <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                     <div>
                       Showing <span className="font-medium">{visibleCases.length}</span> cases
-                      {caseFilter !== "all" ? ` • Filter: ${caseFilter}` : ""}
+                      {caseFilterClass ? ` • Class: ${classrooms.find((c) => c.id === caseFilterClass)?.display || caseFilterClass}` : ""}
+                      {caseFilterHomeworkType ? ` • Type: ${caseFilterHomeworkType}` : ""}
                       {caseSearch.trim() ? ` • Search: "${caseSearch.trim()}"` : ""}
                     </div>
                     <button
                       className="hover:underline"
                       onClick={() => {
                         setCaseSearch("");
-                        setCaseFilter("all");
+                        setCaseFilterClass("");
+                        setCaseFilterHomeworkType("");
                         setCaseSort("newest");
                       }}
                     >

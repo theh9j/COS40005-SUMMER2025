@@ -647,16 +647,23 @@ export default function AnnotationView() {
                         />
                       </div>
                       <div>
-                        <label htmlFor="edit-case-category" className="block text-xs font-medium mb-1">Category</label>
-                        <input
+                        <label htmlFor="edit-case-category" className="block text-xs font-medium mb-1">Case Type (Specialty)</label>
+                        <select
                           id="edit-case-category"
-                          type="text"
                           value={editCaseCategory}
                           onChange={(e) => setEditCaseCategory(e.target.value)}
-                          placeholder="Case category"
-                          title="Case Category"
+                          title="Case Type"
                           className="w-full px-3 py-1.5 text-sm border border-border rounded-md bg-background"
-                        />
+                        >
+                          <option value="">Select a case type</option>
+                          <option value="Neurology">Neurology</option>
+                          <option value="Pulmonology">Pulmonology</option>
+                          <option value="Cardiology">Cardiology</option>
+                          <option value="Gastroenterology">Gastroenterology</option>
+                          <option value="Oncology">Oncology</option>
+                          <option value="Radiology">Radiology</option>
+                          <option value="Orthopedics">Orthopedics</option>
+                        </select>
                       </div>
                     </div>
 

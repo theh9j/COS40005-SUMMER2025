@@ -1,7 +1,13 @@
 import { Annotation } from "@shared/schema";
+import type {
+  AIGradingResult,
+  AIAnnotationComment,
+  GradingSubmissionInput,
+  RubricCriterionDef,
+} from "@/types/ai-grading";
 
 // AI Provider types
-export type AIProvider = "openai" | "anthropic" | "google";
+export type AIProvider = "openai" | "anthropic" | "google" | "default";
 
 export interface AIConfig {
   provider: AIProvider;
@@ -121,8 +127,8 @@ class AIService {
     const visionPrompt = this.buildVisionPrompt(analysisType, context);
     
     const payload = {
-      provider: "google",
-      model: "gemini-2.5-flash",
+      provider: this.config.provider,
+      model: this.config.model,
       messages: [
         { role: "system", content: visionPrompt },
         { role: "user", content: "Please analyze this medical image for educational purposes." }
@@ -261,13 +267,15 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
     messages: ChatMessage[],
     context?: MedicalContext
   ): AsyncGenerator<string, void, unknown> {
+    console.log("[DEBUG] Starting chatStream with messages:", messages);
+    
     const systemPrompt = this.buildSystemPrompt(context);
     
     const payload = {
       provider: this.config.provider,
       model: this.config.model,
       temperature: this.config.temperature || 0.7,
-      maxTokens: this.config.maxTokens || 1000,
+      maxTokens: this.config.maxTokens || 2000,
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map(m => ({ role: m.role, content: m.content }))
@@ -275,6 +283,8 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
       context,
       stream: true
     };
+
+    console.log("[DEBUG] Payload:", payload);
 
     try {
       const response = await fetch(`${this.baseUrl}/chat/stream`, {
@@ -286,43 +296,54 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
         body: JSON.stringify(payload)
       });
 
+      console.log("[DEBUG] Response status:", response.status);
+
       if (!response.ok) {
-        // Mock streaming response
-        const mockResponse = `🤖 Mock Streaming Response: I understand you're asking about "${messages[messages.length - 1]?.content.slice(0, 30)}..."\n\nThis is a simulated streaming response since no real API key is configured.\n\nI can help you with:\n- Medical case analysis\n- Annotation feedback\n- Study guidance\n- Homework assistance\n\nContext I see:\n${context?.caseTitle ? `- Case: ${context.caseTitle}\n` : ''}${context?.annotations?.length ? `- Annotations: ${context.annotations.length} present\n` : ''}${context?.userRole ? `- Your role: ${context.userRole}` : ''}`;
-        
-        const words = mockResponse.split(' ');
-        for (const word of words) {
-          yield word + ' ';
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
+        console.log("[DEBUG] Response not ok, using fallback");
+        yield "Xin lỗi, tôi đang gặp sự cố kỹ thuật. Bạn có thể thử lại không?";
         return;
       }
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response body");
+      if (!reader) {
+        console.error("[DEBUG] No response body reader");
+        yield "Không thể đọc phản hồi từ server.";
+        return;
+      }
 
       const decoder = new TextDecoder();
       
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log("[DEBUG] Stream done");
+            break;
+          }
           
           const chunk = decoder.decode(value);
+          console.log("[DEBUG] Raw chunk:", chunk);
+          
           const lines = chunk.split('\n');
           
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
-              if (data === '[DONE]') return;
+              console.log("[DEBUG] Data line:", data);
+              
+              if (data === '[DONE]') {
+                console.log("[DEBUG] Stream completed with [DONE]");
+                return;
+              }
               
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.content) {
+                  console.log("[DEBUG] Yielding content:", parsed.content);
                   yield parsed.content;
                 }
               } catch (e) {
-                // Skip invalid JSON
+                console.log("[DEBUG] Failed to parse JSON:", data, e);
               }
             }
           }
@@ -331,61 +352,42 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
         reader.releaseLock();
       }
     } catch (error) {
-      console.error("Streaming error:", error);
-      yield "🤖 Connection error. Using fallback response.\n\n";
-      yield `Your question: "${messages[messages.length - 1]?.content}"\n\n`;
-      yield "Please check your connection and try again.";
+      console.error("[DEBUG] Streaming error:", error);
+      yield "Lỗi kết nối. Vui lòng thử lại.";
     }
   }
 
   // Build context-aware system prompt
   private buildSystemPrompt(context?: MedicalContext): string {
-    let prompt = `You are a medical education mentor using Socratic teaching method. Guide learning through questions and hints, never give direct answers.
+    let prompt = `Bạn là một AI assistant chuyên về y khoa và giáo dục y khoa.
 
-🎯 TEACHING APPROACH:
-- Ask guiding questions instead of giving answers
-- Provide general direction, not specific details
-- Encourage students to think critically and discover
-- Use hints like "Consider looking at..." or "What do you notice about..."
-- Make students work for their understanding
+QUY TẮC NGHIÊM NGẶT:
+- CHỈ trả lời các câu hỏi liên quan đến y khoa, medical cases, anatomy, pathology, medical education
+- KHÔNG trả lời về: chính trị, giải trí, thể thao, công nghệ không liên quan y khoa, đời sống cá nhân
+- Nếu câu hỏi không liên quan y khoa: "Tôi chỉ có thể hỗ trợ các vấn đề y khoa. Bạn có câu hỏi gì về medical case không?"
+- Trả lời NGẮN GỌN, đúng trọng tâm (2-3 câu)
+- Dùng tiếng Việt chuyên nghiệp
 
-📋 RESPONSE STYLE:
-- Keep responses SHORT (2-3 sentences max)
-- End with a thought-provoking question
-- Use phrases like "Think about...", "Consider...", "What might..."
-- Never directly identify structures or pathology
-- Guide the learning process, don't shortcut it
-
-⚠️ EDUCATIONAL PHILOSOPHY:
-- Learning happens through struggle and discovery
-- Students must do the work to truly understand
-- Your role is to guide, not to provide answers
-- Encourage systematic thinking and observation`;
+PHẠM VI HỖ TRỢ:
+- Phân tích medical images/cases
+- Giải thích anatomy, physiology  
+- Hướng dẫn annotation medical images
+- Hỗ trợ homework y khoa
+- Medical terminology`;
 
     if (context) {
-      prompt += `\n\n🔍 CURRENT CONTEXT:`;
+      prompt += `\n\nCONTEXT HIỆN TẠI:`;
       
       if (context.caseTitle) {
-        prompt += `\nCase: ${context.caseTitle}`;
+        prompt += ` Trường hợp: ${context.caseTitle}.`;
       }
       
-      if (context.annotations.length > 0) {
-        prompt += `\nStudent has made ${context.annotations.length} annotations`;
-      } else {
-        prompt += `\nStudent hasn't started annotating yet`;
+      if (context.annotations && context.annotations.length > 0) {
+        prompt += ` Có ${context.annotations.length} annotations.`;
       }
       
-      if (context.userRole === "student") {
-        prompt += `\n\n🎓 FOR STUDENT: 
-- Ask questions that make them think deeper
-- Provide hints about WHERE to look, not WHAT they'll find
-- Encourage systematic approach without giving the system
-- Challenge their observations with "Why do you think...?"`;
-      } else {
-        prompt += `\n\n👨‍🏫 FOR INSTRUCTOR: 
-- Suggest teaching strategies that promote discovery learning
-- Recommend ways to guide without giving answers
-- Help create learning challenges that build understanding`;
+      if (context.userRole) {
+        prompt += ` User: ${context.userRole}.`;
       }
     }
 
@@ -458,18 +460,219 @@ IMPORTANT: Guide learning, don't diagnose. Encourage systematic thinking.`;
     return response.json();
   }
 
+  // ── AI-assisted grading ──
+  async gradeSubmission(
+    submission: GradingSubmissionInput,
+    rubricDef: RubricCriterionDef[]
+  ): Promise<AIGradingResult> {
+    const start = Date.now();
+
+    const rubricBlock = rubricDef
+      .map(
+        (c) =>
+          `${c.title} (max ${c.max} pts):\n` +
+          c.levels.map((l) => `  - ${l.label} (${l.points}pts): ${l.desc}`).join("\n")
+      )
+      .join("\n\n");
+
+    const annotationBlock =
+      submission.annotations && submission.annotations.length > 0
+        ? submission.annotations
+            .slice(0, 20)
+            .map(
+              (a, i) =>
+                `${i + 1}. Type: ${a.type}, Label: "${a.label || "(no label)"}", Color: ${a.color}`
+            )
+            .join("\n") +
+          (submission.annotations.length > 20
+            ? `\n... and ${submission.annotations.length - 20} more annotations`
+            : "")
+        : "No annotations provided.";
+
+    const systemPrompt = `You are a concise medical education grading assistant. Evaluate the submission against the rubric. Respond ONLY with valid JSON. Be brief and direct — no filler words.
+
+RUBRIC:
+${rubricBlock}
+
+STRICT JSON FORMAT (no markdown, no extra text):
+{
+  "rubricSuggestions": [
+    {"criterionId": "<id>", "levelKey": "excellent|good|fair|poor", "score": <number>, "reasoning": "<1 sentence max>", "confidence": <0-1>}
+  ],
+  "totalScore": <sum>,
+  "overallConfidence": <0-1>,
+  "strengths": ["<short phrase>"],
+  "weaknesses": ["<short phrase>"],
+  "feedbackSuggestion": "<3-5 sentences. Direct, actionable feedback.>",
+  "annotationComments": [{"annotationId": "<id>", "annotationLabel": "<label>", "comment": "<1 sentence>", "quality": "correct|partial|incorrect|missing-label"}],
+  "improvementSuggestions": ["<short actionable tip>"],
+  "encouragement": "<1 sentence>"
+}`;
+
+    const userMessage = `Grade this student submission:
+
+CASE: ${submission.caseTitle || "N/A"}
+DESCRIPTION: ${submission.caseDescription || "N/A"}
+HOMEWORK INSTRUCTIONS: ${submission.homeworkInstructions || "N/A"}
+
+STUDENT ANNOTATIONS (${submission.annotations?.length ?? 0} total):
+${annotationBlock}
+
+STUDENT ANSWER:
+${submission.studentAnswer || "No text answer provided."}
+
+Evaluate against the rubric and return JSON.`;
+
+    try {
+      const payload = {
+        provider: this.config.provider,
+        model: this.config.model,
+        temperature: 0.2,
+        maxTokens: 1000,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+      };
+
+      const res = await fetch(`${this.baseUrl}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const content = typeof data.content === "string" ? data.content : JSON.stringify(data);
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            submissionId: submission.id,
+            rubricSuggestions: parsed.rubricSuggestions ?? [],
+            totalScore: parsed.totalScore ?? 0,
+            maxScore: rubricDef.reduce((s, c) => s + c.max, 0),
+            overallConfidence: parsed.overallConfidence ?? 0.5,
+            strengths: parsed.strengths ?? [],
+            weaknesses: parsed.weaknesses ?? [],
+            feedbackSuggestion: parsed.feedbackSuggestion ?? "",
+            annotationComments: parsed.annotationComments ?? [],
+            improvementSuggestions: parsed.improvementSuggestions ?? [],
+            encouragement: parsed.encouragement ?? "",
+            generatedAt: new Date().toISOString(),
+            modelUsed: this.config.model,
+            latencyMs: Date.now() - start,
+          };
+        }
+      }
+
+      // Fall through to mock
+      throw new Error("API did not return valid grading JSON");
+    } catch (error) {
+      console.warn("AI grading failed, using mock result:", error);
+      return this.buildMockGradingResult(submission, rubricDef, Date.now() - start);
+    }
+  }
+
+  // Generate personalized feedback text
+  async generateFeedback(
+    gradingResult: AIGradingResult,
+    studentName: string
+  ): Promise<{ feedback: string; annotationComments: AIAnnotationComment[] }> {
+    try {
+      const prompt = `Write brief, direct feedback for student "${studentName}". Score: ${gradingResult.totalScore}/${gradingResult.maxScore}. Strengths: ${gradingResult.strengths.join(", ")}. Weaknesses: ${gradingResult.weaknesses.join(", ")}. Write 3-5 sentences: what was done well, what to improve, one encouraging closing line. No filler.`;
+
+      const res = await this.chat(
+        [{ id: Date.now().toString(), role: "user", content: prompt, timestamp: Date.now() }],
+        undefined
+      );
+
+      return {
+        feedback: res.content,
+        annotationComments: gradingResult.annotationComments,
+      };
+    } catch {
+      return {
+        feedback: gradingResult.feedbackSuggestion || "Good effort! Keep practicing to improve.",
+        annotationComments: gradingResult.annotationComments,
+      };
+    }
+  }
+
+  // Mock grading result when AI is unavailable
+  private buildMockGradingResult(
+    submission: GradingSubmissionInput,
+    rubricDef: RubricCriterionDef[],
+    latencyMs: number
+  ): AIGradingResult {
+    const annCount = submission.annotations?.length ?? 0;
+    const textLen = (submission.studentAnswer ?? "").length;
+
+    const pickLevel = () => {
+      if (annCount >= 3 && textLen > 500) return { key: "good" as const, ratio: 0.8 };
+      if (annCount >= 1 || textLen > 200) return { key: "fair" as const, ratio: 0.5 };
+      return { key: "poor" as const, ratio: 0.2 };
+    };
+
+    const suggestions = rubricDef.map((c) => {
+      const pick = pickLevel();
+      const level = c.levels.find((l) => l.key === pick.key) ?? c.levels[c.levels.length - 1];
+      return {
+        criterionId: c.id,
+        levelKey: pick.key,
+        score: level.points,
+        reasoning: `Based on ${annCount} annotations and ${textLen} characters of text.`,
+        confidence: 0.45 + Math.random() * 0.2,
+      };
+    });
+
+    const total = suggestions.reduce((s, r) => s + r.score, 0);
+    const maxScore = rubricDef.reduce((s, c) => s + c.max, 0);
+
+    const annotationComments: AIAnnotationComment[] = (submission.annotations ?? [])
+      .slice(0, 5)
+      .map((a) => ({
+        annotationId: a.id,
+        annotationLabel: a.label || "(no label)",
+        comment: a.label ? "Annotation noted." : "Consider adding a descriptive label.",
+        quality: a.label ? ("partial" as const) : ("missing-label" as const),
+      }));
+
+    return {
+      submissionId: submission.id,
+      rubricSuggestions: suggestions,
+      totalScore: total,
+      maxScore,
+      overallConfidence: 0.55,
+      strengths: annCount > 0 ? ["Student provided annotations on the image"] : [],
+      weaknesses: textLen < 200 ? ["Answer text could be more detailed"] : [],
+      feedbackSuggestion: `The submission shows ${annCount > 0 ? "some effort in annotating the image" : "that more annotation work is needed"}. ${textLen > 200 ? "The written response provides a reasonable explanation." : "Consider providing a more detailed written response."} Keep up the good work and continue practicing!`,
+      annotationComments,
+      improvementSuggestions: [
+        "Add more descriptive labels to annotations",
+        "Provide detailed reasoning in text answers",
+      ],
+      encouragement: "Good start! Every attempt helps you learn and improve.",
+      generatedAt: new Date().toISOString(),
+      modelUsed: "mock-fallback",
+      latencyMs,
+    };
+  }
+
   // Update configuration
   updateConfig(newConfig: Partial<AIConfig>) {
     this.config = { ...this.config, ...newConfig };
   }
 }
 
-// Default AI service instance với Google Gemini - optimized for concise responses
 export const aiService = new AIService({
   provider: "google",
   model: "gemini-2.5-flash",
-  temperature: 0.3, // Lower temperature for more focused responses
-  maxTokens: 500    // Balanced length for detailed but concise responses
+  temperature: 0.3,
+  maxTokens: 300
 });
 
 export default AIService;

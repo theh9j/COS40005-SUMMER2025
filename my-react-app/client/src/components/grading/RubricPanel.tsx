@@ -24,16 +24,16 @@ import {
 
 export type RubricItem = { id: string; points: number; comment?: string };
 
-type LevelKey = "excellent" | "good" | "fair" | "poor";
+export type LevelKey = "excellent" | "good" | "fair" | "poor";
 
-type Level = {
+export type Level = {
   key: LevelKey;
   label: string;
   points: number;
   desc: string;
 };
 
-type Criterion = {
+export type Criterion = {
   id: string;
   title: string;
   help?: string;
@@ -44,7 +44,7 @@ type Criterion = {
   comment?: string;
 };
 
-type AiSuggestion = {
+export type AiSuggestion = {
   picks: { id: string; levelKey: LevelKey }[];
   total: number;
   confidence?: number; // 0..1
@@ -71,7 +71,7 @@ function timeAgo(iso?: string) {
   return `${day}d ago`;
 }
 
-function buildDefaultCriteria(): Criterion[] {
+export function buildDefaultCriteria(): Criterion[] {
   const correctnessLevels: Level[] = [
     {
       key: "excellent",
@@ -194,6 +194,10 @@ export default function RubricPanel({
   lastSavedAt,
   studentAnswer,
   instructorNotes,
+  externalAiSuggestion,
+  externalAiLoading,
+  onRequestExternalAi,
+  applyAiTrigger,
 }: {
   onSubmit: (total: number, rubric: RubricItem[]) => void;
   disabled?: boolean;
@@ -201,11 +205,39 @@ export default function RubricPanel({
   lastSavedAt?: string;
   studentAnswer?: string;
   instructorNotes?: string;
+  /** When provided, use external AI grading instead of built-in logic */
+  externalAiSuggestion?: AiSuggestion | null;
+  externalAiLoading?: boolean;
+  onRequestExternalAi?: () => void;
+  /** Increment to auto-apply the current AI suggestion */
+  applyAiTrigger?: number;
 }) {
   const [criteria, setCriteria] = useState<Criterion[]>(() => buildDefaultCriteria());
   const [openComment, setOpenComment] = useState<Record<string, boolean>>({});
   const [ai, setAi] = useState<AiSuggestion | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+
+  // Sync external AI suggestion when provided
+  useEffect(() => {
+    if (externalAiSuggestion) {
+      setAi(externalAiSuggestion);
+    }
+  }, [externalAiSuggestion]);
+
+  // Auto-apply AI when trigger increments
+  useEffect(() => {
+    if (applyAiTrigger && applyAiTrigger > 0 && ai) {
+      setCriteria((prev) =>
+        prev.map((c) => {
+          const pick = ai.picks.find((p) => p.id === c.id);
+          if (!pick) return c;
+          const lvl = c.levels.find((l) => l.key === pick.levelKey) ?? c.levels[0];
+          return { ...c, selectedKey: lvl.key, points: lvl.points };
+        })
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyAiTrigger]);
 
   const lastSavedSnapshot = useRef<string>("");
 
@@ -446,11 +478,11 @@ export default function RubricPanel({
                     size="sm"
                     variant="secondary"
                     className="gap-2"
-                    disabled={disabled || aiLoading}
-                    onClick={runAiSuggest}
+                    disabled={disabled || aiLoading || externalAiLoading}
+                    onClick={onRequestExternalAi ?? runAiSuggest}
                   >
                     <Wand2 className="h-4 w-4" />
-                    {aiLoading ? "..." : "Generate"}
+                    {(aiLoading || externalAiLoading) ? "..." : "Generate"}
                   </Button>
                   <Button size="sm" className="gap-2" disabled={disabled || !ai} onClick={applyAi}>
                     <CheckCircle2 className="h-4 w-4" />
