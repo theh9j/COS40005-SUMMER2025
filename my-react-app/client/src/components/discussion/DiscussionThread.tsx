@@ -576,28 +576,39 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
                 </div>
               </div>
 
-              {(selectedThread.replies || []).map((reply) => (
-                <div key={reply.id} className="flex gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={reply.author?.avatarUrl} alt={reply.author?.name} />
-                    <AvatarFallback>
-                      {getInitials(reply.author?.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-semibold text-base">{reply.author?.name || '...'}</span>
-                      {reply.author?.name === selectedThread.author?.name && (
-                        <Badge variant="outline" className="h-5 px-2 py-0.5 text-xs">OP</Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        {formatTimestamp(reply.timestamp)}
-                      </span>
+              {(selectedThread.replies || []).map((reply) => {
+                const currentUserName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+                const isOwnReply = user
+                  ? reply.author?.user_id
+                    ? reply.author.user_id === user.user_id
+                    : reply.author?.name === currentUserName || reply.author?.name === user?.firstName || reply.author?.name === user?.lastName
+                  : false;
+
+                return (
+                  <div key={reply.id} className={`flex gap-3 ${isOwnReply ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`flex gap-3 ${isOwnReply ? 'flex-row-reverse' : ''} max-w-[80%]`}>
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={reply.author?.avatarUrl} alt={reply.author?.name} />
+                        <AvatarFallback>
+                          {getInitials(reply.author?.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className={`flex-1 rounded-xl p-3 shadow-sm ${isOwnReply ? 'bg-sky-100 dark:bg-sky-900 border border-sky-200 dark:border-sky-700' : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700'}`}>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-semibold text-base">{reply.author?.name || '...'}</span>
+                          {reply.author?.name === selectedThread.author?.name && (
+                            <Badge variant="outline" className="h-5 px-2 py-0.5 text-xs">OP</Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            {formatTimestamp(reply.timestamp)}
+                          </span>
+                        </div>
+                        <p className="text-sm mt-1">{reply.content}</p>
+                      </div>
                     </div>
-                    <p className="text-sm mt-1">{reply.content}</p>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
           </div>

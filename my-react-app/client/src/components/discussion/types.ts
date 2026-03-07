@@ -9,6 +9,7 @@ export interface Reply {
 }
 
 export interface Author {
+  user_id?: string;
   name: string;
   avatarUrl: string;
 }
