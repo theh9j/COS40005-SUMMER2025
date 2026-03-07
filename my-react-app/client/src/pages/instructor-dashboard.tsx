@@ -34,6 +34,7 @@ import HomeworkPrepPanel from "@/components/grading/HomeworkPrepPanel";
 // ✅ added
 import AnnotationToolbar from "@/components/annotation-toolbar";
 import AnnotationInspector from "@/components/grading/AnnotationInspector";
+import GradingHub from "@/components/grading/GradingHub";
 
 // ✅ AI Grading
 import AIGradingPanel from "@/components/grading/AIGradingPanel";
@@ -74,6 +75,7 @@ type Submission = {
   caseId: string;
   caseTitle: string;
   studentId: string;
+  studentName?: string;
 
   status: SubmissionStatus;
 
@@ -84,6 +86,13 @@ type Submission = {
 
   published?: boolean;
   publishedAt?: string;
+  submittedAt?: string;
+  dueAt?: string;
+  classDisplay?: string;
+  className?: string;
+  year?: string;
+  homeworkType?: "Q&A" | "Annotate" | string;
+  authorId?: string;
 
   updatedAt: string;
 };
@@ -99,6 +108,7 @@ type CaseFromApi = {
   created_at?: string;
   case_type?: string | null;
   homework_type?: string;
+  author_id?: string;
 };
 
 type CaseCard = {
@@ -110,6 +120,7 @@ type CaseCard = {
   homeworkType?: "Q&A" | "Annotate";
   caseType?: string;
   createdAt?: string;
+  authorId?: string;
 };
 
 type CaseSort = "newest" | "oldest" | "az" | "za";
@@ -455,6 +466,7 @@ export default function InstructorDashboard() {
       homeworkType: c.homework_type as "Q&A" | "Annotate" | undefined,
       caseType: c.case_type ?? undefined,
       createdAt: c.created_at,
+      authorId: c.author_id,
     }));
 
     const demoCases: CaseCard[] = mockCases.map((c) => ({
@@ -465,6 +477,7 @@ export default function InstructorDashboard() {
       source: "mock",
       caseType: c.category,
       createdAt: undefined,
+      authorId: undefined,
     }));
 
     return [...dbCases, ...demoCases];
@@ -578,12 +591,51 @@ export default function InstructorDashboard() {
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const [applyAiTrigger, setApplyAiTrigger] = useState(0);
 
+  // ✅ Grading hub state
+  const [gradingCaseId, setGradingCaseId] = useState<string | null>(null);
+
+  const gradingHubSubmissions = useMemo(() => {
+    const caseLookup = new Map(casesFromApi.map((c) => [c.case_id, c]));
+    const studentLookup = new Map(
+      availableStudents.map((s) => [
+        s.id,
+        {
+          studentName: `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() || undefined,
+          classDisplay: s.classroom ?? undefined,
+        },
+      ])
+    );
+
+    return submissions
+      .map((s) => {
+        const caseMeta = caseLookup.get(s.caseId);
+        const studentMeta = studentLookup.get(s.studentId);
+        return {
+          ...s,
+          studentName: s.studentName ?? studentMeta?.studentName,
+          classDisplay: s.classDisplay ?? studentMeta?.classDisplay,
+          homeworkType: s.homeworkType ?? caseMeta?.homework_type ?? "Annotate",
+          authorId: s.authorId ?? caseMeta?.author_id,
+        };
+      })
+      .filter((s) => (s.authorId ? s.authorId === user?.user_id : true));
+  }, [submissions, casesFromApi, availableStudents, user?.user_id]);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return submissions.filter(
-      (s) => s.studentId.toLowerCase().includes(q) || s.caseTitle.toLowerCase().includes(q)
+    let list = gradingHubSubmissions;
+
+    if (gradingCaseId) {
+      list = list.filter((s) => s.caseId === gradingCaseId);
+    }
+
+    return list.filter(
+      (s) =>
+        s.studentId.toLowerCase().includes(q) ||
+        s.caseTitle.toLowerCase().includes(q) ||
+        (s.studentName ?? "").toLowerCase().includes(q)
     );
-  }, [query, submissions]);
+  }, [query, gradingHubSubmissions, gradingCaseId]);
 
   const selected = useMemo(
     () => filtered.find((s) => s.id === (activeIds[0] ?? "")) ?? filtered[0],
@@ -658,6 +710,7 @@ export default function InstructorDashboard() {
           caseId: s.case_id,
           caseTitle: s.case_title ?? "Unknown case",
           studentId: s.student_id,
+          studentName: [s.student_first_name, s.student_last_name].filter(Boolean).join(" ") || s.student_name || undefined,
           status: (s.status as SubmissionStatus) ?? "submitted",
           score: s.score ?? undefined,
           feedback: s.feedback ?? "",
@@ -665,6 +718,13 @@ export default function InstructorDashboard() {
           modelAnswers: s.model_answers ?? [],
           published: Boolean(s.published),
           publishedAt: s.published_at ?? undefined,
+          submittedAt: s.submitted_at ?? s.created_at ?? undefined,
+          dueAt: s.due_at ?? undefined,
+          classDisplay: s.class_display ?? undefined,
+          className: s.class_name ?? undefined,
+          year: s.year ?? undefined,
+          homeworkType: s.homework_type ?? undefined,
+          authorId: s.author_id ?? undefined,
           updatedAt: s.updated_at ?? "",
         }));
 
@@ -965,23 +1025,55 @@ export default function InstructorDashboard() {
           {/* GRADING */}
           {activeView === "grading" && (
             <div className="p-6" data-testid="view-grading">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Grading</h2>
-                <div className="flex gap-2">
-                  <Button variant={mode === "one" ? "default" : "secondary"} onClick={() => setMode("one")}>
-                    1–1
-                  </Button>
-                  <Button variant={mode === "group" ? "default" : "secondary"} onClick={() => setMode("group")}>
-                    Group
-                  </Button>
-                  <Button variant="outline" className="gap-2" onClick={() => setShowBatchDialog(true)}>
-                    <Sparkles className="h-4 w-4" />
-                    Batch AI Grade
-                  </Button>
-                </div>
-              </div>
+              {gradingCaseId === null ? (
+                <GradingHub
+                  submissions={gradingHubSubmissions}
+                  classOptions={classrooms.map((cls) => cls.display)}
+                  onOpenCase={(caseId) => {
+                    setGradingCaseId(caseId);
+                    setActiveIds([]);
+                    setQuery("");
+                    setMode("one");
+                  }}
+                  onOpenCaseAtSubmission={(caseId, submissionId) => {
+                    setGradingCaseId(caseId);
+                    setActiveIds([submissionId]);
+                    setQuery("");
+                    setMode("one");
+                  }}
+                />
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setGradingCaseId(null);
+                          setActiveIds([]);
+                          setQuery("");
+                        }}
+                      >
+                        ← Back to hub
+                      </Button>
+                      <h2 className="text-2xl font-bold">Grading</h2>
+                    </div>
 
-              <Card className="mb-4">
+                    <div className="flex gap-2">
+                      <Button variant={mode === "one" ? "default" : "secondary"} onClick={() => setMode("one")}>
+                        1–1
+                      </Button>
+                      <Button variant={mode === "group" ? "default" : "secondary"} onClick={() => setMode("group")}>
+                        Group
+                      </Button>
+                      <Button variant="outline" className="gap-2" onClick={() => setShowBatchDialog(true)}>
+                        <Sparkles className="h-4 w-4" />
+                        Batch AI Grade
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Card className="mb-4">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold">Submissions</h3>
@@ -1229,6 +1321,8 @@ export default function InstructorDashboard() {
                 }}
                 getBatchResult={aiGrading.getBatchResult}
               />
+                </>
+              )}
             </div>
           )}
 
@@ -1258,7 +1352,7 @@ export default function InstructorDashboard() {
                       fd.append("image", payload.newCase.imageFile);
                       fd.append("case_type", payload.newCase.type || "");
                       fd.append("homework_type", payload.homeworkType || "Annotate");
-                      fd.append("author_id", user.user_id);
+                      fd.append("author_id", user?.user_id ?? "");
 
                       const createRes = await fetch(`${API_BASE}/api/instructor/cases`, {
                         method: "POST",
