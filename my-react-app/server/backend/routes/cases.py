@@ -103,6 +103,89 @@ async def list_cases(limit: int = 50):
 
 from glob import glob
 
+@router.put("/cases/{case_id}")
+async def update_case(
+    case_id: str,
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    image: Optional[UploadFile] = Form(None),
+    case_type: Optional[str] = Form(None),
+    homework_type: Optional[str] = Form(None),
+    author_id: Optional[str] = Form(None),
+):
+    """Update an existing case.
+
+    Supports updating metadata and replacing the case image.
+    """
+    try:
+        oid = ObjectId(case_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid case_id")
+
+    case = await cases_collection.find_one({"_id": oid})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    update_doc = {}
+
+    if title is not None:
+        update_doc["title"] = title.strip() or None
+    if description is not None:
+        update_doc["description"] = description.strip() or None
+    if case_type is not None:
+        update_doc["case_type"] = case_type.strip() or None
+    if homework_type is not None:
+        update_doc["homework_type"] = homework_type.strip() or None
+
+    # Save new image if provided
+    if image:
+        # Determine author_id for storage
+        stored_author_id = author_id or case.get("author_id")
+        if not stored_author_id:
+            raise HTTPException(status_code=400, detail="author_id is required to update case image")
+
+        user_cases_dir = BASE_UPLOAD_DIR / stored_author_id / "cases"
+        user_cases_dir.mkdir(parents=True, exist_ok=True)
+
+        # Attempt to delete old image file if stored
+        old_filename = case.get("image_filename")
+        if old_filename:
+            old_path = user_cases_dir / old_filename
+            try:
+                if old_path.exists():
+                    old_path.unlink()
+            except Exception:
+                pass
+
+        # Save new image
+        _, ext = os.path.splitext(image.filename or "")
+        ext = ext.lower() if ext else ".png"
+        filename = f"{case_id}{ext}"
+        file_path = user_cases_dir / filename
+        with open(file_path, "wb") as f:
+            f.write(await image.read())
+
+        image_url = f"http://127.0.0.1:8000/uploads/{stored_author_id}/cases/{filename}"
+        update_doc["image_url"] = image_url
+        update_doc["image_filename"] = filename
+
+    if update_doc:
+        await cases_collection.update_one({"_id": oid}, {"$set": update_doc})
+
+    # Return updated case data
+    updated_case = await cases_collection.find_one({"_id": oid})
+
+    return {
+        "case_id": case_id,
+        "title": updated_case.get("title"),
+        "description": updated_case.get("description"),
+        "image_url": updated_case.get("image_url"),
+        "case_type": updated_case.get("case_type"),
+        "homework_type": updated_case.get("homework_type"),
+        "created_at": updated_case.get("created_at"),
+    }
+
+
 @router.delete("/cases/{case_id}")
 async def delete_case(case_id: str):
     """

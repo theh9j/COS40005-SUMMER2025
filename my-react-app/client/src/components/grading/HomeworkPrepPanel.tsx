@@ -46,7 +46,7 @@ type PublishPayload = {
   referenceUploads: Upload[]; // optional reference images
   questions: EssayQuestion[];
 
-  requirementId: string;
+  password: string;
   className: string;
   year: string;
 };
@@ -67,7 +67,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
   const [caseImagePreview, setCaseImagePreview] = useState<string>("");
 
   // ====== meta ======
-  const [requirementId, setRequirementId] = useState("");
+  const [password, setPassword] = useState("");
   const [className, setClassName] = useState("");
   const [year, setYear] = useState("");
 
@@ -112,7 +112,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
     if (!caseTitle.trim()) next.caseTitle = "Case title is required.";
     if (!caseImageFile) next.caseImage = "Annotation image is required.";
     if (!due) next.due = "Due date is required.";
-    if (!requirementId.trim()) next.requirementId = "Requirement ID is required.";
+    if (!password.trim()) next.password = "Password is required.";
     if (!className.trim()) next.className = "Class name is required.";
     if (!year.trim()) next.year = "Year is required.";
     if (questions.length === 0) next.questions = "At least one essay question is required.";
@@ -125,7 +125,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
     caseTitle.trim().length > 0 &&
     Boolean(caseImageFile) &&
     Boolean(due) &&
-    requirementId.trim().length > 0 &&
+    password.trim().length > 0 &&
     className.trim().length > 0 &&
     year.trim().length > 0 &&
     questions.length > 0;
@@ -412,14 +412,14 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
               <div className="text-sm font-semibold">Requirement Metadata</div>
               <div className="grid md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Requirement ID</label>
+                  <label className="text-sm font-medium">Password</label>
                   <Input
-                    placeholder="e.g., RQ-2025-W3-01"
-                    value={requirementId}
-                    onChange={(e) => setRequirementId(e.target.value)}
+                    placeholder="e.g., secure-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                   />
-                  {errors.requirementId && (
-                    <p className="mt-1 text-xs text-red-600">{errors.requirementId}</p>
+                  {errors.password && (
+                    <p className="mt-1 text-xs text-red-600">{errors.password}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -653,7 +653,7 @@ export default function HomeworkPrepPanel({ stats, onPublish }: Props) {
                   homeworkType,
                   referenceUploads,
                   questions,
-                  requirementId: requirementId.trim(),
+                  password: password.trim(),
                   className: className.trim(),
                   year: year.trim(),
                 });

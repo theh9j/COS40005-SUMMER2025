@@ -1287,7 +1287,7 @@ export default function InstructorDashboard() {
                           checklist: payload.autoChecklist,
                           uploads: payload.referenceUploads ?? payload.uploads ?? [],
                           questions: payload.questions ?? [],
-                          requirement_id: payload.requirementId,
+                          password: payload.password,
                           class_name: payload.className,
                           year: payload.year,
                         }),
@@ -1321,6 +1321,7 @@ export default function InstructorDashboard() {
                         checklist: payload.autoChecklist,
                         uploads: payload.uploads ?? [],
                         questions: payload.questions ?? [],
+                        password: payload.password,
                       }),
                     });
 

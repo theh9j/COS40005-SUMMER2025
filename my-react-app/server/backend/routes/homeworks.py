@@ -29,6 +29,8 @@ def now():
 async def create_homework(payload: HomeworkCreate):
     timestamp = now()
 
+    password = payload.password or payload.requirement_id
+
     hw_doc = {
         "case_id": payload.case_id,
         "due_at": payload.due_at,
@@ -36,6 +38,7 @@ async def create_homework(payload: HomeworkCreate):
         "checklist": payload.checklist or [],
         "status": "active",
         "created_at": timestamp,
+        "password": password,
         "requirement_id": payload.requirement_id,
         "class_name": payload.class_name,
         "year": payload.year,

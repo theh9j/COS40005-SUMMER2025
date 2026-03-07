@@ -838,9 +838,41 @@ export default function AnnotationView() {
                       <Button
                         size="sm"
                         className="flex-1"
-                        onClick={() => {
-                          toast({ description: "Case changes saved" });
-                          setShowCaseEditor(false);
+                        onClick={async () => {
+                          try {
+                            const form = new FormData();
+                            form.append("title", editCaseTitle);
+                            form.append("description", editCaseDesc);
+                            form.append("case_type", editCaseCategory);
+                            form.append("homework_type", editHomeworkType);
+                            if (user?.user_id) {
+                              form.append("author_id", user.user_id);
+                            }
+                            if (editCaseImageFile) {
+                              form.append("image", editCaseImageFile);
+                            }
+
+                            const res = await fetch(`${API_BASE}/api/instructor/cases/${caseId}`, {
+                              method: "PUT",
+                              body: form,
+                            });
+
+                            if (!res.ok) {
+                              const text = await res.text();
+                              console.error("Failed to update case", text);
+                              throw new Error(text || "Update failed");
+                            }
+
+                            toast({ description: "Case changes saved" });
+                            setShowCaseEditor(false);
+                          } catch (err) {
+                            console.error(err);
+                            toast({
+                              title: "Failed to save case",
+                              description: "Please try again or contact support.",
+                              variant: "destructive",
+                            });
+                          }
                         }}
                       >
                         <Save className="h-3 w-3 mr-1" />

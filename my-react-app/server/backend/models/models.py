@@ -152,7 +152,8 @@ class HomeworkCreate(BaseModel):
     questions: List[Question] = Field(default_factory=list)
 
     # ✅ Optional extra metadata from frontend (won’t break old clients)
-    requirement_id: Optional[str] = None
+    password: Optional[str] = None
+    requirement_id: Optional[str] = None  # legacy
     class_name: Optional[str] = None
     year: Optional[str] = None
 
