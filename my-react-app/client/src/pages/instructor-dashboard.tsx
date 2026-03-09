@@ -443,6 +443,9 @@ export default function InstructorDashboard() {
       loadClassrooms();
       loadAvailableStudents();
     }
+    if (activeView === "grading") {
+      loadClassrooms();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
@@ -978,6 +981,7 @@ export default function InstructorDashboard() {
               {gradingCaseId === null ? (
                 <GradingHub
                   submissions={submissions}
+                  classrooms={classrooms}
                   onOpenCase={(caseId) => {
                     setGradingCaseId(caseId);
                     setActiveIds([]);
@@ -1286,7 +1290,6 @@ export default function InstructorDashboard() {
               </div>
 
               <HomeworkPrepPanel
-                classrooms={classrooms}
                 stats={{
                   avgScore,
                   commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
