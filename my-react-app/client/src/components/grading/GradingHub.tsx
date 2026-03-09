@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Play, Search } from "lucide-react";
+import { ArrowRight, CheckCircle2, Play, Search } from "lucide-react";
 
 type SubmissionStatus = "submitted" | "graded" | "grading";
 
@@ -13,18 +13,10 @@ export type SubmissionLite = {
   caseId: string;
   caseTitle: string;
   studentId: string;
-  studentName?: string;
   status: SubmissionStatus;
   score?: number;
   published?: boolean;
   updatedAt: string;
-  submittedAt?: string;
-  dueAt?: string;
-  classDisplay?: string;
-  className?: string;
-  year?: string;
-  homeworkType?: "Q&A" | "Annotate" | string;
-  authorId?: string;
 };
 
 function timeAgo(iso?: string) {
@@ -43,63 +35,18 @@ function timeAgo(iso?: string) {
   return `${day}d ago`;
 }
 
-function isLate(sub: SubmissionLite) {
-  if (!sub.dueAt) return false;
-  const due = Date.parse(sub.dueAt);
-  const submitted = Date.parse(sub.submittedAt || sub.updatedAt || "");
-  if (!Number.isFinite(due) || !Number.isFinite(submitted)) return false;
-  return submitted > due;
-}
-
 export default function GradingHub({
   submissions,
-  classOptions,
   onOpenCase,
   onOpenCaseAtSubmission,
 }: {
   submissions: SubmissionLite[];
-  classOptions?: string[];
   onOpenCase: (caseId: string) => void;
   onOpenCaseAtSubmission?: (caseId: string, submissionId: string) => void;
 }) {
   const [q, setQ] = React.useState("");
-  const [selectedClass, setSelectedClass] = React.useState<string>("all");
-  const [selectedHomeworkType, setSelectedHomeworkType] = React.useState<string>("all");
-  const [lateOnly, setLateOnly] = React.useState(false);
-  const [onlyPublished, setOnlyPublished] = React.useState(true);
-
-  const classList = useMemo(() => {
-    const set = new Set((classOptions ?? []).filter(Boolean));
-    submissions.forEach((s) => {
-      if (s.classDisplay) set.add(s.classDisplay);
-      else if (s.className && s.year) set.add(`${s.className} (${s.year})`);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [classOptions, submissions]);
 
   const groups = useMemo(() => {
-    let list = [...submissions];
-    const query = q.trim().toLowerCase();
-
-    if (onlyPublished) {
-      list = list.filter((s) => s.published);
-    }
-    if (selectedClass !== "all") {
-      list = list.filter((s) => (s.classDisplay || (s.className && s.year ? `${s.className} (${s.year})` : "")) === selectedClass);
-    }
-    if (selectedHomeworkType !== "all") {
-      list = list.filter((s) => (s.homeworkType || "Annotate") === selectedHomeworkType);
-    }
-    if (lateOnly) {
-      list = list.filter(isLate);
-    }
-    if (query) {
-      list = list.filter((s) => {
-        const hay = `${s.caseTitle} ${s.caseId} ${s.studentId} ${s.studentName || ""}`.toLowerCase();
-        return hay.includes(query);
-      });
-    }
-
     const map = new Map<
       string,
       {
@@ -111,16 +58,12 @@ export default function GradingHub({
         avg?: number;
         lastUpdated?: string;
         nextUngradedId?: string;
-        classDisplay?: string;
-        homeworkType?: string;
-        lateCount: number;
       }
     >();
 
-    for (const s of list) {
-      const key = `${s.caseId}__${s.classDisplay || s.className || "no-class"}`;
-      if (!map.has(key)) {
-        map.set(key, {
+    for (const s of submissions) {
+      if (!map.has(s.caseId)) {
+        map.set(s.caseId, {
           caseId: s.caseId,
           caseTitle: s.caseTitle,
           total: 0,
@@ -129,142 +72,129 @@ export default function GradingHub({
           avg: undefined,
           lastUpdated: undefined,
           nextUngradedId: undefined,
-          classDisplay: s.classDisplay || (s.className && s.year ? `${s.className} (${s.year})` : undefined),
-          homeworkType: s.homeworkType || "Annotate",
-          lateCount: 0,
         });
       }
-      const g = map.get(key)!;
-      g.total += 1;
 
-      if (s.status === "graded") g.graded += 1;
-      else g.ungraded += 1;
+      const group = map.get(s.caseId)!;
+      group.total += 1;
 
-      if (isLate(s)) g.lateCount += 1;
+      if (s.status === "graded") group.graded += 1;
+      else group.ungraded += 1;
 
       if (s.score != null) {
-        const prevCount = (g as any).__avgCount ?? 0;
-        const prevSum = (g as any).__avgSum ?? 0;
-        (g as any).__avgCount = prevCount + 1;
-        (g as any).__avgSum = prevSum + s.score;
-        g.avg = Math.round((((g as any).__avgSum / (g as any).__avgCount) as number) * 10) / 10;
+        const prevCount = (group as any).__avgCount ?? 0;
+        const prevSum = (group as any).__avgSum ?? 0;
+        (group as any).__avgCount = prevCount + 1;
+        (group as any).__avgSum = prevSum + s.score;
+        group.avg = Math.round((((group as any).__avgSum / (group as any).__avgCount) as number) * 10) / 10;
       }
 
-      if (!g.lastUpdated || Date.parse(s.updatedAt) > Date.parse(g.lastUpdated)) {
-        g.lastUpdated = s.updatedAt;
+      if (!group.lastUpdated || Date.parse(s.updatedAt) > Date.parse(group.lastUpdated)) {
+        group.lastUpdated = s.updatedAt;
       }
 
       if (s.status !== "graded") {
-        if (!g.nextUngradedId) g.nextUngradedId = s.id;
+        if (!group.nextUngradedId) group.nextUngradedId = s.id;
         else {
-          const cur = list.find((x) => x.id === g.nextUngradedId);
-          if (cur && Date.parse(s.updatedAt) > Date.parse(cur.updatedAt)) {
-            g.nextUngradedId = s.id;
+          const current = submissions.find((x) => x.id === group.nextUngradedId);
+          if (current && Date.parse(s.updatedAt) > Date.parse(current.updatedAt)) {
+            group.nextUngradedId = s.id;
           }
         }
       }
     }
 
-    Array.from(map.values()).forEach((g) => {
+    for (const g of map.values()) {
       delete (g as any).__avgCount;
       delete (g as any).__avgSum;
-    });
+    }
 
-    return Array.from(map.values()).sort((a, b) => (Date.parse(b.lastUpdated ?? "0") || 0) - (Date.parse(a.lastUpdated ?? "0") || 0));
-  }, [submissions, q, selectedClass, selectedHomeworkType, lateOnly, onlyPublished]);
+    let list = Array.from(map.values());
+    const query = q.trim().toLowerCase();
+    if (query) {
+      list = list.filter(
+        (g) => g.caseTitle.toLowerCase().includes(query) || g.caseId.toLowerCase().includes(query)
+      );
+    }
+
+    list.sort((a, b) => (Date.parse(b.lastUpdated ?? "0") || 0) - (Date.parse(a.lastUpdated ?? "0") || 0));
+    return list;
+  }, [submissions, q]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Grading Hub</h2>
           <div className="text-sm text-muted-foreground">
-            Choose a published homework to grade. Filters help you narrow by class, student name, late submissions, and homework type.
+            Smaller assignment cards with a clear status color so instructors can spot completed work fast.
           </div>
         </div>
 
-        <div className="relative w-full lg:w-[320px] max-w-full">
+        <div className="relative w-[320px] max-w-full">
           <Search className="h-4 w-4 text-muted-foreground absolute left-2 top-1/2 -translate-y-1/2" />
-          <Input className="pl-8" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search case or student…" />
+          <Input className="pl-8 h-10" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search case title…" />
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Class (Year)</label>
-            <select className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm" value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}>
-              <option value="all">All classes</option>
-              {classList.map((cls) => (
-                <option key={cls} value={cls}>{cls}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Homework type</label>
-            <select className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm" value={selectedHomeworkType} onChange={(e) => setSelectedHomeworkType(e.target.value)}>
-              <option value="all">All types</option>
-              <option value="Annotate">Annotate</option>
-              <option value="Q&A">Q&A</option>
-            </select>
-          </div>
-
-          <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-            <input type="checkbox" checked={lateOnly} onChange={(e) => setLateOnly(e.target.checked)} />
-            Late submissions only
-          </label>
-
-          <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-            <input type="checkbox" checked={onlyPublished} onChange={(e) => setOnlyPublished(e.target.checked)} />
-            Published works only
-          </label>
-        </CardContent>
-      </Card>
-
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {groups.map((g) => {
           const pct = g.total > 0 ? Math.round((g.graded / g.total) * 100) : 0;
+          const isCompleted = g.total > 0 && g.graded === g.total;
 
           return (
-            <Card key={`${g.caseId}-${g.classDisplay || "no-class"}`} className="border">
-              <CardContent className="p-4 space-y-3">
+            <Card
+              key={g.caseId}
+              className={[
+                "border transition-shadow hover:shadow-sm",
+                isCompleted ? "border-green-300 bg-green-50/60 dark:bg-green-950/20" : "border-border",
+              ].join(" ")}
+            >
+              <CardContent className="p-3 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold truncate">{g.caseTitle}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Case ID: {g.caseId} • Last activity: {timeAgo(g.lastUpdated)}
+                    <div className="font-semibold text-sm truncate">{g.caseTitle}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {g.caseId} • {timeAgo(g.lastUpdated)}
                     </div>
                   </div>
-                  <Badge variant="secondary" className="shrink-0">{g.graded}/{g.total} graded</Badge>
-                </div>
 
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {g.classDisplay && <span className="px-2 py-1 rounded-md border bg-muted/20">{g.classDisplay}</span>}
-                  <span className="px-2 py-1 rounded-md border bg-muted/20">Type: <span className="font-medium">{g.homeworkType || "Annotate"}</span></span>
-                  <span className="px-2 py-1 rounded-md border bg-muted/20">Late: <span className="font-medium">{g.lateCount}</span></span>
+                  {isCompleted ? (
+                    <Badge className="shrink-0 bg-green-600 hover:bg-green-600 text-white gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Done
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="shrink-0 text-[11px]">
+                      {g.graded}/{g.total}
+                    </Badge>
+                  )}
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
                     <span>Progress</span>
                     <span>{pct}%</span>
                   </div>
-                  <Progress value={pct} />
+                  <Progress value={pct} className={isCompleted ? "[&>div]:bg-green-600" : ""} />
                 </div>
 
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="px-2 py-1 rounded-md border bg-muted/20">Ungraded: <span className="font-medium">{g.ungraded}</span></span>
-                  <span className="px-2 py-1 rounded-md border bg-muted/20">Avg score: <span className="font-medium">{g.avg ?? "—"}</span></span>
+                <div className="flex flex-wrap gap-1.5 text-[11px]">
+                  <span className={["px-2 py-1 rounded-md border", isCompleted ? "border-green-200 bg-white/80 text-green-700" : "bg-muted/20"].join(" ")}>
+                    Ungraded: <span className="font-medium">{g.ungraded}</span>
+                  </span>
+                  <span className={["px-2 py-1 rounded-md border", isCompleted ? "border-green-200 bg-white/80 text-green-700" : "bg-muted/20"].join(" ")}>
+                    Avg: <span className="font-medium">{g.avg ?? "—"}</span>
+                  </span>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button className="flex-1 gap-2" onClick={() => onOpenCase(g.caseId)}>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" className="gap-2" onClick={() => onOpenCase(g.caseId)}>
                     <ArrowRight className="h-4 w-4" />
-                    Open workspace
+                    Open
                   </Button>
 
                   <Button
+                    size="sm"
                     variant="secondary"
                     className="gap-2"
                     disabled={!g.nextUngradedId}
@@ -284,8 +214,9 @@ export default function GradingHub({
           );
         })}
 
-        {groups.length === 0 && <div className="text-sm text-muted-foreground">No published works match these filters.</div>}
+        {groups.length === 0 && <div className="text-sm text-muted-foreground">No cases found.</div>}
       </div>
     </div>
   );
 }
+
