@@ -17,6 +17,18 @@ export type SubmissionLite = {
   score?: number;
   published?: boolean;
   updatedAt: string;
+  classroom?: string;
+  className?: string;
+  year?: string;
+  homeworkType?: string;
+  late?: boolean;
+};
+
+type ClassroomOption = {
+  id: string;
+  name: string;
+  year: string;
+  display: string;
 };
 
 function timeAgo(iso?: string) {
@@ -35,16 +47,23 @@ function timeAgo(iso?: string) {
   return `${day}d ago`;
 }
 
+function normalizeClassLabel(s?: string) {
+  return (s || "").trim().toLowerCase();
+}
+
 export default function GradingHub({
   submissions,
   onOpenCase,
   onOpenCaseAtSubmission,
+  classrooms = [],
 }: {
   submissions: SubmissionLite[];
   onOpenCase: (caseId: string) => void;
   onOpenCaseAtSubmission?: (caseId: string, submissionId: string) => void;
+  classrooms?: ClassroomOption[];
 }) {
   const [q, setQ] = React.useState("");
+  const [classFilter, setClassFilter] = React.useState("");
 
   const groups = useMemo(() => {
     const map = new Map<
@@ -58,12 +77,14 @@ export default function GradingHub({
         avg?: number;
         lastUpdated?: string;
         nextUngradedId?: string;
+        classroom?: string;
       }
     >();
 
     for (const s of submissions) {
-      if (!map.has(s.caseId)) {
-        map.set(s.caseId, {
+      const key = s.caseId;
+      if (!map.has(key)) {
+        map.set(key, {
           caseId: s.caseId,
           caseTitle: s.caseTitle,
           total: 0,
@@ -72,33 +93,41 @@ export default function GradingHub({
           avg: undefined,
           lastUpdated: undefined,
           nextUngradedId: undefined,
+          classroom:
+            s.classroom ||
+            (s.className ? `${s.className}${s.year ? ` (${s.year})` : ""}` : undefined),
         });
       }
-
-      const group = map.get(s.caseId)!;
-      group.total += 1;
-
-      if (s.status === "graded") group.graded += 1;
-      else group.ungraded += 1;
-
-      if (s.score != null) {
-        const prevCount = (group as any).__avgCount ?? 0;
-        const prevSum = (group as any).__avgSum ?? 0;
-        (group as any).__avgCount = prevCount + 1;
-        (group as any).__avgSum = prevSum + s.score;
-        group.avg = Math.round((((group as any).__avgSum / (group as any).__avgCount) as number) * 10) / 10;
+      const g = map.get(key)!;
+      g.total += 1;
+      if (!g.classroom) {
+        g.classroom =
+          s.classroom ||
+          (s.className ? `${s.className}${s.year ? ` (${s.year})` : ""}` : undefined);
       }
 
-      if (!group.lastUpdated || Date.parse(s.updatedAt) > Date.parse(group.lastUpdated)) {
-        group.lastUpdated = s.updatedAt;
+      const isGraded = s.status === "graded";
+      if (isGraded) g.graded += 1;
+      else g.ungraded += 1;
+
+      if (s.score != null) {
+        const prevCount = (g as any).__avgCount ?? 0;
+        const prevSum = (g as any).__avgSum ?? 0;
+        (g as any).__avgCount = prevCount + 1;
+        (g as any).__avgSum = prevSum + s.score;
+        g.avg = Math.round((((g as any).__avgSum / (g as any).__avgCount) as number) * 10) / 10;
+      }
+
+      if (!g.lastUpdated || Date.parse(s.updatedAt) > Date.parse(g.lastUpdated)) {
+        g.lastUpdated = s.updatedAt;
       }
 
       if (s.status !== "graded") {
-        if (!group.nextUngradedId) group.nextUngradedId = s.id;
+        if (!g.nextUngradedId) g.nextUngradedId = s.id;
         else {
-          const current = submissions.find((x) => x.id === group.nextUngradedId);
-          if (current && Date.parse(s.updatedAt) > Date.parse(current.updatedAt)) {
-            group.nextUngradedId = s.id;
+          const cur = submissions.find((x) => x.id === g.nextUngradedId);
+          if (cur && Date.parse(s.updatedAt) > Date.parse(cur.updatedAt)) {
+            g.nextUngradedId = s.id;
           }
         }
       }
@@ -112,14 +141,17 @@ export default function GradingHub({
     let list = Array.from(map.values());
     const query = q.trim().toLowerCase();
     if (query) {
-      list = list.filter(
-        (g) => g.caseTitle.toLowerCase().includes(query) || g.caseId.toLowerCase().includes(query)
-      );
+      list = list.filter((g) => g.caseTitle.toLowerCase().includes(query) || g.caseId.toLowerCase().includes(query));
+    }
+
+    if (classFilter) {
+      const selected = normalizeClassLabel(classrooms.find((c) => c.id === classFilter)?.display || classFilter);
+      list = list.filter((g) => normalizeClassLabel(g.classroom) === selected);
     }
 
     list.sort((a, b) => (Date.parse(b.lastUpdated ?? "0") || 0) - (Date.parse(a.lastUpdated ?? "0") || 0));
     return list;
-  }, [submissions, q]);
+  }, [submissions, q, classFilter, classrooms]);
 
   return (
     <div className="space-y-4">
@@ -132,69 +164,100 @@ export default function GradingHub({
         </div>
 
         <div className="relative w-[320px] max-w-full">
-          <Search className="h-4 w-4 text-muted-foreground absolute left-2 top-1/2 -translate-y-1/2" />
-          <Input className="pl-8 h-10" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search case title…" />
+          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search case title..."
+          />
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid gap-3 md:grid-cols-[240px_1fr]">
+        <div>
+          <label className="mb-1 block text-sm font-medium">Class (Year)</label>
+          <select
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="">All classes</option>
+            {classrooms.map((cls) => (
+              <option key={cls.id} value={cls.id}>
+                {cls.display}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-end justify-between gap-3 text-xs text-muted-foreground">
+          <div>
+            {classFilter
+              ? `Showing ${groups.length} assignment card${groups.length === 1 ? "" : "s"} in selected class`
+              : `Showing ${groups.length} assignment card${groups.length === 1 ? "" : "s"}`}
+          </div>
+          {classFilter && (
+            <button className="underline underline-offset-2" onClick={() => setClassFilter("")}>
+              Reset class filter
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((g) => {
           const pct = g.total > 0 ? Math.round((g.graded / g.total) * 100) : 0;
-          const isCompleted = g.total > 0 && g.graded === g.total;
+          const isDone = g.total > 0 && g.graded === g.total;
 
           return (
             <Card
               key={g.caseId}
-              className={[
-                "border transition-shadow hover:shadow-sm",
-                isCompleted ? "border-green-300 bg-green-50/60 dark:bg-green-950/20" : "border-border",
-              ].join(" ")}
+              className={isDone ? "border-green-300 bg-green-50/50" : "border"}
             >
-              <CardContent className="p-3 space-y-3">
+              <CardContent className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold text-sm truncate">{g.caseTitle}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">
+                    <div className="truncate font-semibold">{g.caseTitle}</div>
+                    <div className="text-xs text-muted-foreground">
                       {g.caseId} • {timeAgo(g.lastUpdated)}
                     </div>
+                    {g.classroom && <div className="mt-1 text-xs text-muted-foreground">{g.classroom}</div>}
                   </div>
-
-                  {isCompleted ? (
-                    <Badge className="shrink-0 bg-green-600 hover:bg-green-600 text-white gap-1">
-                      <CheckCircle2 className="h-3 w-3" /> Done
+                  {isDone ? (
+                    <Badge className="shrink-0 gap-1 bg-green-600 hover:bg-green-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Done
                     </Badge>
                   ) : (
-                    <Badge variant="secondary" className="shrink-0 text-[11px]">
+                    <Badge variant="secondary" className="shrink-0">
                       {g.graded}/{g.total}
                     </Badge>
                   )}
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                  <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                     <span>Progress</span>
                     <span>{pct}%</span>
                   </div>
-                  <Progress value={pct} className={isCompleted ? "[&>div]:bg-green-600" : ""} />
+                  <Progress value={pct} className={isDone ? "[&>div]:bg-green-600" : ""} />
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 text-[11px]">
-                  <span className={["px-2 py-1 rounded-md border", isCompleted ? "border-green-200 bg-white/80 text-green-700" : "bg-muted/20"].join(" ")}>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-md border bg-muted/20 px-2 py-1">
                     Ungraded: <span className="font-medium">{g.ungraded}</span>
                   </span>
-                  <span className={["px-2 py-1 rounded-md border", isCompleted ? "border-green-200 bg-white/80 text-green-700" : "bg-muted/20"].join(" ")}>
+                  <span className="rounded-md border bg-muted/20 px-2 py-1">
                     Avg: <span className="font-medium">{g.avg ?? "—"}</span>
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Button size="sm" className="gap-2" onClick={() => onOpenCase(g.caseId)}>
+                <div className="flex gap-2">
+                  <Button className="flex-1 gap-2" onClick={() => onOpenCase(g.caseId)}>
                     <ArrowRight className="h-4 w-4" />
                     Open
                   </Button>
-
                   <Button
-                    size="sm"
                     variant="secondary"
                     className="gap-2"
                     disabled={!g.nextUngradedId}
