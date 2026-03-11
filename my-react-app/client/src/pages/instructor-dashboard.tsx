@@ -19,6 +19,7 @@ import {
   TrendingDown,
   Mail,
   LineChart,
+  MessageCircle,
   Users,
   UserPlus,
 } from "lucide-react";
@@ -803,11 +804,10 @@ export default function InstructorDashboard() {
 
   const navItems = [
     { id: "overview", label: t("overview"), icon: Gauge },
-    { id: "students", label: t("studentWork"), icon: GraduationCap },
     { id: "grading", label: t("grading"), icon: ClipboardCheck },
     { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
     { id: "cases", label: t("caseManagement"), icon: FolderOpen },
-    { id: "collaboration", label: "Forums", icon: Users },
+    { id: "collaboration", label: "Forums", icon: MessageCircle },
     { id: "class", label: "Class", icon: Users },
   ];
 
@@ -867,11 +867,6 @@ export default function InstructorDashboard() {
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <ProfileMenu />
-                  <div className="p-2">
-                    <Button variant="outline" className="w-full" onClick={handleLogout}>
-                      Logout
-                    </Button>
-                  </div>
                 </div>
               )}
             </div>
@@ -1290,6 +1285,7 @@ export default function InstructorDashboard() {
               </div>
 
               <HomeworkPrepPanel
+                classrooms={classrooms}
                 stats={{
                   avgScore,
                   commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
