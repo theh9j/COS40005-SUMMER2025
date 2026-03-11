@@ -33,46 +33,55 @@ def now():
 
 @router.post("/", response_model=dict)
 async def create_homework(payload: dict):
-    # Extract data from payload
+    # Accept both frontend payload styles:
+    # 1) New builder payload with `newCase`
+    # 2) Existing dashboard payload with `case_id`
     new_case = payload.get("newCase", {})
-    due_at_iso = payload.get("dueAtISO", "")
-    audience = payload.get("audience", "All Students")
+    case_id = payload.get("case_id")
+    due_at_iso = payload.get("dueAtISO") or payload.get("due_at")
+    audience_raw = (payload.get("audience") or "all").strip().lower()
     instructions = payload.get("instructions")
-    auto_checklist = payload.get("autoChecklist", [])
-    suggested_focus_tags = payload.get("suggestedFocusTags", [])
-    homework_type = payload.get("homeworkType", "Q&A")
-    reference_uploads = payload.get("referenceUploads", [])
-    questions = payload.get("questions", [])
-    password = payload.get("password", "")
-    class_name = payload.get("className", "")
-    year = payload.get("year", "")
+    auto_checklist = payload.get("autoChecklist") or payload.get("checklist") or []
+    suggested_focus_tags = payload.get("suggestedFocusTags") or []
+    homework_type = payload.get("homeworkType") or "Annotate"
+    reference_uploads = payload.get("referenceUploads") or payload.get("uploads") or []
+    questions = payload.get("questions") or []
+    password = payload.get("password") or ""
+    class_name = payload.get("className") or payload.get("class_name") or ""
+    year = payload.get("year") or ""
+    max_points = payload.get("maxPoints")
 
-    # Validate required fields
-    if not new_case.get("title"):
+    if not case_id and not new_case.get("title"):
         raise HTTPException(status_code=400, detail="Case title is required")
     if not due_at_iso:
         raise HTTPException(status_code=400, detail="Due date is required")
-    if audience == "Classrooms":
-        if not class_name:
-            raise HTTPException(status_code=400, detail="Class name is required for classroom audience")
 
-    # Create case document
-    case_doc = {
-        "title": new_case["title"],
-        "description": new_case.get("description"),
-        "type": new_case.get("type", "Cardiology"),
-        "homework_type": homework_type,
-        "created_at": now(),
-    }
+    if audience_raw in ("classroom", "classrooms") and not class_name:
+        raise HTTPException(status_code=400, detail="Class name is required for classroom audience")
 
-    # Handle case image URL if provided (imageFile can't be sent in JSON, so use imagePreviewUrl if available)
-    if new_case.get("imagePreviewUrl"):
-        case_doc["image_url"] = new_case.get("imagePreviewUrl")
+    audience = "Classrooms" if audience_raw in ("classroom", "classrooms") else "All Students"
 
-    case_result = await cases_collection.insert_one(case_doc)
-    case_id = str(case_result.inserted_id)
+    # Create case when payload uses `newCase`, otherwise attach homework to provided case_id.
+    if not case_id:
+        case_doc = {
+            "title": new_case["title"],
+            "description": new_case.get("description"),
+            "case_type": new_case.get("type", "Cardiology"),
+            "homework_type": homework_type,
+            "created_at": now(),
+        }
+        if new_case.get("imagePreviewUrl"):
+            case_doc["image_url"] = new_case.get("imagePreviewUrl")
 
-    # Create homework document
+        case_result = await cases_collection.insert_one(case_doc)
+        case_id = str(case_result.inserted_id)
+
+    if max_points is None:
+        if isinstance(questions, list) and len(questions) > 0:
+            max_points = sum(int(q.get("points", 0) or 0) for q in questions)
+        else:
+            max_points = 100
+
     homework_doc = {
         "case_id": case_id,
         "homework_type": homework_type,
@@ -80,6 +89,7 @@ async def create_homework(payload: dict):
         "audience": audience,
         "due_at": due_at_iso,
         "status": "active",
+        "max_points": int(max_points),
         "created_at": now(),
     }
 
@@ -89,9 +99,11 @@ async def create_homework(payload: dict):
         if password:
             homework_doc["password"] = password
 
+    if instructions is not None:
+        homework_doc["instructions"] = instructions
+
     homework_result = await homeworks_collection.insert_one(homework_doc)
 
-    # Create QNA document if Q&A homework
     if homework_type == "Q&A":
         qna_doc = {
             "case_id": case_id,
@@ -100,8 +112,6 @@ async def create_homework(payload: dict):
             "questions": questions,
         }
         await qna_collection.insert_one(qna_doc)
-
-    # Create Annot document if Annotate homework
     elif homework_type == "Annotate":
         annot_doc = {
             "case_id": case_id,
@@ -122,35 +132,30 @@ async def homework_by_case(
     caseId: str = Query(...),
     userId: str = Query(...)
 ):
-    # Get homework
-    hw = await homeworks_collection.find_one({
-        "case_id": caseId
-    })
-
-    if not hw:
-        return {
-            "case": None,
-            "homework": None,
-            "qna": None,
-            "annot": None,
-            "assigned": False
-        }
-
-    # Check if homework is active
-    if hw.get("status") != "active":
-        return {
-            "case": None,
-            "homework": None,
-            "qna": None,
-            "annot": None,
-            "assigned": False
-        }
-
-    # Get case
-    case = await cases_collection.find_one({"_id": ObjectId(caseId)})
+    # Get case for page context even when homework is inaccessible.
+    case = None
+    try:
+        case = await cases_collection.find_one({"_id": ObjectId(caseId)})
+    except Exception:
+        case = await cases_collection.find_one({"case_id": caseId})
     if case:
         case["_id"] = str(case["_id"])
         case.pop("created_at", None)
+
+    # Get latest homework by case.
+    hw = await homeworks_collection.find_one(
+        {"case_id": caseId},
+        sort=[("created_at", -1)]
+    )
+
+    if not hw:
+        return {
+            "case": case,
+            "homework": None,
+            "qna": None,
+            "annot": None,
+            "assigned": False
+        }
 
     # Get QNA if exists
     qna = await qna_collection.find_one({"case_id": caseId})
@@ -164,21 +169,44 @@ async def homework_by_case(
 
     # Assignment check
     assigned = False
-    audience = hw.get("audience", "All Students")
+    is_instructor_like = False
+    try:
+        user_doc = await users_collection.find_one({"_id": ObjectId(userId)})
+        if user_doc and str(user_doc.get("role", "")).lower() in ("instructor", "admin"):
+            is_instructor_like = True
+    except Exception:
+        pass
 
-    if audience == "All Students":
+    if is_instructor_like:
         assigned = True
-    elif audience == "Classrooms":
-        # Check if user is in the classroom
+
+    audience = (hw.get("audience") or "All Students")
+    audience_norm = str(audience).strip().lower()
+
+    if not assigned and audience_norm in ("all students", "all"):
+        assigned = True
+    elif not assigned and audience_norm in ("classrooms", "classroom"):
+        # Check if user is in the selected classroom.
         classroom = await classrooms_collection.find_one({
             "name": hw.get("class_name"),
             "year": hw.get("year")
         })
-        if classroom and userId in classroom.get("students", []):
-            assigned = True
+        if classroom:
+            member_ids = [str(x) for x in classroom.get("members", [])]
+            assigned = userId in member_ids
 
     hw["_id"] = str(hw["_id"])
     hw.pop("created_at", None)
+
+    # If not assigned to this homework, hide homework payload while still returning case.
+    if not assigned:
+        return {
+            "case": case,
+            "homework": None,
+            "qna": None,
+            "annot": None,
+            "assigned": False
+        }
 
     return {
         "case": case,
@@ -187,6 +215,37 @@ async def homework_by_case(
         "annot": annot,
         "assigned": assigned
     }
+
+
+@router.put("/by-case/{case_id}", response_model=dict)
+async def update_homework_by_case(case_id: str, payload: dict):
+    hw = await homeworks_collection.find_one(
+        {"case_id": case_id},
+        sort=[("created_at", -1)]
+    )
+
+    if not hw:
+        raise HTTPException(status_code=404, detail="Homework not found for case")
+
+    update_doc = {}
+
+    if payload.get("instructions") is not None:
+        update_doc["instructions"] = payload.get("instructions")
+    if payload.get("due_at") is not None:
+        update_doc["due_at"] = payload.get("due_at")
+    if payload.get("max_points") is not None:
+        try:
+            update_doc["max_points"] = int(payload.get("max_points"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="max_points must be a number")
+
+    if update_doc:
+        await homeworks_collection.update_one(
+            {"_id": hw["_id"]},
+            {"$set": update_doc}
+        )
+
+    return {"status": "ok", "homework_id": str(hw["_id"])}
 
 @router.post("/upload")
 async def upload_homework_file(

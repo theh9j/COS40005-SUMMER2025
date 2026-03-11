@@ -60,6 +60,9 @@ export default function AnnotationView() {
     closed: boolean;
     description: string;
     points: number;
+    audience?: string;
+    className?: string;
+    classYear?: string;
     instructions?: string;
     uploads?: any[];
     questions?: any[];
@@ -139,19 +142,30 @@ export default function AnnotationView() {
         if (homeworkRes.ok) {
           const homeworkData = await homeworkRes.json();
           if (!cancelled) {
-            if (homeworkData && homeworkData.status && homeworkData.status !== "none") {
-              const totalPoints = Array.isArray(homeworkData.questions)
-                ? homeworkData.questions.reduce((sum: number, q: any) => sum + Number(q.points || 0), 0)
+            const assigned = homeworkData?.assigned ?? true;
+            const hwData = homeworkData?.homework ?? homeworkData;
+            const qnaData = homeworkData?.qna;
+
+            const hwId = hwData?._id || hwData?.homework_id || "";
+
+            if (assigned && hwData && hwId) {
+              const questionList = qnaData?.questions || hwData?.questions || [];
+              const totalPoints = Array.isArray(questionList)
+                ? questionList.reduce((sum: number, q: any) => sum + Number(q.points || 0), 0)
                 : 0;
+
               setRemoteHomework({
-                id: homeworkData.homework_id,
-                dueAt: homeworkData.due_at || new Date().toISOString(),
-                closed: homeworkData.status !== "active",
-                description: homeworkData.instructions || "Complete this assignment.",
-                instructions: homeworkData.instructions || "",
-                points: totalPoints > 0 ? totalPoints : 100,
-                uploads: homeworkData.uploads || [],
-                questions: homeworkData.questions || [],
+                id: hwId,
+                dueAt: hwData.due_at || new Date().toISOString(),
+                closed: hwData.status !== "active",
+                description: hwData.instructions || qnaData?.instructions || "Complete this assignment.",
+                instructions: hwData.instructions || qnaData?.instructions || "",
+                points: Number(hwData.max_points) || (totalPoints > 0 ? totalPoints : 100),
+                audience: hwData.audience || undefined,
+                className: hwData.class_name || undefined,
+                classYear: hwData.year || undefined,
+                uploads: hwData.uploads || [],
+                questions: questionList,
               });
             } else {
               setRemoteHomework(undefined);
@@ -206,11 +220,14 @@ export default function AnnotationView() {
   const [editCaseImageFile, setEditCaseImageFile] = useState<File | null>(null);
   const [editCaseImagePreview, setEditCaseImagePreview] = useState<string>("");
   const [editHomeworkType, setEditHomeworkType] = useState<"Q&A" | "Annotate">("Annotate");
-  const [editCaseClasses, setEditCaseClasses] = useState<string[]>(["COS40005"]);
+  const [editCaseClasses, setEditCaseClasses] = useState<string[]>([]);
   const [caseTags, setCaseTags] = useState<Array<{ label: string; highlighted: boolean }>>([
     { label: "Fix: Overlapping regions", highlighted: true },
     { label: "Fix: Incorrect boundary", highlighted: true },
-    { label: "Practice: Anatomical localization", highlighted: true }
+    { label: "Fix: Missed edema area", highlighted: true },
+    { label: "Practice: Anatomical localization", highlighted: true },
+    { label: "Practice: Contrast handling", highlighted: true },
+    { label: "Practice: Annotation labeling", highlighted: true }
   ]);
   const [newTagInput, setNewTagInput] = useState("");
   
@@ -223,7 +240,7 @@ export default function AnnotationView() {
     { label: "Note abnormalities", highlighted: true }
   ]);
   const [newHomeworkTagInput, setNewHomeworkTagInput] = useState("");
-  const [assignedClasses, setAssignedClasses] = useState<string[]>(["COS40005"]);
+  const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
   
   // Add Classes modal state
   const [showAddClassesModal, setShowAddClassesModal] = useState(false);
@@ -386,8 +403,20 @@ export default function AnnotationView() {
       setEditHwDescription(hw.description || "");
       setEditHwPoints(hw.points || 0);
       setEditHwDueDate(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
+      const tags: string[] = [];
+      if (hw.audience === "All Students") {
+        tags.push("All students");
+      }
+      if (hw.className) {
+        tags.push(`${hw.className}${hw.classYear ? ` (${hw.classYear})` : ""}`);
+      }
+      setAssignedClasses(tags);
+      setEditCaseClasses(tags);
+    } else {
+      setAssignedClasses([]);
+      setEditCaseClasses([]);
     }
-  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt]);
+  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear]);
 
   if (!user || pageLoading) {
     return <div>Loading...</div>;
@@ -507,7 +536,7 @@ export default function AnnotationView() {
 
           <div className="flex items-center space-x-3">
             {/* Assignment Details Button (students only) */}
-            {user?.role === 'student' && hw && (
+            {user?.role === 'student' && (
               <Button
                 variant="outline"
                 size="sm"
@@ -586,13 +615,14 @@ export default function AnnotationView() {
           </div>
 
           {/* Conditional right panels */}
-          {user?.role === 'student' && showAssignmentDetails && hw && (
+          {user?.role === 'student' && showAssignmentDetails && (
             <AssignmentDetailsPanel
               title={case_.title}
-              description={hw.description}
-              dueDate={hw.dueAt}
-              points={hw.points}
-              closed={hw.closed}
+              description={hw?.description || case_.description || "No homework assignment for this case yet."}
+              dueDate={hw?.dueAt}
+              points={hw?.points ?? 0}
+              closed={hw?.closed ?? false}
+              hasHomework={Boolean(hw)}
               autoChecklist={[
                 "Review all annotated structures",
                 "Check annotation completeness",
@@ -861,13 +891,13 @@ export default function AnnotationView() {
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label htmlFor="hw-points" className="block text-xs font-medium mb-1">Total Points</label>
+                              <label htmlFor="hw-points" className="block text-xs font-medium mb-1">Maximum Points</label>
                               <input
                                 id="hw-points"
                                 type="number"
                                 value={editHwPoints}
                                 onChange={(e) => setEditHwPoints(parseInt(e.target.value) || 0)}
-                                title="Total Points"
+                                title="Maximum Points"
                                 className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
                               />
                             </div>
@@ -981,6 +1011,24 @@ export default function AnnotationView() {
                               const text = await res.text();
                               console.error("Failed to update case", text);
                               throw new Error(text || "Update failed");
+                            }
+
+                            if (hw?.id) {
+                              const hwRes = await fetch(`${API_BASE}/api/instructor/homeworks/by-case/${caseId}`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  instructions: editHwDescription,
+                                  due_at: editHwDueDate ? new Date(`${editHwDueDate}T23:59:00`).toISOString() : undefined,
+                                  max_points: editHwPoints,
+                                }),
+                              });
+
+                              if (!hwRes.ok) {
+                                const hwText = await hwRes.text();
+                                console.error("Failed to update homework", hwText);
+                                throw new Error(hwText || "Homework update failed");
+                              }
                             }
 
                             toast({ description: "Case changes saved" });
@@ -1369,36 +1417,71 @@ export default function AnnotationView() {
                       </div>
                     </div>
                   )}
-                  {hw ? (
-                    <>
-                      <SubmissionPanel
-                        status={submission?.status || "none"}
-                        dueDate={hw.dueAt}
-                        score={submission?.score}
-                        notes={submission?.notes}
-                        files={submission?.files}
-                        closed={hw.closed}
-                        loading={subLoading}
-                        error={subError}
-                        onSubmit={async (notes, files) => {
-                          await submitHomework({
-                            notes,
-                            files,
-                            answers: [],
-                          });
-                        }}
-                        onUploadFile={uploadFile}
-                      />
-                      {submission?.status === "graded" && (
-                        <FeedbackPanel />
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-sm text-muted-foreground">
-                        No homework assignment for this case.
+                  <SubmissionPanel
+                    status={submission?.status || "none"}
+                    dueDate={hw?.dueAt}
+                    score={submission?.score}
+                    notes={submission?.notes}
+                    files={submission?.files}
+                    closed={hw?.closed ?? false}
+                    loading={subLoading}
+                    error={subError}
+                    onSubmit={async (notes, files) => {
+                      if (!hw?.id) {
+                        toast({
+                          title: "No homework assigned",
+                          description: "This case does not have an active homework yet.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      if (hw.closed) {
+                        toast({
+                          title: "Assignment closed",
+                          description: "This assignment is closed and cannot accept submissions.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      await submitHomework({
+                        notes,
+                        files,
+                        answers: [],
+                      });
+                    }}
+                    onUploadFile={async (file) => {
+                      if (!hw?.id) {
+                        toast({
+                          title: "No homework assigned",
+                          description: "Attach files is only available when a homework is assigned.",
+                          variant: "destructive",
+                        });
+                        return null;
+                      }
+
+                      if (hw.closed) {
+                        toast({
+                          title: "Assignment closed",
+                          description: "This assignment is closed and cannot accept files.",
+                          variant: "destructive",
+                        });
+                        return null;
+                      }
+
+                      return uploadFile(file);
+                    }}
+                  />
+                  {!hw && (
+                    <div className="text-center py-2">
+                      <p className="text-xs text-muted-foreground">
+                        No active homework is assigned to this case yet.
                       </p>
                     </div>
+                  )}
+                  {submission?.status === "graded" && (
+                    <FeedbackPanel />
                   )}
                 </div>
               )}

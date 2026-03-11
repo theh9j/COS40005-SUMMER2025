@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 type AssignmentDetailsPanelProps = {
   title: string;
   description: string;
-  dueDate: string;
+  dueDate?: string;
   points: number;
   closed: boolean;
+  hasHomework?: boolean;
   autoChecklist?: string[];
   onClose: () => void;
 };
@@ -19,15 +20,16 @@ export default function AssignmentDetailsPanel({
   dueDate,
   points,
   closed,
+  hasHomework = true,
   autoChecklist,
   onClose,
 }: AssignmentDetailsPanelProps) {
-  const dueDateTime = new Date(dueDate);
+  const dueDateTime = dueDate ? new Date(dueDate) : null;
   const now = new Date();
-  const isOverdue = dueDateTime < now && !closed;
-  const daysUntilDue = Math.ceil(
-    (dueDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  );
+  const isOverdue = Boolean(dueDateTime && dueDateTime < now && !closed);
+  const daysUntilDue = dueDateTime
+    ? Math.ceil((dueDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
 
   return (
     <div className="h-full flex flex-col bg-card border-l border-border">
@@ -52,7 +54,12 @@ export default function AssignmentDetailsPanel({
         {/* Status Section */}
         <Card className="bg-muted/50">
           <CardContent className="p-3 space-y-2">
-            {closed ? (
+            {!hasHomework ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm font-medium">No Homework Assigned</span>
+              </div>
+            ) : closed ? (
               <div className="flex items-center gap-2 text-red-600">
                 <AlertCircle className="h-4 w-4" />
                 <span className="text-sm font-medium">Assignment Closed</span>
@@ -69,14 +76,21 @@ export default function AssignmentDetailsPanel({
               </div>
             )}
 
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>
-                {daysUntilDue > 0
-                  ? `${daysUntilDue} day${daysUntilDue !== 1 ? "s" : ""} left`
-                  : "Due today"}
-              </span>
-            </div>
+            {dueDateTime ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span>
+                  {daysUntilDue && daysUntilDue > 0
+                    ? `${daysUntilDue} day${daysUntilDue !== 1 ? "s" : ""} left`
+                    : "Due today"}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span>No due date</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -84,7 +98,7 @@ export default function AssignmentDetailsPanel({
         <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
           <span className="text-sm font-medium">Total Points</span>
           <Badge variant="outline" className="text-base font-bold">
-            {points}
+            {hasHomework ? points : "N/A"}
           </Badge>
         </div>
 
@@ -92,17 +106,17 @@ export default function AssignmentDetailsPanel({
         <div className="space-y-1">
           <span className="text-xs font-medium text-muted-foreground">Due Date</span>
           <div className="text-sm">
-            {dueDateTime.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}{" "}
-            at{" "}
-            {dueDateTime.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {dueDateTime
+              ? `${dueDateTime.toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })} at ${dueDateTime.toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}`
+              : "No due date"}
           </div>
         </div>
 
