@@ -67,14 +67,6 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>Upload Medical Images</DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              data-testid="button-close-modal"
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
         </DialogHeader>
 
