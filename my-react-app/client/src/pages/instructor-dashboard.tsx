@@ -101,6 +101,8 @@ type CaseFromApi = {
   created_at?: string;
   case_type?: string | null;
   homework_type?: string;
+  homework_audience?: string | null;
+  class_info?: { name?: string; year?: string };
 };
 
 type CaseCard = {
@@ -111,6 +113,7 @@ type CaseCard = {
   source: "db" | "mock";
   homeworkType?: "Q&A" | "Annotate";
   caseType?: string;
+  homeworkAudience?: string;
   classInfo?: { name?: string; year?: string };
   createdAt?: string;
 };
@@ -463,6 +466,7 @@ export default function InstructorDashboard() {
       source: "db",
       homeworkType: c.homework_type as "Q&A" | "Annotate" | undefined,
       caseType: c.case_type ?? undefined,
+      homeworkAudience: c.homework_audience ?? undefined,
       classInfo: c.class_info,
       createdAt: c.created_at,
     }));
@@ -1296,7 +1300,6 @@ export default function InstructorDashboard() {
                   commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
                   skillGaps: ["Anatomical localization", "Contrast handling", "Annotation labeling"],
                 }}
-                classrooms={classrooms}
                 onPublish={async (payload: any) => {
                   try {
                     // Map audience values: frontend sends "all"/"classroom", backend expects "All Students"/"Classrooms"
@@ -1353,6 +1356,7 @@ export default function InstructorDashboard() {
                       password: payload.password || "",
                       className: payload.className || "",
                       year: payload.year || "",
+                      maxPoints: payload.maxPoints || 100,
                     };
 
                     const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
@@ -1483,7 +1487,7 @@ export default function InstructorDashboard() {
                         />
                         {c.source === "db" && (
                           <button
-                            className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border bg-background/90 hover:bg-background"
+                            className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border border-border text-foreground bg-white/90 hover:bg-white dark:bg-black/50 dark:hover:bg-black/70"
                             onClick={(e) => {
                               e.stopPropagation();
                               deleteDbCase(c.id, c.title);
@@ -1506,6 +1510,11 @@ export default function InstructorDashboard() {
                           {c.caseType && (
                             <span className={`text-xs px-2 py-1 rounded font-medium ${getCaseTypeColor(c.caseType)}`}>
                               {c.caseType}
+                            </span>
+                          )}
+                          {c.homeworkAudience === "All Students" && (
+                            <span className="text-xs px-2 py-1 rounded font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100">
+                              All students
                             </span>
                           )}
                           {c.classInfo && c.classInfo.name && (

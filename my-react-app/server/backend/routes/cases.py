@@ -118,6 +118,7 @@ async def list_cases(limit: int = 50):
             "image_url": image_url,
             "case_type": c.get("case_type"),
             "homework_type": homework_type,
+            "homework_audience": homework.get("audience") if homework else None,
             "class_info": class_info,
             "created_at": c.get("created_at"),
         })

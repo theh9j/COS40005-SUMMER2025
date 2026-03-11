@@ -23,6 +23,17 @@ import DiscussionThread from "@/components/discussion/DiscussionThread";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 
+const API_BASE = "http://127.0.0.1:8000";
+
+type CaseFromApi = {
+  case_id: string;
+  title: string;
+  description?: string | null;
+  image_url?: string | null;
+  case_type?: string | null;
+  homework_type?: "Q&A" | "Annotate" | null;
+};
+
 
 // === Homework metadata 
 type HomeworkMeta = { dueAt: string; closed: boolean };
@@ -110,6 +121,43 @@ export default function StudentDashboard() {
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
+
+  const [casesFromApi, setCasesFromApi] = useState<CaseFromApi[]>([]);
+
+  const loadCases = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/instructor/cases`);
+      if (!res.ok) {
+        setCasesFromApi([]);
+        return;
+      }
+      const data = await res.json();
+      setCasesFromApi(Array.isArray(data) ? data : []);
+    } catch {
+      setCasesFromApi([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeView === "cases") {
+      loadCases();
+    }
+  }, [activeView]);
+
+  const caseLibraryCases = useMemo(() => {
+    const dbCases = casesFromApi.map((c) => ({
+      id: c.case_id,
+      title: c.title,
+      description: c.description || "No description",
+      category: c.case_type || "General",
+      imageUrl: c.image_url || "",
+      createdBy: null,
+      createdAt: null,
+      homeworkType: c.homework_type || undefined,
+    }));
+
+    return [...dbCases, ...mockCases.filter((m) => !dbCases.some((d) => d.id === m.id))];
+  }, [casesFromApi]);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
@@ -566,10 +614,10 @@ export default function StudentDashboard() {
                 <h2 className="text-2xl font-bold">{t("caseLibrary")}</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mockCases.map((case_) => {
+                {caseLibraryCases.map((case_) => {
                   const hw = homeworkByCase[case_.id];
                   const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
-                  const hwType = homeworkTypeByCase[case_.id];
+                  const hwType = homeworkTypeByCase[case_.id] || (case_ as any).homeworkType;
 
                   return (
                     <div key={case_.id} className="space-y-2">

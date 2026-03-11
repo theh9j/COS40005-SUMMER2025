@@ -52,6 +52,7 @@ type PublishPayload = {
   password: string;
   className: string;
   year: string;
+  maxPoints: number;
 };
 
 type ClassroomOption = {
@@ -83,6 +84,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
   const [password, setPassword] = useState("");
   const [selectedClassroomId, setSelectedClassroomId] = useState("");
   const [className, setClassName] = useState("");
+  const [annotateMaxPoints, setAnnotateMaxPoints] = useState(100);
 
   const [due, setDue] = useState("");
   const [audience, setAudience] = useState<"all" | "classroom">("all");
@@ -116,6 +118,11 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     return Array.from(new Set(base)).slice(0, 6);
   }, [stats]);
 
+  const qnaMaxPoints = useMemo(
+    () => questions.reduce((sum, q) => sum + Number(q.points || 0), 0),
+    [questions]
+  );
+
   const onSelectClassroom = (classroomId: string) => {
     setSelectedClassroomId(classroomId);
     const selected = classroomOptions.find((c) => c.id === classroomId);
@@ -127,6 +134,9 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     if (!caseTitle.trim()) next.caseTitle = "Case title is required.";
     if (builderTab === "Annotate" && !caseImageFile) next.caseImage = "Annotation image is required.";
     if (!due) next.due = "Due date is required.";
+    if (builderTab === "Annotate" && (!annotateMaxPoints || annotateMaxPoints < 1)) {
+      next.maxPoints = "Maximum points must be at least 1.";
+    }
     if (audience === "classroom") {
       if (!password.trim()) next.password = "Homework password is required.";
       if (!className.trim()) next.className = "Class is required.";
@@ -139,6 +149,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
   const canPublish =
     caseTitle.trim().length > 0 &&
     Boolean(due) &&
+    (builderTab === "Q&A" ? qnaMaxPoints > 0 : annotateMaxPoints > 0) &&
     (builderTab === "Q&A" ? questions.length > 0 : Boolean(caseImageFile)) &&
     (audience === "all" || (password.trim() && className.trim() && selectedClassroomId));
 
@@ -366,6 +377,27 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                   <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
                   {errors.due && <p className="text-xs text-red-600">{errors.due}</p>}
                 </div>
+
+                {builderTab === "Q&A" ? (
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium">Maximum points</label>
+                    <div className="h-10 rounded-md border border-border bg-muted/30 px-3 text-sm flex items-center">
+                      {qnaMaxPoints} point{qnaMaxPoints !== 1 ? "s" : ""} from {questions.length} question{questions.length !== 1 ? "s" : ""}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Calculated automatically from question points.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Maximum points</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={annotateMaxPoints}
+                      onChange={(e) => setAnnotateMaxPoints(Number(e.target.value) || 0)}
+                    />
+                    {errors.maxPoints && <p className="text-xs text-red-600">{errors.maxPoints}</p>}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -681,6 +713,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                     password,
                     className,
                     year: classroomOptions.find((c) => c.id === selectedClassroomId)?.year,
+                    maxPoints: builderTab === "Q&A" ? qnaMaxPoints : annotateMaxPoints,
                   });
                 }}
               >

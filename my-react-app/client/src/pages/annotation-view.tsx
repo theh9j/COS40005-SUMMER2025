@@ -60,6 +60,9 @@ export default function AnnotationView() {
     closed: boolean;
     description: string;
     points: number;
+    audience?: string;
+    className?: string;
+    classYear?: string;
     instructions?: string;
     uploads?: any[];
     questions?: any[];
@@ -139,19 +142,30 @@ export default function AnnotationView() {
         if (homeworkRes.ok) {
           const homeworkData = await homeworkRes.json();
           if (!cancelled) {
-            if (homeworkData && homeworkData.status && homeworkData.status !== "none") {
-              const totalPoints = Array.isArray(homeworkData.questions)
-                ? homeworkData.questions.reduce((sum: number, q: any) => sum + Number(q.points || 0), 0)
+            const assigned = homeworkData?.assigned ?? true;
+            const hwData = homeworkData?.homework ?? homeworkData;
+            const qnaData = homeworkData?.qna;
+
+            const hwId = hwData?._id || hwData?.homework_id || "";
+
+            if (assigned && hwData && hwId) {
+              const questionList = qnaData?.questions || hwData?.questions || [];
+              const totalPoints = Array.isArray(questionList)
+                ? questionList.reduce((sum: number, q: any) => sum + Number(q.points || 0), 0)
                 : 0;
+
               setRemoteHomework({
-                id: homeworkData.homework_id,
-                dueAt: homeworkData.due_at || new Date().toISOString(),
-                closed: homeworkData.status !== "active",
-                description: homeworkData.instructions || "Complete this assignment.",
-                instructions: homeworkData.instructions || "",
-                points: totalPoints > 0 ? totalPoints : 100,
-                uploads: homeworkData.uploads || [],
-                questions: homeworkData.questions || [],
+                id: hwId,
+                dueAt: hwData.due_at || new Date().toISOString(),
+                closed: hwData.status !== "active",
+                description: hwData.instructions || qnaData?.instructions || "Complete this assignment.",
+                instructions: hwData.instructions || qnaData?.instructions || "",
+                points: Number(hwData.max_points) || (totalPoints > 0 ? totalPoints : 100),
+                audience: hwData.audience || undefined,
+                className: hwData.class_name || undefined,
+                classYear: hwData.year || undefined,
+                uploads: hwData.uploads || [],
+                questions: questionList,
               });
             } else {
               setRemoteHomework(undefined);
@@ -206,11 +220,14 @@ export default function AnnotationView() {
   const [editCaseImageFile, setEditCaseImageFile] = useState<File | null>(null);
   const [editCaseImagePreview, setEditCaseImagePreview] = useState<string>("");
   const [editHomeworkType, setEditHomeworkType] = useState<"Q&A" | "Annotate">("Annotate");
-  const [editCaseClasses, setEditCaseClasses] = useState<string[]>(["COS40005"]);
+  const [editCaseClasses, setEditCaseClasses] = useState<string[]>([]);
   const [caseTags, setCaseTags] = useState<Array<{ label: string; highlighted: boolean }>>([
     { label: "Fix: Overlapping regions", highlighted: true },
     { label: "Fix: Incorrect boundary", highlighted: true },
-    { label: "Practice: Anatomical localization", highlighted: true }
+    { label: "Fix: Missed edema area", highlighted: true },
+    { label: "Practice: Anatomical localization", highlighted: true },
+    { label: "Practice: Contrast handling", highlighted: true },
+    { label: "Practice: Annotation labeling", highlighted: true }
   ]);
   const [newTagInput, setNewTagInput] = useState("");
   
@@ -223,7 +240,7 @@ export default function AnnotationView() {
     { label: "Note abnormalities", highlighted: true }
   ]);
   const [newHomeworkTagInput, setNewHomeworkTagInput] = useState("");
-  const [assignedClasses, setAssignedClasses] = useState<string[]>(["COS40005"]);
+  const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
   
   // Add Classes modal state
   const [showAddClassesModal, setShowAddClassesModal] = useState(false);
@@ -386,8 +403,20 @@ export default function AnnotationView() {
       setEditHwDescription(hw.description || "");
       setEditHwPoints(hw.points || 0);
       setEditHwDueDate(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
+      const tags: string[] = [];
+      if (hw.audience === "All Students") {
+        tags.push("All students");
+      }
+      if (hw.className) {
+        tags.push(`${hw.className}${hw.classYear ? ` (${hw.classYear})` : ""}`);
+      }
+      setAssignedClasses(tags);
+      setEditCaseClasses(tags);
+    } else {
+      setAssignedClasses([]);
+      setEditCaseClasses([]);
     }
-  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt]);
+  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear]);
 
   if (!user || pageLoading) {
     return <div>Loading...</div>;
@@ -862,13 +891,13 @@ export default function AnnotationView() {
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label htmlFor="hw-points" className="block text-xs font-medium mb-1">Total Points</label>
+                              <label htmlFor="hw-points" className="block text-xs font-medium mb-1">Maximum Points</label>
                               <input
                                 id="hw-points"
                                 type="number"
                                 value={editHwPoints}
                                 onChange={(e) => setEditHwPoints(parseInt(e.target.value) || 0)}
-                                title="Total Points"
+                                title="Maximum Points"
                                 className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
                               />
                             </div>
@@ -982,6 +1011,24 @@ export default function AnnotationView() {
                               const text = await res.text();
                               console.error("Failed to update case", text);
                               throw new Error(text || "Update failed");
+                            }
+
+                            if (hw?.id) {
+                              const hwRes = await fetch(`${API_BASE}/api/instructor/homeworks/by-case/${caseId}`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  instructions: editHwDescription,
+                                  due_at: editHwDueDate ? new Date(`${editHwDueDate}T23:59:00`).toISOString() : undefined,
+                                  max_points: editHwPoints,
+                                }),
+                              });
+
+                              if (!hwRes.ok) {
+                                const hwText = await hwRes.text();
+                                console.error("Failed to update homework", hwText);
+                                throw new Error(hwText || "Homework update failed");
+                              }
                             }
 
                             toast({ description: "Case changes saved" });
