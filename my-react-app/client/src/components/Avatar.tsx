@@ -54,7 +54,8 @@ export default function Avatar({
       alt={computedAlt}
       width={size}
       height={size}
-      className={`rounded-full object-cover ${className}`}
+      style={{ width: size, height: size }}
+      className={`block rounded-full object-cover aspect-square ${className}`}
     />
   );
 }

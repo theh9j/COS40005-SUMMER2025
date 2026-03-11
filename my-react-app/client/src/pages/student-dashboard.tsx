@@ -11,10 +11,9 @@ import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { mockCases, mockPerformanceData, mockUpcomingAssignments } from "@/lib/mock-data";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import CaseCard from "@/components/case-card";
-import UploadModal from "@/components/upload-modal";
 import {
   UserRound, Gauge, FolderOpen, Edit, Users, ChartLine, Settings,
-  CheckCircle, MessageCircle, Flame, LogOut, Upload, Calendar, AlertCircle
+  CheckCircle, MessageCircle, Flame, LogOut, Calendar, AlertCircle
 } from "lucide-react";
 
 // discussion 
@@ -112,7 +111,6 @@ export default function StudentDashboard() {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
 
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   // Close profile menu on outside click or Escape
@@ -566,10 +564,6 @@ export default function StudentDashboard() {
             <div className="p-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">{t("caseLibrary")}</h2>
-                <Button onClick={() => setShowUploadModal(true)} className="bg-primary text-primary-foreground hover:opacity-90" data-testid="button-upload-case">
-                  <Upload className="h-4 w-4 mr-2" />
-                  {t("uploadCase")}
-                </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {mockCases.map((case_) => {
@@ -689,7 +683,6 @@ export default function StudentDashboard() {
         </main>
       </div>
 
-      <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
     </div>
   );
 }
