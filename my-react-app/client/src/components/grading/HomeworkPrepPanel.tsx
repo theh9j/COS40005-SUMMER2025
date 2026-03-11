@@ -83,7 +83,6 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
   const [password, setPassword] = useState("");
   const [selectedClassroomId, setSelectedClassroomId] = useState("");
   const [className, setClassName] = useState("");
-  const [year, setYear] = useState("");
 
   const [due, setDue] = useState("");
   const [audience, setAudience] = useState<"all" | "classroom">("all");
@@ -121,7 +120,6 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     setSelectedClassroomId(classroomId);
     const selected = classroomOptions.find((c) => c.id === classroomId);
     setClassName(selected?.name || "");
-    setYear(selected?.year || "");
   };
 
   const validate = () => {
@@ -132,7 +130,6 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     if (audience === "classroom") {
       if (!password.trim()) next.password = "Homework password is required.";
       if (!className.trim()) next.className = "Class is required.";
-      if (!year.trim()) next.year = "Year is required.";
     }
     if (builderTab === "Q&A" && questions.length === 0) next.questions = "Add at least one Q&A question.";
     setErrors(next);
@@ -143,7 +140,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     caseTitle.trim().length > 0 &&
     Boolean(due) &&
     (builderTab === "Q&A" ? questions.length > 0 : Boolean(caseImageFile)) &&
-    (audience === "all" || (password.trim() && className.trim() && year.trim()));
+    (audience === "all" || (password.trim() && className.trim() && selectedClassroomId));
 
   const toISO = (d: string) => (d ? new Date(`${d}T23:59:00`).toISOString() : "");
 
@@ -412,11 +409,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                       {errors.className && <p className="text-xs text-red-600">{errors.className}</p>}
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Year</label>
-                      <Input value={year} readOnly placeholder="Auto-filled from selected class" />
-                      {errors.year && <p className="text-xs text-red-600">{errors.year}</p>}
-                    </div>
+
                   </>
                 )}
               </div>
@@ -687,7 +680,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                     questions: builderTab === "Q&A" ? questions : [],
                     password,
                     className,
-                    year,
+                    year: classroomOptions.find((c) => c.id === selectedClassroomId)?.year,
                   });
                 }}
               >

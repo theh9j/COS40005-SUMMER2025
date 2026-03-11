@@ -55,22 +55,8 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
     }
   }, [initialPost]);
 
-  // when starting a new post, auto-fill with previously used tags if none selected
-  useEffect(() => {
-    if (isCreatingPost && newPostTags.length === 0) {
-      try {
-        const saved = sessionStorage.getItem('lastTags');
-        if (saved) {
-          const arr = JSON.parse(saved);
-          if (Array.isArray(arr)) {
-            setNewPostTags(arr);
-          }
-        }
-      } catch (e) {
-        console.warn('could not restore lastTags', e);
-      }
-    }
-  }, [isCreatingPost]);
+  // NOTE: We intentionally do NOT auto-fill tags when starting a new post.
+  // This keeps the tag selector empty/unchanged until the user explicitly picks tags.
 
   useEffect(() => {
     if (initialPost) return;

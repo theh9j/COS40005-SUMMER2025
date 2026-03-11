@@ -870,11 +870,6 @@ export default function InstructorDashboard() {
               {showProfileMenu && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <ProfileMenu />
-                  <div className="p-2">
-                    <Button variant="outline" className="w-full" onClick={handleLogout}>
-                      Logout
-                    </Button>
-                  </div>
                 </div>
               )}
             </div>
@@ -1293,6 +1288,7 @@ export default function InstructorDashboard() {
               </div>
 
               <HomeworkPrepPanel
+                classrooms={classrooms}
                 stats={{
                   avgScore,
                   commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
