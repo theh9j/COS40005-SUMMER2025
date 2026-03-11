@@ -803,7 +803,6 @@ export default function InstructorDashboard() {
 
   const navItems = [
     { id: "overview", label: t("overview"), icon: Gauge },
-    { id: "students", label: t("studentWork"), icon: GraduationCap },
     { id: "grading", label: t("grading"), icon: ClipboardCheck },
     { id: "analytics", label: t("homeworkBuilder"), icon: LineChart },
     { id: "cases", label: t("caseManagement"), icon: FolderOpen },
