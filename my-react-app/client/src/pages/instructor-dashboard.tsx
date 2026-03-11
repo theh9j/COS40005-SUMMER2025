@@ -75,7 +75,6 @@ type Submission = {
   caseId: string;
   caseTitle: string;
   studentId: string;
-  studentName?: string;
 
   status: SubmissionStatus;
 
@@ -86,13 +85,6 @@ type Submission = {
 
   published?: boolean;
   publishedAt?: string;
-  submittedAt?: string;
-  dueAt?: string;
-  classDisplay?: string;
-  className?: string;
-  year?: string;
-  homeworkType?: "Q&A" | "Annotate" | string;
-  authorId?: string;
 
   updatedAt: string;
 };
@@ -108,7 +100,6 @@ type CaseFromApi = {
   created_at?: string;
   case_type?: string | null;
   homework_type?: string;
-  author_id?: string;
 };
 
 type CaseCard = {
@@ -120,7 +111,6 @@ type CaseCard = {
   homeworkType?: "Q&A" | "Annotate";
   caseType?: string;
   createdAt?: string;
-  authorId?: string;
 };
 
 type CaseSort = "newest" | "oldest" | "az" | "za";
@@ -453,6 +443,9 @@ export default function InstructorDashboard() {
       loadClassrooms();
       loadAvailableStudents();
     }
+    if (activeView === "grading") {
+      loadClassrooms();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
@@ -466,7 +459,6 @@ export default function InstructorDashboard() {
       homeworkType: c.homework_type as "Q&A" | "Annotate" | undefined,
       caseType: c.case_type ?? undefined,
       createdAt: c.created_at,
-      authorId: c.author_id,
     }));
 
     const demoCases: CaseCard[] = mockCases.map((c) => ({
@@ -477,7 +469,6 @@ export default function InstructorDashboard() {
       source: "mock",
       caseType: c.category,
       createdAt: undefined,
-      authorId: undefined,
     }));
 
     return [...dbCases, ...demoCases];
@@ -594,48 +585,18 @@ export default function InstructorDashboard() {
   // ✅ Grading hub state
   const [gradingCaseId, setGradingCaseId] = useState<string | null>(null);
 
-  const gradingHubSubmissions = useMemo(() => {
-    const caseLookup = new Map(casesFromApi.map((c) => [c.case_id, c]));
-    const studentLookup = new Map(
-      availableStudents.map((s) => [
-        s.id,
-        {
-          studentName: `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() || undefined,
-          classDisplay: s.classroom ?? undefined,
-        },
-      ])
-    );
-
-    return submissions
-      .map((s) => {
-        const caseMeta = caseLookup.get(s.caseId);
-        const studentMeta = studentLookup.get(s.studentId);
-        return {
-          ...s,
-          studentName: s.studentName ?? studentMeta?.studentName,
-          classDisplay: s.classDisplay ?? studentMeta?.classDisplay,
-          homeworkType: s.homeworkType ?? caseMeta?.homework_type ?? "Annotate",
-          authorId: s.authorId ?? caseMeta?.author_id,
-        };
-      })
-      .filter((s) => (s.authorId ? s.authorId === user?.user_id : true));
-  }, [submissions, casesFromApi, availableStudents, user?.user_id]);
-
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    let list = gradingHubSubmissions;
+    let list = submissions;
 
     if (gradingCaseId) {
       list = list.filter((s) => s.caseId === gradingCaseId);
     }
 
     return list.filter(
-      (s) =>
-        s.studentId.toLowerCase().includes(q) ||
-        s.caseTitle.toLowerCase().includes(q) ||
-        (s.studentName ?? "").toLowerCase().includes(q)
+      (s) => s.studentId.toLowerCase().includes(q) || s.caseTitle.toLowerCase().includes(q)
     );
-  }, [query, gradingHubSubmissions, gradingCaseId]);
+  }, [query, submissions, gradingCaseId]);
 
   const selected = useMemo(
     () => filtered.find((s) => s.id === (activeIds[0] ?? "")) ?? filtered[0],
@@ -710,7 +671,6 @@ export default function InstructorDashboard() {
           caseId: s.case_id,
           caseTitle: s.case_title ?? "Unknown case",
           studentId: s.student_id,
-          studentName: [s.student_first_name, s.student_last_name].filter(Boolean).join(" ") || s.student_name || undefined,
           status: (s.status as SubmissionStatus) ?? "submitted",
           score: s.score ?? undefined,
           feedback: s.feedback ?? "",
@@ -718,13 +678,6 @@ export default function InstructorDashboard() {
           modelAnswers: s.model_answers ?? [],
           published: Boolean(s.published),
           publishedAt: s.published_at ?? undefined,
-          submittedAt: s.submitted_at ?? s.created_at ?? undefined,
-          dueAt: s.due_at ?? undefined,
-          classDisplay: s.class_display ?? undefined,
-          className: s.class_name ?? undefined,
-          year: s.year ?? undefined,
-          homeworkType: s.homework_type ?? undefined,
-          authorId: s.author_id ?? undefined,
           updatedAt: s.updated_at ?? "",
         }));
 
@@ -1027,8 +980,8 @@ export default function InstructorDashboard() {
             <div className="p-6" data-testid="view-grading">
               {gradingCaseId === null ? (
                 <GradingHub
-                  submissions={gradingHubSubmissions}
-                  classOptions={classrooms.map((cls) => cls.display)}
+                  submissions={submissions}
+                  classrooms={classrooms}
                   onOpenCase={(caseId) => {
                     setGradingCaseId(caseId);
                     setActiveIds([]);
@@ -1352,7 +1305,7 @@ export default function InstructorDashboard() {
                       fd.append("image", payload.newCase.imageFile);
                       fd.append("case_type", payload.newCase.type || "");
                       fd.append("homework_type", payload.homeworkType || "Annotate");
-                      fd.append("author_id", user?.user_id ?? "");
+                      fd.append("author_id", user.user_id);
 
                       const createRes = await fetch(`${API_BASE}/api/instructor/cases`, {
                         method: "POST",

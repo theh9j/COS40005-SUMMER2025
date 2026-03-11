@@ -53,22 +53,30 @@ export default function AnnotationView() {
   const { toast } = useToast();
   const { t } = useI18n();
   const caseId = params?.caseId || "";
-  const case_ = mockCases.find((c) => c.id === caseId);
+
+  type HomeworkMeta = {
+    id: string;
+    dueAt: string;
+    closed: boolean;
+    description: string;
+    points: number;
+    instructions?: string;
+    uploads?: any[];
+    questions?: any[];
+  };
+
+  const [remoteCase, setRemoteCase] = useState<any | null>(null);
+  const [remoteHomework, setRemoteHomework] = useState<HomeworkMeta | undefined>(undefined);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  const case_ = remoteCase ?? mockCases.find((c) => c.id === caseId);
+  const hw = remoteHomework;
 
   // Timer key scoped to case + user so timers are not shared between users
   const timerKey = `timer_${caseId}_${user?.user_id ?? 'guest'}`;
 
   const annotation = useAnnotation(caseId, user?.user_id || "current-user");
-
-  // === Homework metadata (mock) theo case ===
-  type HomeworkMeta = { id: string; dueAt: string; closed: boolean; description: string; points: number };
-  const homeworkByCase: Record<string, HomeworkMeta> = {
-    "case-1": { id: "hw-1", dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false, description: "Analyze the medical imaging and create comprehensive annotations identifying key anatomical structures and pathological findings.", points: 100 },
-    "case-2": { id: "hw-2", dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false, description: "Detailed case analysis with peer comparison to learn different annotation approaches.", points: 85 },
-    "case-3": { id: "hw-3", dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true, description: "Final comprehensive annotation exercise with quality and accuracy requirements.", points: 90 },
-  };
-
-  const hw = homeworkByCase[caseId];
   const { submission, loading: subLoading, error: subError, submitHomework, uploadFile, fetchSubmission } = useSubmission(
     hw?.id || "",
     caseId,
@@ -81,6 +89,94 @@ export default function AnnotationView() {
       fetchSubmission();
     }
   }, [hw?.id, caseId, user?.user_id, fetchSubmission]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCasePageData = async () => {
+      if (!caseId) {
+        if (!cancelled) {
+          setPageLoading(false);
+          setPageError("Missing case id");
+        }
+        return;
+      }
+
+      try {
+        setPageLoading(true);
+        setPageError(null);
+
+        const [casesRes, homeworkRes] = await Promise.all([
+          fetch(`${API_BASE}/api/instructor/cases`),
+          fetch(`${API_BASE}/api/instructor/homeworks/by-case?caseId=${encodeURIComponent(caseId)}&userId=${encodeURIComponent(user?.user_id || "current-user")}`),
+        ]);
+
+        if (!casesRes.ok) {
+          throw new Error(`Failed to load case (${casesRes.status})`);
+        }
+
+        const cases = await casesRes.json();
+        const found = Array.isArray(cases)
+          ? cases.find((c: any) => (c.case_id ?? c.id) === caseId)
+          : null;
+
+        if (!cancelled) {
+          if (found) {
+            setRemoteCase({
+              id: found.case_id ?? found.id,
+              title: found.title,
+              description: found.description || "",
+              category: found.case_type || found.category || "General",
+              imageUrl: found.image_url || found.imageUrl,
+              createdBy: found.author_id || found.createdBy || "",
+              createdAt: found.created_at ? new Date(found.created_at) : new Date(),
+            });
+          } else {
+            setRemoteCase(null);
+          }
+        }
+
+        if (homeworkRes.ok) {
+          const homeworkData = await homeworkRes.json();
+          if (!cancelled) {
+            if (homeworkData && homeworkData.status && homeworkData.status !== "none") {
+              const totalPoints = Array.isArray(homeworkData.questions)
+                ? homeworkData.questions.reduce((sum: number, q: any) => sum + Number(q.points || 0), 0)
+                : 0;
+              setRemoteHomework({
+                id: homeworkData.homework_id,
+                dueAt: homeworkData.due_at || new Date().toISOString(),
+                closed: homeworkData.status !== "active",
+                description: homeworkData.instructions || "Complete this assignment.",
+                instructions: homeworkData.instructions || "",
+                points: totalPoints > 0 ? totalPoints : 100,
+                uploads: homeworkData.uploads || [],
+                questions: homeworkData.questions || [],
+              });
+            } else {
+              setRemoteHomework(undefined);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load annotation page data", err);
+        if (!cancelled) {
+          setPageError(err instanceof Error ? err.message : "Failed to load case");
+        }
+      } finally {
+        if (!cancelled) {
+          setPageLoading(false);
+        }
+      }
+    };
+
+    loadCasePageData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, user?.user_id]);
+
 
   // Heartbeat and presence
   useHeartbeat(user?.user_id);
@@ -277,8 +373,32 @@ export default function AnnotationView() {
     else setLocation("/instructor");
   };
 
-  if (!user || !case_) {
+  useEffect(() => {
+    if (case_) {
+      setEditCaseTitle(case_.title || "");
+      setEditCaseDesc(case_.description || "");
+      setEditCaseCategory(case_.category || "");
+    }
+  }, [case_?.id, case_?.title, case_?.description, case_?.category]);
+
+  useEffect(() => {
+    if (hw) {
+      setEditHwDescription(hw.description || "");
+      setEditHwPoints(hw.points || 0);
+      setEditHwDueDate(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
+    }
+  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt]);
+
+  if (!user || pageLoading) {
     return <div>Loading...</div>;
+  }
+
+  if (pageError && !case_) {
+    return <div className="p-6 text-sm text-muted-foreground">{pageError}</div>;
+  }
+
+  if (!case_) {
+    return <div className="p-6 text-sm text-muted-foreground">Case not found.</div>;
   }
 
   // Show assignment requirements first (students only)
