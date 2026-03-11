@@ -13,10 +13,9 @@ forum_collection = db["forum"]
 
 # ===== Other collections =====
 homeworks_collection = db["homeworks"]
-homework_targets_collection = db["homework_targets"]
-homework_uploads_collection = db["homework_uploads"]
-homework_questions_collection = db["homework_questions"]
 submissions_collection = db["submissions"]
 classrooms_collection = db["classrooms"]
 cases_collection = db["cases"]
+qna_collection = db["qna"]
+annot_collection = db["annot"]
 

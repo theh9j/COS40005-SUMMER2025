@@ -139,30 +139,33 @@ class QuestionMCQ(BaseModel):
 # ✅ now includes essay
 Question = Union[QuestionShort, QuestionEssay, QuestionMCQ]
 
-# ---- Create / Out ----
-class HomeworkCreate(BaseModel):
-    case_id: str
-    due_at: str  # ISO
-    audience: Literal["all", "group", "list"]
-    group_name: Optional[str] = None
-    student_ids: Optional[List[str]] = None
-    instructions: Optional[str] = None
-    checklist: Optional[List[str]] = None
-    uploads: List[HWUpload] = Field(default_factory=list)
-    questions: List[Question] = Field(default_factory=list)
+# ---- Homework Related ----
+class Case(BaseModel):
+    title: str
+    description: Optional[str] = None
+    type: Optional[str] = None
+    image_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # ✅ Optional extra metadata from frontend (won’t break old clients)
-    password: Optional[str] = None
-    requirement_id: Optional[str] = None  # legacy
+class Homework(BaseModel):
+    case_id: str
+    homework_type: Literal["Q&A", "Annotate"]
+    focus: List[Dict[str, Any]] = Field(default_factory=list)
+    audience: Literal["All Students", "Classrooms"]
+    class_id: Optional[str] = None
     class_name: Optional[str] = None
     year: Optional[str] = None
+    password: Optional[str] = None
+    due_at: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class HomeworkOut(BaseModel):
-    homework_id: str
+class QNA(BaseModel):
     case_id: str
-    status: Literal["active", "closed"]
-    due_at: datetime
-    assigned: bool
     instructions: Optional[str] = None
-    uploads: List[HWUpload] = Field(default_factory=list)
+    total_questions: int = 0
     questions: List[Question] = Field(default_factory=list)
+
+class Annot(BaseModel):
+    case_id: str
+    annotation_image: str = ""
+    reference_images: List[str] = Field(default_factory=list)

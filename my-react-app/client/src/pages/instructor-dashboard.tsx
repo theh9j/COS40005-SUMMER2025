@@ -111,6 +111,7 @@ type CaseCard = {
   source: "db" | "mock";
   homeworkType?: "Q&A" | "Annotate";
   caseType?: string;
+  classInfo?: { name?: string; year?: string };
   createdAt?: string;
 };
 
@@ -459,6 +460,7 @@ export default function InstructorDashboard() {
       source: "db",
       homeworkType: c.homework_type as "Q&A" | "Annotate" | undefined,
       caseType: c.case_type ?? undefined,
+      classInfo: c.class_info,
       createdAt: c.created_at,
     }));
 
@@ -1293,92 +1295,83 @@ export default function InstructorDashboard() {
                 }}
                 onPublish={async (payload: any) => {
                   try {
-                    // Case A: payload có newCase (bản bạn làm mới)
-                    if (payload?.newCase?.title && payload?.newCase?.imageFile) {
-                      const fd = new FormData();
-                      fd.append("title", payload.newCase.title);
-                      if (payload.newCase.description) fd.append("description", payload.newCase.description);
-                      fd.append("image", payload.newCase.imageFile);
-                      fd.append("case_type", payload.newCase.type || "");
-                      fd.append("homework_type", payload.homeworkType || "Annotate");
-                      fd.append("author_id", user.user_id);
+                    // Map audience values: frontend sends "all"/"classroom", backend expects "All Students"/"Classrooms"
+                    const audienceMap: Record<string, string> = {
+                      "all": "All Students",
+                      "classroom": "Classrooms"
+                    };
+                    const mappedAudience = audienceMap[payload.audience] || payload.audience;
 
-                      const createRes = await fetch(`${API_BASE}/api/instructor/cases`, {
-                        method: "POST",
-                        body: fd,
+                    // For Annotation homework: upload image first and get the URL
+                    let imageUrl: string | undefined;
+                    if (payload.homeworkType === "Annotate" && payload.newCase?.imageFile) {
+                      const formData = new FormData();
+                      formData.append("file", payload.newCase.imageFile);
+
+                      const uploadParams = new URLSearchParams({
+                        caseId: "temp",
+                        userId: user?.user_id || "",
                       });
 
-                      if (!createRes.ok) {
-                        console.error("Create case failed", await createRes.text());
-                        alert("Cannot create case. Check backend /api/instructor/cases");
+                      const uploadRes = await fetch(`${API_BASE}/api/instructor/homeworks/upload?${uploadParams}`, {
+                        method: "POST",
+                        body: formData,
+                      });
+
+                      if (!uploadRes.ok) {
+                        console.error("Image upload failed", await uploadRes.text());
+                        alert("Failed to upload image");
                         return;
                       }
 
-                      const caseData = await createRes.json();
-                      const createdCaseId = caseData.case_id ?? caseData.id;
-
-                      const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          case_id: createdCaseId,
-                          due_at: payload.dueAtISO,
-                          audience: payload.audience,
-                          group_name: payload.groupName ?? null,
-                          student_ids: payload.studentIds ?? null,
-                          instructions: payload.instructions ?? null,
-                          checklist: payload.autoChecklist,
-                          uploads: payload.referenceUploads ?? payload.uploads ?? [],
-                          questions: payload.questions ?? [],
-                          password: payload.password,
-                          class_name: payload.className,
-                          year: payload.year,
-                        }),
-                      });
-
-                      if (!res.ok) {
-                        console.error("Failed to publish homework", await res.text());
-                        alert("Failed to publish homework");
-                        return;
-                      }
-
-                      const data = await res.json();
-                      alert(`Homework published with id ${data.homework_id}`);
-
-                      setActiveView("cases");
-                      await loadCases();
-                      return;
+                      const uploadData = await uploadRes.json();
+                      // Use full URL from upload response
+                      imageUrl = uploadData.url || uploadData.filename || uploadData.path;
                     }
 
-                    // Case B: payload kiểu cũ
+                    // Build the homework payload with new simplified structure
+                    const homeworkPayload = {
+                      newCase: {
+                        title: payload.newCase?.title,
+                        description: payload.newCase?.description,
+                        type: payload.newCase?.type,
+                        imageFile: null, // Don't send the file object
+                        imagePreviewUrl: imageUrl || payload.newCase?.imagePreviewUrl,
+                      },
+                      dueAtISO: payload.dueAtISO,
+                      audience: mappedAudience,
+                      instructions: payload.instructions,
+                      autoChecklist: payload.autoChecklist || [],
+                      suggestedFocusTags: payload.suggestedFocusTags || [],
+                      homeworkType: payload.homeworkType || "Q&A",
+                      referenceUploads: payload.referenceUploads || [],
+                      questions: payload.questions || [],
+                      password: payload.password || "",
+                      className: payload.className || "",
+                      year: payload.year || "",
+                    };
+
                     const res = await fetch(`${API_BASE}/api/instructor/homeworks`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        case_id: payload.caseId,
-                        due_at: payload.dueAtISO,
-                        audience: payload.audience,
-                        group_name: payload.groupName ?? null,
-                        student_ids: payload.studentIds ?? null,
-                        instructions: payload.instructions ?? null,
-                        checklist: payload.autoChecklist,
-                        uploads: payload.uploads ?? [],
-                        questions: payload.questions ?? [],
-                        password: payload.password,
-                      }),
+                      body: JSON.stringify(homeworkPayload),
                     });
 
                     if (!res.ok) {
-                      console.error("Failed to publish homework", await res.text());
-                      alert("Failed to publish homework");
+                      const errorText = await res.text();
+                      console.error("Failed to publish homework", errorText);
+                      alert(`Failed to publish homework: ${res.status}`);
                       return;
                     }
 
                     const data = await res.json();
-                    alert(`Homework published with id ${data.homework_id}`);
+                    alert(`Homework published! Case: ${data.case_id}, Homework: ${data.homework_id}`);
+
+                    setActiveView("cases");
+                    await loadCases();
                   } catch (err) {
                     console.error("Error publishing homework", err);
-                    alert("Error publishing homework");
+                    alert(`Error publishing homework: ${err instanceof Error ? err.message : "Unknown error"}`);
                   }
                 }}
               />
@@ -1412,8 +1405,9 @@ export default function InstructorDashboard() {
                       onChange={(e) => setCaseFilterClass(e.target.value)}
                     >
                       <option value="">All Classes</option>
+                      <option value="all-classes">All Classes (assigned)</option>
                       {classrooms.map((cls) => (
-                        <option key={cls.id} value={cls.id}>
+                        <option key={cls.id} value={cls.name}>
                           {cls.display}
                         </option>
                       ))}
@@ -1504,13 +1498,18 @@ export default function InstructorDashboard() {
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{c.description}</p>
-                        {c.caseType && (
-                          <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {c.caseType && (
                             <span className={`text-xs px-2 py-1 rounded font-medium ${getCaseTypeColor(c.caseType)}`}>
                               {c.caseType}
                             </span>
-                          </div>
-                        )}
+                          )}
+                          {c.classInfo && c.classInfo.name && (
+                            <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800">
+                              {c.classInfo.name} ({c.classInfo.year})
+                            </span>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   ))

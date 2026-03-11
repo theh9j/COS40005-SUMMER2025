@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from bson import ObjectId
 
-from db.connection import cases_collection
+from db.connection import cases_collection, homeworks_collection
 
 router = APIRouter(prefix="/api/instructor", tags=["Cases"])
 
@@ -84,19 +84,41 @@ async def create_case(
 @router.get("/cases")
 async def list_cases(limit: int = 50):
     """
-    Optional: list cases for management page
+    List cases for management page.
+    For each case, look up the associated homework to get the correct homework_type and class info.
     """
     items = await cases_collection.find({}).sort("created_at", -1).to_list(limit)
     out = []
     for c in items:
+        case_id = str(c["_id"])
+        
+        # Look up homework for this case to get the correct homework_type and class info
+        homework = await homeworks_collection.find_one({"case_id": case_id})
+        homework_type = homework.get("homework_type") if homework else c.get("homework_type", "Annotate")
+        
+        # Get class information if assigned to a class
+        class_info = None
+        if homework and homework.get("audience") == "Classrooms":
+            class_info = {
+                "name": homework.get("class_name"),
+                "year": homework.get("year")
+            }
+        
+        # Normalize image URL: convert relative URLs to full URLs
+        image_url = c.get("image_url")
+        if image_url and not image_url.startswith("http") and not image_url.startswith("blob:"):
+            # It's a relative URL, convert to full URL
+            image_url = f"http://127.0.0.1:8000{image_url}"
+        
         out.append({
-            "case_id": str(c["_id"]),
+            "case_id": case_id,
             "title": c.get("title"),
             "author_id": c.get("author_id"),
             "description": c.get("description"),
-            "image_url": c.get("image_url"),
+            "image_url": image_url,
             "case_type": c.get("case_type"),
-            "homework_type": c.get("homework_type", "Annotate"),
+            "homework_type": homework_type,
+            "class_info": class_info,
             "created_at": c.get("created_at"),
         })
     return out

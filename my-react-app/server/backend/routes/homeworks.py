@@ -4,14 +4,16 @@ from datetime import datetime
 from typing import Optional
 from pathlib import Path
 import shutil
+import time
 
 from db.connection import (
     homeworks_collection,
-    homework_targets_collection,
-    homework_uploads_collection,
-    homework_questions_collection,
+    users_collection,
+    classrooms_collection,
+    cases_collection,
+    qna_collection,
+    annot_collection,
 )
-from models.models import HomeworkCreate, HomeworkOut
 
 router = APIRouter(prefix="/api/instructor/homeworks", tags=["Homeworks"])
 
@@ -25,167 +27,205 @@ def now():
 # Instructor: Create Homework
 # ====================================================
 
+# ====================================================
+# Instructor: Create Homework
+# ====================================================
+
 @router.post("/", response_model=dict)
-async def create_homework(payload: HomeworkCreate):
-    timestamp = now()
+async def create_homework(payload: dict):
+    # Extract data from payload
+    new_case = payload.get("newCase", {})
+    due_at_iso = payload.get("dueAtISO", "")
+    audience = payload.get("audience", "All Students")
+    instructions = payload.get("instructions")
+    auto_checklist = payload.get("autoChecklist", [])
+    suggested_focus_tags = payload.get("suggestedFocusTags", [])
+    homework_type = payload.get("homeworkType", "Q&A")
+    reference_uploads = payload.get("referenceUploads", [])
+    questions = payload.get("questions", [])
+    password = payload.get("password", "")
+    class_name = payload.get("className", "")
+    year = payload.get("year", "")
 
-    password = payload.password or payload.requirement_id
+    # Validate required fields
+    if not new_case.get("title"):
+        raise HTTPException(status_code=400, detail="Case title is required")
+    if not due_at_iso:
+        raise HTTPException(status_code=400, detail="Due date is required")
+    if audience == "Classrooms":
+        if not class_name:
+            raise HTTPException(status_code=400, detail="Class name is required for classroom audience")
 
-    hw_doc = {
-        "case_id": payload.case_id,
-        "due_at": payload.due_at,
-        "instructions": payload.instructions,
-        "checklist": payload.checklist or [],
-        "status": "active",
-        "created_at": timestamp,
-        "password": password,
-        "requirement_id": payload.requirement_id,
-        "class_name": payload.class_name,
-        "year": payload.year,
+    # Create case document
+    case_doc = {
+        "title": new_case["title"],
+        "description": new_case.get("description"),
+        "type": new_case.get("type", "Cardiology"),
+        "homework_type": homework_type,
+        "created_at": now(),
     }
 
-    result = await homeworks_collection.insert_one(hw_doc)
-    hw_id = str(result.inserted_id)
+    # Handle case image URL if provided (imageFile can't be sent in JSON, so use imagePreviewUrl if available)
+    if new_case.get("imagePreviewUrl"):
+        case_doc["image_url"] = new_case.get("imagePreviewUrl")
 
-    # Target audience
-    target_doc = {"homework_id": hw_id}
+    case_result = await cases_collection.insert_one(case_doc)
+    case_id = str(case_result.inserted_id)
 
-    if payload.audience == "all":
-        target_doc["all_flag"] = True
-    elif payload.audience == "group":
-        target_doc["group_name"] = payload.group_name
-    elif payload.audience == "list":
-        target_doc["student_ids"] = payload.student_ids or []
+    # Create homework document
+    homework_doc = {
+        "case_id": case_id,
+        "homework_type": homework_type,
+        "focus": suggested_focus_tags or auto_checklist,
+        "audience": audience,
+        "due_at": due_at_iso,
+        "status": "active",
+        "created_at": now(),
+    }
 
-    await homework_targets_collection.insert_one(target_doc)
+    if audience == "Classrooms":
+        homework_doc["class_name"] = class_name
+        homework_doc["year"] = year
+        if password:
+            homework_doc["password"] = password
 
-    # Uploads
-    if payload.uploads:
-        await homework_uploads_collection.insert_many([
-            {"homework_id": hw_id, **u.model_dump()}
-            for u in payload.uploads
-        ])
+    homework_result = await homeworks_collection.insert_one(homework_doc)
 
-    # Questions
-    if payload.questions:
-        await homework_questions_collection.insert_many([
-            {
-                "homework_id": hw_id,
-                "idx": idx,
-                **q.model_dump()
-            }
-            for idx, q in enumerate(payload.questions)
-        ])
+    # Create QNA document if Q&A homework
+    if homework_type == "Q&A":
+        qna_doc = {
+            "case_id": case_id,
+            "instructions": instructions,
+            "total_questions": len(questions),
+            "questions": questions,
+        }
+        await qna_collection.insert_one(qna_doc)
 
-    return {"homework_id": hw_id, "status": "active"}
+    # Create Annot document if Annotate homework
+    elif homework_type == "Annotate":
+        annot_doc = {
+            "case_id": case_id,
+            "annotation_image": new_case.get("imagePreviewUrl", ""),
+            "reference_images": [u.get("url", "") for u in reference_uploads] if reference_uploads else [],
+        }
+        await annot_collection.insert_one(annot_doc)
+
+    return {"case_id": case_id, "homework_id": str(homework_result.inserted_id)}
 
 
 # ====================================================
 # Student: Get Homework by Case
 # ====================================================
 
-@router.get("/by-case", response_model=HomeworkOut)
+@router.get("/by-case", response_model=dict)
 async def homework_by_case(
     caseId: str = Query(...),
     userId: str = Query(...)
 ):
+    # Get homework
     hw = await homeworks_collection.find_one({
-        "case_id": caseId,
-        "status": "active"
+        "case_id": caseId
     })
 
     if not hw:
-        return HomeworkOut(
-            homework_id="",
-            case_id=caseId,
-            status="none",
-            due_at="",
-            assigned=False,
-            instructions=None,
-            uploads=[],
-            questions=[]
-        )
+        return {
+            "case": None,
+            "homework": None,
+            "qna": None,
+            "annot": None,
+            "assigned": False
+        }
 
-    hw_id = str(hw["_id"])
+    # Check if homework is active
+    if hw.get("status") != "active":
+        return {
+            "case": None,
+            "homework": None,
+            "qna": None,
+            "annot": None,
+            "assigned": False
+        }
+
+    # Get case
+    case = await cases_collection.find_one({"_id": ObjectId(caseId)})
+    if case:
+        case["_id"] = str(case["_id"])
+        case.pop("created_at", None)
+
+    # Get QNA if exists
+    qna = await qna_collection.find_one({"case_id": caseId})
+    if qna:
+        qna.pop("_id", None)
+
+    # Get Annot if exists
+    annot = await annot_collection.find_one({"case_id": caseId})
+    if annot:
+        annot.pop("_id", None)
 
     # Assignment check
-    target = await homework_targets_collection.find_one({
-        "homework_id": hw_id
-    })
-
     assigned = False
+    audience = hw.get("audience", "All Students")
 
-    if target:
-        if target.get("all_flag"):
+    if audience == "All Students":
+        assigned = True
+    elif audience == "Classrooms":
+        # Check if user is in the classroom
+        classroom = await classrooms_collection.find_one({
+            "name": hw.get("class_name"),
+            "year": hw.get("year")
+        })
+        if classroom and userId in classroom.get("students", []):
             assigned = True
-        elif userId in (target.get("student_ids") or []):
-            assigned = True
-        elif target.get("group_name"):
-            assigned = True
 
-    uploads = await homework_uploads_collection.find(
-        {"homework_id": hw_id}
-    ).to_list(length=100)
+    hw["_id"] = str(hw["_id"])
+    hw.pop("created_at", None)
 
-    for u in uploads:
-        u.pop("_id", None)
-        u.pop("homework_id", None)
-
-    questions = await homework_questions_collection.find(
-        {"homework_id": hw_id}
-    ).sort("idx", 1).to_list(length=200)
-
-    for q in questions:
-        q.pop("_id", None)
-        q.pop("homework_id", None)
-        q.pop("idx", None)
-
-    return HomeworkOut(
-        homework_id=hw_id,
-        case_id=hw["case_id"],
-        status=hw["status"],
-        due_at=hw.get("due_at"),
-        assigned=assigned,
-        instructions=hw.get("instructions"),
-        uploads=uploads,
-        questions=questions
-    )
+    return {
+        "case": case,
+        "homework": hw,
+        "qna": qna,
+        "annot": annot,
+        "assigned": assigned
+    }
 
 @router.post("/upload")
 async def upload_homework_file(
     file: UploadFile = File(...),
-    homeworkId: str = Query(...),
+    caseId: str = Query(...),
     userId: str = Query(...)  # instructor ID
 ):
-    # Validate homework
-    hw = await homeworks_collection.find_one({"_id": ObjectId(homeworkId)})
-    if not hw:
-        raise HTTPException(status_code=404, detail="Homework not found")
+    """
+    Upload an image file for annotation homework.
+    Path: uploads/{userId}/cases/{filename}
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="File is required")
 
-    # Path: uploads/{userId}/homeworks/{homeworkId}/
-    hw_dir = UPLOAD_ROOT / userId / "homeworks" / homeworkId
-    hw_dir.mkdir(parents=True, exist_ok=True)
+    # Path: uploads/{userId}/cases/
+    cases_dir = UPLOAD_ROOT / userId / "cases"
+    cases_dir.mkdir(parents=True, exist_ok=True)
 
+    # Generate filename with timestamp to avoid conflicts
+    timestamp = int(time.time() * 1000)
     safe_name = Path(file.filename).name
-    file_path = hw_dir / safe_name
+    filename = f"{timestamp}_{safe_name}"
+    file_path = cases_dir / filename
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
-    url = f"/uploads/{userId}/homeworks/{homeworkId}/{safe_name}"
-
-    await homework_uploads_collection.insert_one({
-        "homework_id": homeworkId,
-        "owner_id": userId,
-        "name": safe_name,
-        "url": url,
-        "type": file.content_type or "application/octet-stream",
-        "size": file_path.stat().st_size
-    })
+    # Return full URL and relative URL
+    full_url = f"http://127.0.0.1:8000/uploads/{userId}/cases/{filename}"
+    relative_url = f"/uploads/{userId}/cases/{filename}"
 
     return {
-        "name": safe_name,
-        "url": url,
+        "name": filename,
+        "url": full_url,
+        "relative_url": relative_url,
         "type": file.content_type,
-        "size": file_path.stat().st_size
+        "size": file_path.stat().st_size,
+        "filename": filename
     }

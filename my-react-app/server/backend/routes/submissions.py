@@ -10,7 +10,7 @@ import shutil
 from db.connection import (
     submissions_collection,
     homeworks_collection,
-    homework_targets_collection,
+    classrooms_collection,
 )
 from models.models import SubmissionCreate, SubmissionOut, GradeRequest
 
@@ -111,25 +111,23 @@ async def create_or_update_submission(
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found")
 
-    if hw.get("status") != "active":
-        raise HTTPException(status_code=400, detail="Homework inactive")
-
     due_at = hw.get("due_at")
     if due_at and datetime.fromisoformat(due_at) < timestamp:
         raise HTTPException(status_code=400, detail="Deadline passed")
 
-    # Validate assignment
-    target = await homework_targets_collection.find_one({
-        "homework_id": homeworkId
-    })
-
+    # Validate assignment based on audience
+    audience = hw.get("audience", "All Students")
     assigned = False
-    if target:
-        if target.get("all_flag"):
-            assigned = True
-        elif userId in (target.get("student_ids") or []):
-            assigned = True
-        elif target.get("group_name"):
+
+    if audience == "All Students":
+        assigned = True
+    elif audience == "Classrooms":
+        # Check if user is in the classroom
+        classroom = await classrooms_collection.find_one({
+            "name": hw.get("class_name"),
+            "year": hw.get("year")
+        })
+        if classroom and userId in classroom.get("students", []):
             assigned = True
 
     if not assigned:
