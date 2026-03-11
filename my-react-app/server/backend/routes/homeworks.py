@@ -159,6 +159,37 @@ async def homework_by_case(
         questions=questions
     )
 
+# ====================================================
+# Instructor: List & Manage Submissions
+# ====================================================
+
+@router.get("/submissions")
+async def list_submissions():
+    """List submissions for instructor dashboard.
+
+    This endpoint is used by the frontend at `/api/instructor/submissions`.
+    It returns a list of submissions with the fields expected by the UI.
+    """
+    items = await submissions_collection.find({}).to_list(200)
+    out = []
+    for s in items:
+        out.append({
+            "id": str(s.get("_id")),
+            "case_id": s.get("case_id"),
+            # case_title may not exist on all documents, frontend handles missing values
+            "case_title": s.get("case_title"),
+            "student_id": s.get("user_id"),
+            "status": s.get("status"),
+            "score": s.get("score"),
+            "feedback": s.get("feedback"),
+            "rubric": s.get("rubric"),
+            "model_answers": s.get("model_answers"),
+            "published": bool(s.get("published")),
+            "published_at": s.get("published_at"),
+            "updated_at": s.get("updated_at"),
+        })
+    return out
+
 @router.post("/upload")
 async def upload_homework_file(
     file: UploadFile = File(...),
@@ -348,3 +379,42 @@ async def grade_submission(submission_id: str, payload: GradeRequest):
         raise HTTPException(status_code=404, detail="Submission not found")
 
     return {"status": "graded", "score": payload.score}
+
+
+@submissions_router.post("/submissions/{submission_id}/publish")
+async def publish_submission(submission_id: str):
+    """Mark a submission as published so the student can see their grade."""
+    published_at = now()
+    result = await submissions_collection.update_one(
+        {"_id": ObjectId(submission_id)},
+        {"$set": {"published": True, "published_at": published_at, "updated_at": published_at}}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    return {"published_at": published_at.isoformat()}
+
+
+@submissions_router.post("/submissions/{submission_id}/return")
+async def return_submission(submission_id: str, payload: dict = Body(...)):
+    """Return a graded submission to the student for review/revisions."""
+    # The UI sends `{ feedback: "..." }`.
+    feedback = payload.get("feedback")
+    update = {
+        "status": "submitted",
+        "published": False,
+        "updated_at": now(),
+    }
+    if feedback is not None:
+        update["feedback"] = feedback
+
+    result = await submissions_collection.update_one(
+        {"_id": ObjectId(submission_id)},
+        {"$set": update}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    return {"returned": True}
