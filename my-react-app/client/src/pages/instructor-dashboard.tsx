@@ -447,6 +447,9 @@ export default function InstructorDashboard() {
     if (activeView === "grading") {
       loadClassrooms();
     }
+    if (activeView === "analytics") {
+      loadClassrooms();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
@@ -1295,6 +1298,7 @@ export default function InstructorDashboard() {
                   commonMistakes: ["Overlapping regions", "Incorrect boundary", "Missed edema area"],
                   skillGaps: ["Anatomical localization", "Contrast handling", "Annotation labeling"],
                 }}
+                classrooms={classrooms}
                 onPublish={async (payload: any) => {
                   try {
                     // Case A: payload có newCase (bản bạn làm mới)

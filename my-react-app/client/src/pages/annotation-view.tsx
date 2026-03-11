@@ -507,7 +507,7 @@ export default function AnnotationView() {
 
           <div className="flex items-center space-x-3">
             {/* Assignment Details Button (students only) */}
-            {user?.role === 'student' && hw && (
+            {user?.role === 'student' && (
               <Button
                 variant="outline"
                 size="sm"
@@ -586,13 +586,14 @@ export default function AnnotationView() {
           </div>
 
           {/* Conditional right panels */}
-          {user?.role === 'student' && showAssignmentDetails && hw && (
+          {user?.role === 'student' && showAssignmentDetails && (
             <AssignmentDetailsPanel
               title={case_.title}
-              description={hw.description}
-              dueDate={hw.dueAt}
-              points={hw.points}
-              closed={hw.closed}
+              description={hw?.description || case_.description || "No homework assignment for this case yet."}
+              dueDate={hw?.dueAt}
+              points={hw?.points ?? 0}
+              closed={hw?.closed ?? false}
+              hasHomework={Boolean(hw)}
               autoChecklist={[
                 "Review all annotated structures",
                 "Check annotation completeness",
@@ -1369,36 +1370,71 @@ export default function AnnotationView() {
                       </div>
                     </div>
                   )}
-                  {hw ? (
-                    <>
-                      <SubmissionPanel
-                        status={submission?.status || "none"}
-                        dueDate={hw.dueAt}
-                        score={submission?.score}
-                        notes={submission?.notes}
-                        files={submission?.files}
-                        closed={hw.closed}
-                        loading={subLoading}
-                        error={subError}
-                        onSubmit={async (notes, files) => {
-                          await submitHomework({
-                            notes,
-                            files,
-                            answers: [],
-                          });
-                        }}
-                        onUploadFile={uploadFile}
-                      />
-                      {submission?.status === "graded" && (
-                        <FeedbackPanel />
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-sm text-muted-foreground">
-                        No homework assignment for this case.
+                  <SubmissionPanel
+                    status={submission?.status || "none"}
+                    dueDate={hw?.dueAt}
+                    score={submission?.score}
+                    notes={submission?.notes}
+                    files={submission?.files}
+                    closed={hw?.closed ?? false}
+                    loading={subLoading}
+                    error={subError}
+                    onSubmit={async (notes, files) => {
+                      if (!hw?.id) {
+                        toast({
+                          title: "No homework assigned",
+                          description: "This case does not have an active homework yet.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      if (hw.closed) {
+                        toast({
+                          title: "Assignment closed",
+                          description: "This assignment is closed and cannot accept submissions.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      await submitHomework({
+                        notes,
+                        files,
+                        answers: [],
+                      });
+                    }}
+                    onUploadFile={async (file) => {
+                      if (!hw?.id) {
+                        toast({
+                          title: "No homework assigned",
+                          description: "Attach files is only available when a homework is assigned.",
+                          variant: "destructive",
+                        });
+                        return null;
+                      }
+
+                      if (hw.closed) {
+                        toast({
+                          title: "Assignment closed",
+                          description: "This assignment is closed and cannot accept files.",
+                          variant: "destructive",
+                        });
+                        return null;
+                      }
+
+                      return uploadFile(file);
+                    }}
+                  />
+                  {!hw && (
+                    <div className="text-center py-2">
+                      <p className="text-xs text-muted-foreground">
+                        No active homework is assigned to this case yet.
                       </p>
                     </div>
+                  )}
+                  {submission?.status === "graded" && (
+                    <FeedbackPanel />
                   )}
                 </div>
               )}
