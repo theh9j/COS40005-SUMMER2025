@@ -581,7 +581,7 @@ export default function StudentDashboard() {
                       />
 
                       {/* Meta bar cho Assignment */}
-                      <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center px-1">
                         <div className="flex items-center gap-2">
                           {hw && <Badge>{t("homework")}</Badge>}
                           {hw ? (
@@ -591,22 +591,6 @@ export default function StudentDashboard() {
                               <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
                             )
                           ) : null}
-                        </div>
-
-                        <div>
-                          {hw ? (
-                            hw.closed ? (
-                              <Button size="sm" variant="outline" disabled>{t("closed")}</Button>
-                            ) : (
-                              <Link href={`/annotation/${case_.id}`}>
-                                <Button size="sm">{t("open")}</Button>
-                              </Link>
-                            )
-                          ) : (
-                            <Link href={`/annotation/${case_.id}`}>
-                              <Button size="sm" variant="ghost">{t("open")}</Button>
-                            </Link>
-                          )}
                         </div>
                       </div>
                     </div>
