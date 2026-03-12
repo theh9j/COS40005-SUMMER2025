@@ -60,6 +60,7 @@ export default function AnnotationView() {
     closed: boolean;
     description: string;
     points: number;
+    homeworkType?: "Q&A" | "Annotate";
     audience?: string;
     className?: string;
     classYear?: string;
@@ -75,6 +76,7 @@ export default function AnnotationView() {
 
   const case_ = remoteCase ?? mockCases.find((c) => c.id === caseId);
   const hw = remoteHomework;
+  const isQnAHomework = hw?.homeworkType === "Q&A";
 
   // Timer key scoped to case + user so timers are not shared between users
   const timerKey = `timer_${caseId}_${user?.user_id ?? 'guest'}`;
@@ -161,6 +163,7 @@ export default function AnnotationView() {
                 description: hwData.instructions || qnaData?.instructions || "Complete this assignment.",
                 instructions: hwData.instructions || qnaData?.instructions || "",
                 points: Number(hwData.max_points) || (totalPoints > 0 ? totalPoints : 100),
+                homeworkType: (hwData.homework_type || found?.homework_type || "Annotate") as "Q&A" | "Annotate",
                 audience: hwData.audience || undefined,
                 className: hwData.class_name || undefined,
                 classYear: hwData.year || undefined,
@@ -606,12 +609,46 @@ export default function AnnotationView() {
         <main className="flex-1 flex overflow-hidden">
           {/* Canvas */}
           <div className="flex-1 p-0 overflow-auto">
-            <AnnotationCanvas
-              imageUrl={case_.imageUrl}
-              annotation={annotation}
-              peerAnnotations={annotation.peerAnnotations}
-              peerOpacity={compare.alpha || 0.5}
-            />
+            {user?.role === "student" && isQnAHomework ? (
+              <div className="p-6 space-y-6">
+                <Card>
+                  <CardContent className="p-6 space-y-4">
+                    <div>
+                      <h2 className="text-2xl font-semibold">{case_.title}</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {case_.description || "Answer the questions below and submit your work."}
+                      </p>
+                    </div>
+
+                    {case_.imageUrl && (
+                      <div className="rounded-lg overflow-hidden border bg-muted">
+                        <img
+                          src={case_.imageUrl}
+                          alt={case_.title || "Case image"}
+                          className="w-full max-h-[520px] object-contain"
+                        />
+                      </div>
+                    )}
+
+                    {hw?.instructions && (
+                      <div className="rounded-lg border p-4 bg-card">
+                        <div className="font-medium mb-2">Instructions</div>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {hw.instructions}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <AnnotationCanvas
+                imageUrl={case_.imageUrl}
+                annotation={annotation}
+                peerAnnotations={annotation.peerAnnotations}
+                peerOpacity={compare.alpha || 0.5}
+              />
+            )}
           </div>
 
           {/* Conditional right panels */}
@@ -1423,10 +1460,13 @@ export default function AnnotationView() {
                     score={submission?.score}
                     notes={submission?.notes}
                     files={submission?.files}
+                    questions={hw?.questions || []}
+                    answers={submission?.answers || []}
+                    homeworkType={hw?.homeworkType || "Annotate"}
                     closed={hw?.closed ?? false}
                     loading={subLoading}
                     error={subError}
-                    onSubmit={async (notes, files) => {
+                    onSubmit={async (notes, files, answers) => {
                       if (!hw?.id) {
                         toast({
                           title: "No homework assigned",
@@ -1448,7 +1488,7 @@ export default function AnnotationView() {
                       await submitHomework({
                         notes,
                         files,
-                        answers: [],
+                        answers,
                       });
                     }}
                     onUploadFile={async (file) => {
