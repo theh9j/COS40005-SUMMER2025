@@ -3,14 +3,15 @@ from fastapi.responses import FileResponse
 from bson import ObjectId
 from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
-import os
 import shutil
 
 from db.connection import (
     submissions_collection,
     homeworks_collection,
     classrooms_collection,
+    cases_collection,
+    qna_collection,
+    versions_collection,
 )
 from models.models import SubmissionCreate, SubmissionOut, GradeRequest
 
@@ -24,17 +25,39 @@ def now():
     return datetime.utcnow()
 
 
-# ====================================================
-# Upload File
-# ====================================================
+def to_iso(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if value is None:
+        return None
+    return str(value)
+
+
+def build_model_answers(questions):
+    out = []
+    for idx, q in enumerate(questions or []):
+        qtype = q.get("type")
+        item = {
+            "index": idx,
+            "type": qtype,
+            "prompt": q.get("prompt", ""),
+            "points": q.get("points", 0),
+        }
+        if qtype in ("short", "essay"):
+            item["expectedAnswer"] = q.get("expectedAnswer")
+        elif qtype == "mcq":
+            item["options"] = q.get("options", [])
+            item["correctIndex"] = q.get("correctIndex")
+        out.append(item)
+    return out
+
 
 @router.post("/submissions/upload")
 async def upload_submission_file(
     file: UploadFile = File(...),
     homeworkId: str = Query(...),
-    userId: str = Query(...)  # student ID
+    userId: str = Query(...)
 ):
-    # Path: uploads/{userId}/submissions/{homeworkId}/
     user_dir = UPLOAD_ROOT / userId / "submissions" / homeworkId
     user_dir.mkdir(parents=True, exist_ok=True)
 
@@ -48,7 +71,7 @@ async def upload_submission_file(
         "url": f"/uploads/{userId}/submissions/{homeworkId}/{safe_name}",
         "name": safe_name,
         "type": file.content_type or "application/octet-stream",
-        "size": file_path.stat().st_size
+        "size": file_path.stat().st_size,
     }
 
 
@@ -61,10 +84,6 @@ async def download_submission_file(userId: str, filename: str):
 
     return FileResponse(file_path)
 
-
-# ====================================================
-# Get My Submission
-# ====================================================
 
 @router.get("/submissions/mine", response_model=SubmissionOut)
 async def my_submission(
@@ -86,13 +105,9 @@ async def my_submission(
         notes=sub.get("notes"),
         files=sub.get("files"),
         answers=sub.get("answers"),
-        updated_at=sub.get("updated_at").isoformat() if sub.get("updated_at") else None
+        updated_at=to_iso(sub.get("updated_at"))
     )
 
-
-# ====================================================
-# Create / Update Submission (with validation)
-# ====================================================
 
 @router.post("/submissions", response_model=SubmissionOut)
 async def create_or_update_submission(
@@ -103,32 +118,39 @@ async def create_or_update_submission(
 ):
     timestamp = now()
 
-    # Validate homework
-    hw = await homeworks_collection.find_one({
-        "_id": ObjectId(homeworkId)
-    })
+    try:
+        hw = await homeworks_collection.find_one({"_id": ObjectId(homeworkId)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid homework id")
 
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found")
 
     due_at = hw.get("due_at")
-    if due_at and datetime.fromisoformat(due_at) < timestamp:
-        raise HTTPException(status_code=400, detail="Deadline passed")
+    if due_at:
+        try:
+            due_dt = datetime.fromisoformat(str(due_at).replace("Z", "+00:00"))
+            if due_dt.replace(tzinfo=None) < timestamp:
+                raise HTTPException(status_code=400, detail="Deadline passed")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
 
-    # Validate assignment based on audience
     audience = hw.get("audience", "All Students")
     assigned = False
 
     if audience == "All Students":
         assigned = True
     elif audience == "Classrooms":
-        # Check if user is in the classroom
         classroom = await classrooms_collection.find_one({
             "name": hw.get("class_name"),
             "year": hw.get("year")
         })
-        if classroom and userId in classroom.get("students", []):
-            assigned = True
+        if classroom:
+            member_ids = [str(x) for x in classroom.get("members", [])]
+            student_ids = [str(x) for x in classroom.get("students", [])]
+            assigned = userId in member_ids or userId in student_ids
 
     if not assigned:
         raise HTTPException(status_code=403, detail="Not assigned")
@@ -144,12 +166,12 @@ async def create_or_update_submission(
         "files": files_list,
         "answers": answers_list,
         "status": "submitted",
-        "updated_at": timestamp
+        "updated_at": timestamp,
     }
 
     existing = await submissions_collection.find_one({
         "homework_id": homeworkId,
-        "user_id": userId
+        "user_id": userId,
     })
 
     if existing:
@@ -169,16 +191,71 @@ async def create_or_update_submission(
         notes=payload.notes,
         files=files_list,
         answers=answers_list,
-        updated_at=timestamp.isoformat()
+        updated_at=timestamp.isoformat(),
     )
 
 
-# ====================================================
-# Grade Submission
-# ====================================================
+@router.get("/instructor/submissions")
+async def instructor_submissions():
+    rows = await submissions_collection.find({}).sort("updated_at", -1).to_list(1000)
+    out = []
+
+    for sub in rows:
+        case_id = str(sub.get("case_id") or "")
+        user_id = str(sub.get("user_id") or "")
+        homework_id = str(sub.get("homework_id") or "")
+
+        case_doc = None
+        if case_id:
+            try:
+                case_doc = await cases_collection.find_one({"_id": ObjectId(case_id)})
+            except Exception:
+                case_doc = await cases_collection.find_one({"case_id": case_id})
+
+        homework_doc = None
+        if homework_id:
+            try:
+                homework_doc = await homeworks_collection.find_one({"_id": ObjectId(homework_id)})
+            except Exception:
+                homework_doc = None
+        if not homework_doc and case_id:
+            homework_doc = await homeworks_collection.find_one({"case_id": case_id}, sort=[("created_at", -1)])
+
+        qna_doc = await qna_collection.find_one({"case_id": case_id}) if case_id else None
+        latest_version = await versions_collection.find_one(
+            {"caseId": case_id, "userId": user_id},
+            sort=[("version", -1)]
+        ) if case_id and user_id else None
+
+        out.append({
+            "id": str(sub["_id"]),
+            "homework_id": homework_id,
+            "case_id": case_id,
+            "case_title": (case_doc or {}).get("title") or f"Case {case_id[:8]}",
+            "case_image_url": (case_doc or {}).get("image_url", ""),
+            "student_id": user_id,
+            "status": sub.get("status", "submitted"),
+            "score": sub.get("score"),
+            "feedback": sub.get("feedback", ""),
+            "rubric": sub.get("rubric", []),
+            "notes": sub.get("notes"),
+            "files": sub.get("files", []),
+            "answers": sub.get("answers", []),
+            "model_answers": build_model_answers((qna_doc or {}).get("questions", [])),
+            "annotations": (latest_version or {}).get("annotations", []),
+            "annotation_version": (latest_version or {}).get("version"),
+            "class_name": (homework_doc or {}).get("class_name"),
+            "year": (homework_doc or {}).get("year"),
+            "updated_at": to_iso(sub.get("updated_at")),
+            "created_at": to_iso(sub.get("created_at")),
+        })
+
+    return out
+
 
 @router.post("/submissions/{submission_id}/grade")
 async def grade_submission(submission_id: str, payload: GradeRequest):
+    graded_at = now()
     result = await submissions_collection.update_one(
         {"_id": ObjectId(submission_id)},
         {"$set": {
@@ -186,12 +263,18 @@ async def grade_submission(submission_id: str, payload: GradeRequest):
             "rubric": payload.rubric,
             "feedback": payload.feedback,
             "status": "graded",
-            "graded_at": now(),
-            "updated_at": now()
+            "graded_at": graded_at,
+            "updated_at": graded_at,
         }}
     )
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    return {"status": "graded", "score": payload.score}
+    return {
+        "status": "graded",
+        "score": payload.score,
+        "rubric": payload.rubric,
+        "feedback": payload.feedback,
+        "updated_at": graded_at.isoformat(),
+    }
