@@ -81,10 +81,9 @@ export function useSubmission(homeworkId: string, caseId: string, userId: string
         formData.append("file", file);
 
         // Build URL with query parameters for caseId, userId, type
-        const url = new URL(`${API_BASE}/upload`);
-        url.searchParams.append("caseId", caseId);
+        const url = new URL(`${API_BASE}/submissions/upload`);
+        url.searchParams.append("homeworkId", homeworkId);
         url.searchParams.append("userId", userId);
-        url.searchParams.append("type", "submission");
 
         // Assuming there's an upload endpoint
         const res = await fetch(url.toString(), {
@@ -176,3 +175,4 @@ export function useSubmission(homeworkId: string, caseId: string, userId: string
     submitHomework,
   };
 }
+
