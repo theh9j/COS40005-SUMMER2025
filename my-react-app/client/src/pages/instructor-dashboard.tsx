@@ -75,6 +75,7 @@ type Submission = {
   id: string;
   caseId: string;
   caseTitle: string;
+  caseImageUrl?: string;
   studentId: string;
 
   status: SubmissionStatus;
@@ -450,6 +451,7 @@ export default function InstructorDashboard() {
     }
     if (activeView === "grading") {
       loadClassrooms();
+      loadCases();
     }
     if (activeView === "analytics") {
       loadClassrooms();
@@ -542,42 +544,7 @@ export default function InstructorDashboard() {
   };
 
   // ==== Grading state ====
-  const [submissions, setSubmissions] = useState<Submission[]>([
-    {
-      id: "sub-1",
-      caseId: "case-1",
-      caseTitle: "Brain MRI - Stroke",
-      studentId: "david.tran",
-      status: "submitted",
-      score: 8,
-      feedback: "",
-      published: false,
-      updatedAt: "2025-10-10T10:00:00Z",
-    },
-    {
-      id: "sub-2",
-      caseId: "case-1",
-      caseTitle: "Brain MRI - Stroke",
-      studentId: "emma.wilson",
-      status: "submitted",
-      score: 7,
-      feedback: "",
-      published: false,
-      updatedAt: "2025-10-11T08:00:00Z",
-    },
-    {
-      id: "sub-3",
-      caseId: "case-2",
-      caseTitle: "Chest X-Ray Analysis",
-      studentId: "james.lee",
-      status: "graded",
-      score: 9,
-      feedback: "Good job. Consider boundary precision.",
-      published: true,
-      publishedAt: "2025-10-12T12:30:00Z",
-      updatedAt: "2025-10-12T12:00:00Z",
-    },
-  ]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
 
   const [mode, setMode] = useState<Mode>("one");
   const [query, setQuery] = useState("");
@@ -632,8 +599,18 @@ export default function InstructorDashboard() {
 
   const selectedCaseId = selected?.caseId ?? "case-1";
   const selectedStudentId = selected?.studentId ?? "unknown";
-  const selectedCase = mockCases.find((c) => c.id === selectedCaseId);
+  const selectedCase =
+    mergedCases.find((c) => c.id === selectedCaseId) ??
+    mockCases.find((c) => c.id === selectedCaseId);
+
+  const selectedImageUrl =
+    selected?.caseImageUrl ||
+    selectedCase?.imageUrl ||
+    "";
+
   const selectedAnn = useAnnotation(selectedCaseId, selectedStudentId);
+
+
 
   useEffect(() => {
     setDraftFeedback(selected?.feedback ?? "");
@@ -680,6 +657,7 @@ export default function InstructorDashboard() {
           id: s.id,
           caseId: s.case_id,
           caseTitle: s.case_title ?? "Unknown case",
+          caseImageUrl: s.case_image_url ?? "",
           studentId: s.student_id,
           status: (s.status as SubmissionStatus) ?? "submitted",
           score: s.score ?? undefined,
@@ -691,7 +669,7 @@ export default function InstructorDashboard() {
           updatedAt: s.updated_at ?? "",
         }));
 
-        if (mapped.length) setSubmissions(mapped);
+        setSubmissions(mapped);
       } catch (err) {
         console.error("Error loading submissions", err);
       }
@@ -1083,8 +1061,9 @@ export default function InstructorDashboard() {
 
                       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 p-4">
                         <div className="min-h-[560px]">
+                      
                           <AnnotationCanvas
-                            imageUrl={selectedCase?.imageUrl ?? ""}
+                            imageUrl={selectedImageUrl}
                             annotation={selectedAnn}
                             peerAnnotations={selectedAnn.peerAnnotations}
                           />
