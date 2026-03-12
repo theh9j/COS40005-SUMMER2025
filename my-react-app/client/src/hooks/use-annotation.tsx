@@ -564,21 +564,55 @@ export function useAnnotation(caseId: string, userId: string) {
         const sorted = [...data]
           .map((v) => ({
             ...v,
-            id: v._id, // Map _id to id for component compatibility
+            id: v._id,
           }))
           .sort((a, b) => b.version - a.version);
+
+        const latestAnnotations =
+          Array.isArray(sorted[0]?.annotations) ? sorted[0].annotations : [];
+
         setState(prev => ({
           ...prev,
           versions: sorted,
           versionsLoading: false,
+          annotations: latestAnnotations,
+          history: [latestAnnotations],
+          historyIndex: 0,
+          selectedAnnotationIds: [],
+          currentAnnotation: null,
+          textInputPosition: null,
+          isDrawing: false,
         }));
+
       } else {
         console.error("Unexpected version data:", data);
-        setState(prev => ({ ...prev, versions: [], versionsLoading: false }));
+        setState(prev => ({
+        ...prev,
+        versions: [],
+        versionsLoading: false,
+        annotations: [],
+        history: [[]],
+        historyIndex: 0,
+        selectedAnnotationIds: [],
+        currentAnnotation: null,
+        textInputPosition: null,
+        isDrawing: false,
+      }));
       }
     } catch (error) {
       console.error("Failed to load versions:", error);
-      setState(prev => ({ ...prev, versions: [], versionsLoading: false }));
+      setState(prev => ({
+        ...prev,
+        versions: [],
+        versionsLoading: false,
+        annotations: [],
+        history: [[]],
+        historyIndex: 0,
+        selectedAnnotationIds: [],
+        currentAnnotation: null,
+        textInputPosition: null,
+        isDrawing: false,
+      }));
     }
   }, [caseId, userId]);
 
