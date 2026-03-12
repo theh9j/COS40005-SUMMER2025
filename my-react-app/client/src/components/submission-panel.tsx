@@ -1,9 +1,17 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, FileUp, X, Send, Loader2, CheckCircle } from "lucide-react";
 import { SubmissionFile } from "@/hooks/use-submission";
+
+type HomeworkQuestion = {
+  type: "essay" | "mcq";
+  prompt: string;
+  points: number;
+  guidance?: string;
+  options?: string[];
+};
 
 interface SubmissionPanelProps {
   status: "none" | "submitted" | "grading" | "graded";
@@ -11,7 +19,14 @@ interface SubmissionPanelProps {
   score?: number;
   notes?: string;
   files?: SubmissionFile[];
-  onSubmit: (notes: string, files: SubmissionFile[]) => Promise<void>;
+  questions?: HomeworkQuestion[];
+  answers?: { index: number; value: any }[];
+  homeworkType?: "Q&A" | "Annotate";
+  onSubmit: (
+    notes: string,
+    files: SubmissionFile[],
+    answers: { index: number; value: any }[]
+  ) => Promise<void>;
   onUploadFile: (file: File) => Promise<SubmissionFile | null>;
   loading?: boolean;
   error?: string | null;
@@ -24,6 +39,9 @@ export default function SubmissionPanel({
   score,
   notes: initialNotes = "",
   files: initialFiles = [],
+  questions = [],
+  answers: initialAnswers = [],
+  homeworkType = "Annotate",
   onSubmit,
   onUploadFile,
   loading = false,
@@ -32,9 +50,39 @@ export default function SubmissionPanel({
 }: SubmissionPanelProps) {
   const [notes, setNotes] = useState(initialNotes);
   const [files, setFiles] = useState<SubmissionFile[]>(initialFiles);
+  const [answers, setAnswers] = useState<{ index: number; value: any }[]>(initialAnswers);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(status !== "none");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setNotes(initialNotes);
+  }, [initialNotes]);
+
+  useEffect(() => {
+    setFiles(initialFiles);
+  }, [initialFiles]);
+
+  useEffect(() => {
+    setAnswers(initialAnswers);
+  }, [initialAnswers]);
+
+  const getAnswerValue = (index: number) => {
+    return answers.find((a) => a.index === index)?.value ?? "";
+  };
+
+  const setAnswerValue = (index: number, value: any) => {
+    setAnswers((prev) => {
+      const next = [...prev];
+      const foundIndex = next.findIndex((a) => a.index === index);
+      if (foundIndex >= 0) {
+        next[foundIndex] = { index, value };
+      } else {
+        next.push({ index, value });
+      }
+      return next;
+    });
+  };
 
   const daysLeft = dueDate
     ? Math.ceil((new Date(dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -69,7 +117,7 @@ export default function SubmissionPanel({
 
   const handleSubmit = async () => {
     try {
-      await onSubmit(notes, files);
+      await onSubmit(notes, files, answers);
       setSubmitted(true);
     } catch (err) {
       console.error("Submission failed:", err);
@@ -162,11 +210,69 @@ export default function SubmissionPanel({
         </div>
       )}
 
+      {homeworkType === "Q&A" && questions.length > 0 && (
+        <div className="space-y-4">
+          <div className="text-sm font-semibold">Questions</div>
+
+          {questions.map((q, idx) => (
+            <div key={idx} className="border rounded-lg p-3 bg-card space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-sm">Question {idx + 1}</div>
+                  <div className="text-sm mt-1 whitespace-pre-wrap">{q.prompt}</div>
+                </div>
+                <Badge variant="outline">{q.points} pts</Badge>
+              </div>
+
+              {q.guidance && (
+                <div className="text-xs text-muted-foreground whitespace-pre-wrap">
+                  {q.guidance}
+                </div>
+              )}
+
+              {q.type === "mcq" && Array.isArray(q.options) ? (
+                <div className="space-y-2">
+                  {q.options.map((opt, optionIndex) => (
+                    <label
+                      key={optionIndex}
+                      className="flex items-center gap-2 text-sm border rounded-md p-2 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name={`question-${idx}`}
+                        checked={String(getAnswerValue(idx)) === String(optionIndex)}
+                        onChange={() => setAnswerValue(idx, optionIndex)}
+                        disabled={closed || status === "graded" || loading}
+                      />
+                      <span>{opt}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <Textarea
+                  placeholder="Type your answer here..."
+                  value={getAnswerValue(idx)}
+                  onChange={(e) => setAnswerValue(idx, e.target.value)}
+                  disabled={closed || status === "graded" || loading}
+                  className="min-h-[120px]"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Notes/Answer textarea */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">Your Answer / Notes</label>
+        <label className="text-sm font-medium">
+          {homeworkType === "Q&A" ? "Additional Notes" : "Your Answer / Notes"}
+        </label>
         <Textarea
-          placeholder="Type your submission notes here..."
+          placeholder={
+            homeworkType === "Q&A"
+              ? "Optional notes for your instructor..."
+              : "Type your submission notes here..."
+          }
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           disabled={closed || status === "graded" || loading}
