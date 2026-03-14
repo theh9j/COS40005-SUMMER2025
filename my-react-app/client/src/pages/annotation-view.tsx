@@ -68,6 +68,8 @@ const dedupeClassIds = (ids: string[]) => {
   });
 };
 
+const ALL_STUDENTS_OPTION_ID = "__all_students__";
+
 export default function AnnotationView() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute<{ caseId: string }>("/annotation/:caseId");
@@ -297,10 +299,14 @@ export default function AnnotationView() {
   // Load classrooms when modal opens
   useEffect(() => {
     if (showAddClassesModal) {
-      setSelectedClassesInModal(editCaseClassIds);
+      if (editCaseClasses.some((label) => normalizeClassTag(label) === "all students")) {
+        setSelectedClassesInModal([ALL_STUDENTS_OPTION_ID]);
+      } else {
+        setSelectedClassesInModal(editCaseClassIds);
+      }
       loadClassrooms();
     }
-  }, [showAddClassesModal, editCaseClassIds]);
+  }, [showAddClassesModal, editCaseClassIds, editCaseClasses]);
 
   // Case image upload handler
   const handleEditCaseImageUpload = (file: File | null) => {
@@ -1198,31 +1204,62 @@ export default function AnnotationView() {
                           No classes available
                         </div>
                       ) : (
-                        availableClasses.map((cls) => (
-                          <label key={cls.id} className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                        <>
+                          <label className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded border border-emerald-200 dark:border-emerald-800">
                             <input
                               type="checkbox"
-                              checked={selectedClassesInModal.includes(cls.id)}
+                              checked={selectedClassesInModal.includes(ALL_STUDENTS_OPTION_ID)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedClassesInModal((prev) => dedupeClassIds([...prev, cls.id]));
+                                  setSelectedClassesInModal([ALL_STUDENTS_OPTION_ID]);
                                 } else {
-                                  setSelectedClassesInModal((prev) => prev.filter((c) => c !== cls.id));
+                                  setSelectedClassesInModal([]);
                                 }
                               }}
                               className="w-4 h-4 rounded"
                             />
                             <div className="flex-1">
-                              <div className="text-sm font-medium">{cls.name}</div>
-                              <div className="text-xs text-muted-foreground">{cls.year} • {cls.members_count} students</div>
+                              <div className="text-sm font-medium">All students</div>
+                              <div className="text-xs text-muted-foreground">Publish this case to every student</div>
                             </div>
-                            {editCaseClassIds.includes(cls.id) && (
-                              <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950 dark:text-green-300">
+                            {editCaseClasses.some((label) => normalizeClassTag(label) === "all students") && (
+                              <div className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded dark:bg-emerald-950 dark:text-emerald-300">
                                 Added
                               </div>
                             )}
                           </label>
-                        ))
+
+                          {availableClasses.map((cls) => (
+                            <label key={cls.id} className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                              <input
+                                type="checkbox"
+                                checked={selectedClassesInModal.includes(cls.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedClassesInModal((prev) =>
+                                      dedupeClassIds([
+                                        ...prev.filter((id) => id !== ALL_STUDENTS_OPTION_ID),
+                                        cls.id,
+                                      ])
+                                    );
+                                  } else {
+                                    setSelectedClassesInModal((prev) => prev.filter((c) => c !== cls.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium">{cls.name}</div>
+                                <div className="text-xs text-muted-foreground">{cls.year} • {cls.members_count} students</div>
+                              </div>
+                              {editCaseClassIds.includes(cls.id) && (
+                                <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950 dark:text-green-300">
+                                  Added
+                                </div>
+                              )}
+                            </label>
+                          ))}
+                        </>
                       )}
                     </div>
 
@@ -1249,6 +1286,15 @@ export default function AnnotationView() {
                         className="bg-blue-600 hover:bg-blue-700 text-white"
                         disabled={loadingClasses || selectedClassesInModal.length === 0}
                         onClick={() => {
+                          if (selectedClassesInModal.includes(ALL_STUDENTS_OPTION_ID)) {
+                            setEditCaseClassIds([]);
+                            setEditCaseClasses(["All students"]);
+                            toast({ description: "Assigned to all students" });
+                            setShowAddClassesModal(false);
+                            setSelectedClassesInModal([]);
+                            return;
+                          }
+
                           const existingLabelSet = new Set(
                             editCaseClasses
                               .filter((label) => normalizeClassTag(label) !== "all students")

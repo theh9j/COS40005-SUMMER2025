@@ -77,6 +77,10 @@ type Submission = {
   caseTitle: string;
   caseImageUrl?: string;
   studentId: string;
+  classId?: string;
+  className?: string;
+  year?: string;
+  classroom?: string;
 
   status: SubmissionStatus;
 
@@ -662,6 +666,10 @@ export default function InstructorDashboard() {
           caseTitle: s.case_title ?? "Unknown case",
           caseImageUrl: s.case_image_url ?? "",
           studentId: s.student_id,
+          classId: s.class_id ?? undefined,
+          className: s.class_name ?? undefined,
+          year: s.year ?? undefined,
+          classroom: s.classroom ?? undefined,
           status: (s.status as SubmissionStatus) ?? "submitted",
           score: s.score ?? undefined,
           feedback: s.feedback ?? "",

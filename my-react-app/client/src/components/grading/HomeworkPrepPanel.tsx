@@ -123,6 +123,21 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     [questions]
   );
 
+  const visibleFocusTags =
+    homeworkTags.length === 0 ? autoChecklist.map((label) => ({ label, highlighted: true })) : homeworkTags;
+
+  const addFocusTag = (rawLabel: string) => {
+    const label = rawLabel.trim();
+    if (!label) return;
+
+    setHomeworkTags((prev) => {
+      const base = prev.length === 0 ? autoChecklist.map((tagLabel) => ({ label: tagLabel, highlighted: true })) : prev;
+      const exists = base.some((tag) => tag.label.trim().toLowerCase() === label.toLowerCase());
+      if (exists) return base;
+      return [...base, { label, highlighted: true }];
+    });
+  };
+
   const onSelectClassroom = (classroomId: string) => {
     setSelectedClassroomId(classroomId);
     const selected = classroomOptions.find((c) => c.id === classroomId);
@@ -274,7 +289,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
         <CardContent className="p-4 space-y-3">
           <div className="text-xs font-medium text-muted-foreground">Suggested focus</div>
           <div className="flex flex-wrap gap-2">
-            {(homeworkTags.length === 0 ? autoChecklist.map((label) => ({ label, highlighted: true })) : homeworkTags).map((tag, i) => (
+            {visibleFocusTags.map((tag, i) => (
               <button
                 key={`${tag.label}-${i}`}
                 type="button"
@@ -301,7 +316,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
               onChange={(e) => setNewHomeworkTagInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newHomeworkTagInput.trim()) {
-                  setHomeworkTags((prev) => [...prev, { label: newHomeworkTagInput.trim(), highlighted: true }]);
+                  addFocusTag(newHomeworkTagInput);
                   setNewHomeworkTagInput("");
                 }
               }}
@@ -312,7 +327,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
               variant="outline"
               onClick={() => {
                 if (!newHomeworkTagInput.trim()) return;
-                setHomeworkTags((prev) => [...prev, { label: newHomeworkTagInput.trim(), highlighted: true }]);
+                addFocusTag(newHomeworkTagInput);
                 setNewHomeworkTagInput("");
               }}
             >
