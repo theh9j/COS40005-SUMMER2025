@@ -46,6 +46,30 @@ type Classroom = {
   members_count: number;
 };
 
+const normalizeClassTag = (value: string) => value.trim().toLowerCase();
+
+const dedupeClassTags = (tags: string[]) => {
+  const seen = new Set<string>();
+  return tags.filter((tag) => {
+    const key = normalizeClassTag(tag);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const dedupeClassIds = (ids: string[]) => {
+  const seen = new Set<string>();
+  return ids.filter((id) => {
+    const key = id.trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const ALL_STUDENTS_OPTION_ID = "__all_students__";
+
 export default function AnnotationView() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute<{ caseId: string }>("/annotation/:caseId");
@@ -64,6 +88,8 @@ export default function AnnotationView() {
     audience?: string;
     className?: string;
     classYear?: string;
+    classIds?: string[];
+    classLabels?: string[];
     instructions?: string;
     uploads?: any[];
     questions?: any[];
@@ -167,6 +193,8 @@ export default function AnnotationView() {
                 audience: hwData.audience || undefined,
                 className: hwData.class_name || undefined,
                 classYear: hwData.year || undefined,
+                classIds: Array.isArray(hwData.class_ids) ? hwData.class_ids.map((id: any) => String(id)) : [],
+                classLabels: Array.isArray(hwData.class_labels) ? hwData.class_labels.map((label: any) => String(label)) : [],
                 uploads: hwData.uploads || [],
                 questions: questionList,
               });
@@ -244,6 +272,7 @@ export default function AnnotationView() {
   ]);
   const [newHomeworkTagInput, setNewHomeworkTagInput] = useState("");
   const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
+  const [editCaseClassIds, setEditCaseClassIds] = useState<string[]>([]);
   
   // Add Classes modal state
   const [showAddClassesModal, setShowAddClassesModal] = useState(false);
@@ -270,9 +299,14 @@ export default function AnnotationView() {
   // Load classrooms when modal opens
   useEffect(() => {
     if (showAddClassesModal) {
+      if (editCaseClasses.some((label) => normalizeClassTag(label) === "all students")) {
+        setSelectedClassesInModal([ALL_STUDENTS_OPTION_ID]);
+      } else {
+        setSelectedClassesInModal(editCaseClassIds);
+      }
       loadClassrooms();
     }
-  }, [showAddClassesModal]);
+  }, [showAddClassesModal, editCaseClassIds, editCaseClasses]);
 
   // Case image upload handler
   const handleEditCaseImageUpload = (file: File | null) => {
@@ -410,16 +444,21 @@ export default function AnnotationView() {
       if (hw.audience === "All Students") {
         tags.push("All students");
       }
-      if (hw.className) {
+      if (Array.isArray(hw.classLabels) && hw.classLabels.length > 0) {
+        tags.push(...hw.classLabels);
+      } else if (hw.className) {
         tags.push(`${hw.className}${hw.classYear ? ` (${hw.classYear})` : ""}`);
       }
-      setAssignedClasses(tags);
-      setEditCaseClasses(tags);
+      const uniqueTags = dedupeClassTags(tags);
+      setAssignedClasses(uniqueTags);
+      setEditCaseClasses(uniqueTags);
+      setEditCaseClassIds(dedupeClassIds(Array.isArray(hw.classIds) ? hw.classIds : []));
     } else {
       setAssignedClasses([]);
       setEditCaseClasses([]);
+      setEditCaseClassIds([]);
     }
-  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear]);
+  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear, hw?.classIds, hw?.classLabels]);
 
   if (!user || pageLoading) {
     return <div>Loading...</div>;
@@ -989,14 +1028,34 @@ export default function AnnotationView() {
                     <div className="space-y-2 pb-3 border-b border-border">
                       <h4 className="text-xs font-medium text-muted-foreground">ASSIGNED CLASSES</h4>
                       <div className="flex flex-wrap gap-2">
-                        {editCaseClasses.map((classId) => (
+                        {editCaseClasses.map((classLabel, index) => (
                           <div
-                            key={classId}
+                            key={`${classLabel}-${index}`}
                             className="flex items-center gap-2 bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-100 px-3 py-1 rounded-full text-xs"
                           >
-                            <span>{classId}</span>
+                            <span>{classLabel}</span>
                             <button
-                              onClick={() => setEditCaseClasses(editCaseClasses.filter(c => c !== classId))}
+                              onClick={() => {
+                                const nextLabels = editCaseClasses.filter((_, i) => i !== index);
+                                setEditCaseClasses(nextLabels);
+
+                                if (classLabel.toLowerCase() === "all students") {
+                                  return;
+                                }
+
+                                const matchedClass = availableClasses.find(
+                                  (cls) => `${cls.name} (${cls.year})` === classLabel
+                                );
+
+                                if (matchedClass) {
+                                  setEditCaseClassIds(editCaseClassIds.filter((id) => id !== matchedClass.id));
+                                  return;
+                                }
+
+                                if (editCaseClasses.length === editCaseClassIds.length && editCaseClassIds[index]) {
+                                  setEditCaseClassIds(editCaseClassIds.filter((_, i) => i !== index));
+                                }
+                              }}
                               className="hover:opacity-70"
                               title="Remove class"
                             >
@@ -1051,6 +1110,15 @@ export default function AnnotationView() {
                             }
 
                             if (hw?.id) {
+                              const classroomLabels = editCaseClasses.filter(
+                                (label) => label.toLowerCase() !== "all students"
+                              );
+                              const selectedClassrooms = availableClasses.filter((cls) =>
+                                editCaseClassIds.includes(cls.id)
+                              );
+                              const firstClass = selectedClassrooms[0];
+                              const useClassroomAudience = editCaseClassIds.length > 0 || classroomLabels.length > 0;
+
                               const hwRes = await fetch(`${API_BASE}/api/instructor/homeworks/by-case/${caseId}`, {
                                 method: "PUT",
                                 headers: { "Content-Type": "application/json" },
@@ -1058,6 +1126,11 @@ export default function AnnotationView() {
                                   instructions: editHwDescription,
                                   due_at: editHwDueDate ? new Date(`${editHwDueDate}T23:59:00`).toISOString() : undefined,
                                   max_points: editHwPoints,
+                                  audience: useClassroomAudience ? "Classrooms" : "All Students",
+                                  class_ids: editCaseClassIds,
+                                  class_labels: classroomLabels,
+                                  class_name: firstClass?.name,
+                                  year: firstClass?.year,
                                 }),
                               });
 
@@ -1067,6 +1140,26 @@ export default function AnnotationView() {
                                 throw new Error(hwText || "Homework update failed");
                               }
                             }
+
+                            setAssignedClasses(editCaseClasses);
+                            setRemoteHomework((prev) => {
+                              if (!prev) return prev;
+                              const classroomLabels = editCaseClasses.filter(
+                                (label) => label.toLowerCase() !== "all students"
+                              );
+                              const selectedClassrooms = availableClasses.filter((cls) =>
+                                editCaseClassIds.includes(cls.id)
+                              );
+                              const firstClass = selectedClassrooms[0];
+                              return {
+                                ...prev,
+                                audience: editCaseClassIds.length > 0 || classroomLabels.length > 0 ? "Classrooms" : "All Students",
+                                classIds: editCaseClassIds,
+                                classLabels: classroomLabels,
+                                className: firstClass?.name || prev.className,
+                                classYear: firstClass?.year || prev.classYear,
+                              };
+                            });
 
                             toast({ description: "Case changes saved" });
                             setShowCaseEditor(false);
@@ -1111,31 +1204,62 @@ export default function AnnotationView() {
                           No classes available
                         </div>
                       ) : (
-                        availableClasses.map((cls) => (
-                          <label key={cls.id} className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                        <>
+                          <label className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded border border-emerald-200 dark:border-emerald-800">
                             <input
                               type="checkbox"
-                              checked={selectedClassesInModal.includes(cls.id)}
+                              checked={selectedClassesInModal.includes(ALL_STUDENTS_OPTION_ID)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedClassesInModal([...selectedClassesInModal, cls.id]);
+                                  setSelectedClassesInModal([ALL_STUDENTS_OPTION_ID]);
                                 } else {
-                                  setSelectedClassesInModal(selectedClassesInModal.filter(c => c !== cls.id));
+                                  setSelectedClassesInModal([]);
                                 }
                               }}
                               className="w-4 h-4 rounded"
                             />
                             <div className="flex-1">
-                              <div className="text-sm font-medium">{cls.name}</div>
-                              <div className="text-xs text-muted-foreground">{cls.year} • {cls.members_count} students</div>
+                              <div className="text-sm font-medium">All students</div>
+                              <div className="text-xs text-muted-foreground">Publish this case to every student</div>
                             </div>
-                            {editCaseClasses.includes(cls.id) && (
-                              <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950 dark:text-green-300">
+                            {editCaseClasses.some((label) => normalizeClassTag(label) === "all students") && (
+                              <div className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded dark:bg-emerald-950 dark:text-emerald-300">
                                 Added
                               </div>
                             )}
                           </label>
-                        ))
+
+                          {availableClasses.map((cls) => (
+                            <label key={cls.id} className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                              <input
+                                type="checkbox"
+                                checked={selectedClassesInModal.includes(cls.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedClassesInModal((prev) =>
+                                      dedupeClassIds([
+                                        ...prev.filter((id) => id !== ALL_STUDENTS_OPTION_ID),
+                                        cls.id,
+                                      ])
+                                    );
+                                  } else {
+                                    setSelectedClassesInModal((prev) => prev.filter((c) => c !== cls.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium">{cls.name}</div>
+                                <div className="text-xs text-muted-foreground">{cls.year} • {cls.members_count} students</div>
+                              </div>
+                              {editCaseClassIds.includes(cls.id) && (
+                                <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950 dark:text-green-300">
+                                  Added
+                                </div>
+                              )}
+                            </label>
+                          ))}
+                        </>
                       )}
                     </div>
 
@@ -1151,7 +1275,10 @@ export default function AnnotationView() {
                     <div className="flex gap-2 justify-end">
                       <Button
                         variant="outline"
-                        onClick={() => setShowAddClassesModal(false)}
+                        onClick={() => {
+                          setShowAddClassesModal(false);
+                          setSelectedClassesInModal([]);
+                        }}
                       >
                         Cancel
                       </Button>
@@ -1159,13 +1286,51 @@ export default function AnnotationView() {
                         className="bg-blue-600 hover:bg-blue-700 text-white"
                         disabled={loadingClasses || selectedClassesInModal.length === 0}
                         onClick={() => {
-                          const newClasses = selectedClassesInModal.filter(
-                            cls => !editCaseClasses.includes(cls)
+                          if (selectedClassesInModal.includes(ALL_STUDENTS_OPTION_ID)) {
+                            setEditCaseClassIds([]);
+                            setEditCaseClasses(["All students"]);
+                            toast({ description: "Assigned to all students" });
+                            setShowAddClassesModal(false);
+                            setSelectedClassesInModal([]);
+                            return;
+                          }
+
+                          const existingLabelSet = new Set(
+                            editCaseClasses
+                              .filter((label) => normalizeClassTag(label) !== "all students")
+                              .map((label) => normalizeClassTag(label))
                           );
-                          if (newClasses.length > 0) {
-                            setEditCaseClasses([...editCaseClasses, ...newClasses]);
+
+                          const newClassIds = selectedClassesInModal.filter(
+                            (clsId) => !editCaseClassIds.includes(clsId)
+                          );
+
+                          if (newClassIds.length > 0) {
+                            const addablePairs = newClassIds.map((clsId) => {
+                              const cls = availableClasses.find((c) => c.id === clsId);
+                              const label = cls ? `${cls.name} (${cls.year})` : clsId;
+                              return { id: clsId, label };
+                            }).filter(({ label }) => !existingLabelSet.has(normalizeClassTag(label)));
+
+                            const filteredNewClassIds = addablePairs.map((pair) => pair.id);
+                            const newClassLabels = addablePairs.map((pair) => pair.label);
+
+                            if (filteredNewClassIds.length === 0) {
+                              toast({
+                                description: "All selected classes are already added"
+                              });
+                              setShowAddClassesModal(false);
+                              setSelectedClassesInModal([]);
+                              return;
+                            }
+
+                            setEditCaseClassIds((prev) => dedupeClassIds([...prev, ...filteredNewClassIds]));
+                            setEditCaseClasses((prev) => dedupeClassTags([
+                              ...prev.filter((label) => normalizeClassTag(label) !== "all students"),
+                              ...newClassLabels,
+                            ]));
                             toast({ 
-                              description: `Added ${newClasses.length} class(es) to the case`
+                              description: `Added ${filteredNewClassIds.length} class(es) to the case`
                             });
                           } else {
                             toast({ 
@@ -1173,6 +1338,7 @@ export default function AnnotationView() {
                             });
                           }
                           setShowAddClassesModal(false);
+                          setSelectedClassesInModal([]);
                         }}
                       >
                         <Plus className="h-4 w-4 mr-2" />

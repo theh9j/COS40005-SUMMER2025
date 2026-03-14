@@ -17,6 +17,7 @@ export type SubmissionLite = {
   score?: number;
   published?: boolean;
   updatedAt: string;
+  classId?: string;
   classroom?: string;
   className?: string;
   year?: string;
@@ -77,6 +78,7 @@ export default function GradingHub({
         avg?: number;
         lastUpdated?: string;
         nextUngradedId?: string;
+        classId?: string;
         classroom?: string;
       }
     >();
@@ -93,6 +95,7 @@ export default function GradingHub({
           avg: undefined,
           lastUpdated: undefined,
           nextUngradedId: undefined,
+          classId: s.classId,
           classroom:
             s.classroom ||
             (s.className ? `${s.className}${s.year ? ` (${s.year})` : ""}` : undefined),
@@ -100,6 +103,9 @@ export default function GradingHub({
       }
       const g = map.get(key)!;
       g.total += 1;
+      if (!g.classId && s.classId) {
+        g.classId = s.classId;
+      }
       if (!g.classroom) {
         g.classroom =
           s.classroom ||
@@ -146,7 +152,12 @@ export default function GradingHub({
 
     if (classFilter) {
       const selected = normalizeClassLabel(classrooms.find((c) => c.id === classFilter)?.display || classFilter);
-      list = list.filter((g) => normalizeClassLabel(g.classroom) === selected);
+      list = list.filter((g) => {
+        if (g.classId) {
+          return g.classId === classFilter;
+        }
+        return normalizeClassLabel(g.classroom) === selected;
+      });
     }
 
     list.sort((a, b) => (Date.parse(b.lastUpdated ?? "0") || 0) - (Date.parse(a.lastUpdated ?? "0") || 0));

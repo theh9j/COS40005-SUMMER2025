@@ -49,7 +49,16 @@ async def create_homework(payload: dict):
     password = payload.get("password") or ""
     class_name = payload.get("className") or payload.get("class_name") or ""
     year = payload.get("year") or ""
+    classroom_id = payload.get("classroomId") or payload.get("classroom_id") or ""
+    class_ids = payload.get("classIds") or payload.get("class_ids") or []
+    class_labels = payload.get("classLabels") or payload.get("class_labels") or []
     max_points = payload.get("maxPoints")
+
+    if classroom_id and classroom_id not in class_ids:
+        class_ids = [*class_ids, classroom_id]
+
+    class_ids = [str(cid) for cid in class_ids if cid]
+    class_labels = [str(label) for label in class_labels if label]
 
     if not case_id and not new_case.get("title"):
         raise HTTPException(status_code=400, detail="Case title is required")
@@ -96,6 +105,10 @@ async def create_homework(payload: dict):
     if audience == "Classrooms":
         homework_doc["class_name"] = class_name
         homework_doc["year"] = year
+        if class_ids:
+            homework_doc["class_ids"] = class_ids
+        if class_labels:
+            homework_doc["class_labels"] = class_labels
         if password:
             homework_doc["password"] = password
 
@@ -186,14 +199,32 @@ async def homework_by_case(
     if not assigned and audience_norm in ("all students", "all"):
         assigned = True
     elif not assigned and audience_norm in ("classrooms", "classroom"):
-        # Check if user is in the selected classroom.
-        classroom = await classrooms_collection.find_one({
-            "name": hw.get("class_name"),
-            "year": hw.get("year")
-        })
-        if classroom:
-            member_ids = [str(x) for x in classroom.get("members", [])]
-            assigned = userId in member_ids
+        # Check if user is in any selected classroom.
+        class_ids = [str(x) for x in hw.get("class_ids", []) if x]
+        if class_ids:
+            valid_ids = []
+            for class_id in class_ids:
+                try:
+                    valid_ids.append(ObjectId(class_id))
+                except Exception:
+                    continue
+
+            if valid_ids:
+                cursor = classrooms_collection.find({"_id": {"$in": valid_ids}})
+                async for classroom in cursor:
+                    member_ids = [str(x) for x in classroom.get("members", [])]
+                    if userId in member_ids:
+                        assigned = True
+                        break
+
+        if not assigned:
+            classroom = await classrooms_collection.find_one({
+                "name": hw.get("class_name"),
+                "year": hw.get("year")
+            })
+            if classroom:
+                member_ids = [str(x) for x in classroom.get("members", [])]
+                assigned = userId in member_ids
 
     hw["_id"] = str(hw["_id"])
     hw.pop("created_at", None)
@@ -228,6 +259,7 @@ async def update_homework_by_case(case_id: str, payload: dict):
         raise HTTPException(status_code=404, detail="Homework not found for case")
 
     update_doc = {}
+    unset_doc = {}
 
     if payload.get("instructions") is not None:
         update_doc["instructions"] = payload.get("instructions")
@@ -239,11 +271,79 @@ async def update_homework_by_case(case_id: str, payload: dict):
         except Exception:
             raise HTTPException(status_code=400, detail="max_points must be a number")
 
+    audience_payload = payload.get("audience")
+    if audience_payload is not None:
+                audience_norm = str(audience_payload).strip().lower()
+                update_doc["audience"] = "Classrooms" if audience_norm in ("classroom", "classrooms") else "All Students"
+
+    class_ids_payload = payload.get("class_ids")
+    class_labels_payload = payload.get("class_labels")
+    class_name_payload = payload.get("class_name")
+    year_payload = payload.get("year")
+
+    if class_ids_payload is not None:
+        class_ids = [str(cid) for cid in class_ids_payload if cid]
+        update_doc["class_ids"] = class_ids
+
+        resolved_labels = []
+        valid_ids = []
+        for class_id in class_ids:
+            try:
+                valid_ids.append(ObjectId(class_id))
+            except Exception:
+                continue
+
+        if valid_ids:
+            cursor = classrooms_collection.find({"_id": {"$in": valid_ids}})
+            async for cls in cursor:
+                label = f"{cls.get('name')} ({cls.get('year')})"
+                resolved_labels.append(label)
+
+            if not class_name_payload or not year_payload:
+                first_class = await classrooms_collection.find_one({"_id": valid_ids[0]})
+                if first_class:
+                    update_doc["class_name"] = first_class.get("name")
+                    update_doc["year"] = first_class.get("year")
+
+        if resolved_labels:
+            update_doc["class_labels"] = resolved_labels
+
+    if class_labels_payload is not None:
+        update_doc["class_labels"] = [str(label) for label in class_labels_payload if label]
+
+    if class_name_payload is not None:
+        if class_name_payload:
+            update_doc["class_name"] = class_name_payload
+        else:
+            unset_doc["class_name"] = ""
+
+    if year_payload is not None:
+        if year_payload:
+            update_doc["year"] = year_payload
+        else:
+            unset_doc["year"] = ""
+
+    effective_audience = update_doc.get("audience", hw.get("audience"))
+    if effective_audience == "All Students":
+        unset_doc["class_name"] = ""
+        unset_doc["year"] = ""
+        unset_doc["class_ids"] = ""
+        unset_doc["class_labels"] = ""
+
+    if effective_audience == "Classrooms":
+        if update_doc.get("class_ids") == []:
+            unset_doc["class_ids"] = ""
+        if update_doc.get("class_labels") == []:
+            unset_doc["class_labels"] = ""
+
+    update_ops = {}
     if update_doc:
-        await homeworks_collection.update_one(
-            {"_id": hw["_id"]},
-            {"$set": update_doc}
-        )
+        update_ops["$set"] = update_doc
+    if unset_doc:
+        update_ops["$unset"] = unset_doc
+
+    if update_ops:
+        await homeworks_collection.update_one({"_id": hw["_id"]}, update_ops)
 
     return {"status": "ok", "homework_id": str(hw["_id"])}
 

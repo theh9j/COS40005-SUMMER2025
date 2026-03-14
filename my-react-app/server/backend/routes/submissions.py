@@ -221,6 +221,37 @@ async def instructor_submissions():
         if not homework_doc and case_id:
             homework_doc = await homeworks_collection.find_one({"case_id": case_id}, sort=[("created_at", -1)])
 
+        class_id = None
+        class_name = (homework_doc or {}).get("class_name")
+        year = (homework_doc or {}).get("year")
+
+        class_ids = (homework_doc or {}).get("class_ids") or []
+        if isinstance(class_ids, list) and len(class_ids) > 0:
+            class_id = str(class_ids[0])
+
+        resolved_classroom = None
+        if class_id:
+            try:
+                resolved_classroom = await classrooms_collection.find_one({"_id": ObjectId(class_id)})
+            except Exception:
+                resolved_classroom = None
+
+        # Legacy fallback: class_name may contain classroom ObjectId string.
+        if not resolved_classroom and class_name:
+            try:
+                resolved_classroom = await classrooms_collection.find_one({"_id": ObjectId(str(class_name))})
+            except Exception:
+                resolved_classroom = None
+
+        if resolved_classroom:
+            class_id = str(resolved_classroom.get("_id"))
+            class_name = resolved_classroom.get("name")
+            year = resolved_classroom.get("year")
+
+        classroom_label = None
+        if class_name:
+            classroom_label = f"{class_name} ({year})" if year else str(class_name)
+
         qna_doc = await qna_collection.find_one({"case_id": case_id}) if case_id else None
         latest_version = await versions_collection.find_one(
             {"caseId": case_id, "userId": user_id},
@@ -244,8 +275,10 @@ async def instructor_submissions():
             "model_answers": build_model_answers((qna_doc or {}).get("questions", [])),
             "annotations": (latest_version or {}).get("annotations", []),
             "annotation_version": (latest_version or {}).get("version"),
-            "class_name": (homework_doc or {}).get("class_name"),
-            "year": (homework_doc or {}).get("year"),
+            "class_id": class_id,
+            "class_name": class_name,
+            "year": year,
+            "classroom": classroom_label,
             "updated_at": to_iso(sub.get("updated_at")),
             "created_at": to_iso(sub.get("created_at")),
         })

@@ -98,11 +98,19 @@ async def list_cases(limit: int = 50):
         
         # Get class information if assigned to a class
         class_info = None
+        class_infos = []
         if homework and homework.get("audience") == "Classrooms":
-            class_info = {
-                "name": homework.get("class_name"),
-                "year": homework.get("year")
-            }
+            if isinstance(homework.get("class_labels"), list) and homework.get("class_labels"):
+                for label in homework.get("class_labels"):
+                    class_infos.append({"name": label, "year": None})
+            elif homework.get("class_name"):
+                class_infos.append({
+                    "name": homework.get("class_name"),
+                    "year": homework.get("year")
+                })
+
+            if class_infos:
+                class_info = class_infos[0]
         
         # Normalize image URL: convert relative URLs to full URLs
         image_url = c.get("image_url")
@@ -120,6 +128,7 @@ async def list_cases(limit: int = 50):
             "homework_type": homework_type,
             "homework_audience": homework.get("audience") if homework else None,
             "class_info": class_info,
+            "class_infos": class_infos,
             "created_at": c.get("created_at"),
         })
     return out
