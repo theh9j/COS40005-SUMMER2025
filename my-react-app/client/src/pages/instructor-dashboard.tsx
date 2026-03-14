@@ -104,6 +104,7 @@ type CaseFromApi = {
   homework_type?: string;
   homework_audience?: string | null;
   class_info?: { name?: string; year?: string };
+  class_infos?: Array<{ name?: string; year?: string | null }>;
 };
 
 type CaseCard = {
@@ -116,6 +117,7 @@ type CaseCard = {
   caseType?: string;
   homeworkAudience?: string;
   classInfo?: { name?: string; year?: string };
+  classInfos?: Array<{ name?: string; year?: string | null }>;
   createdAt?: string;
 };
 
@@ -470,6 +472,7 @@ export default function InstructorDashboard() {
       caseType: c.case_type ?? undefined,
       homeworkAudience: c.homework_audience ?? undefined,
       classInfo: c.class_info,
+      classInfos: c.class_infos ?? (c.class_info ? [c.class_info] : []),
       createdAt: c.created_at,
     }));
 
@@ -1496,11 +1499,21 @@ export default function InstructorDashboard() {
                               All students
                             </span>
                           )}
-                          {c.classInfo && c.classInfo.name && (
+                          {(!c.classInfos || c.classInfos.length === 0) && c.classInfo && c.classInfo.name && (
                             <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800">
-                              {c.classInfo.name} ({c.classInfo.year})
+                              {c.classInfo.year ? `${c.classInfo.name} (${c.classInfo.year})` : c.classInfo.name}
                             </span>
                           )}
+                          {(c.classInfos ?? [])
+                            .filter((ci) => !!ci?.name)
+                            .map((ci, idx) => (
+                              <span
+                                key={`${ci.name}-${ci.year ?? ""}-${idx}`}
+                                className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800"
+                              >
+                                {ci.year ? `${ci.name} (${ci.year})` : ci.name}
+                              </span>
+                            ))}
                         </div>
                       </CardContent>
                     </Card>
