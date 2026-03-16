@@ -34,6 +34,13 @@ type CaseFromApi = {
   homework_type?: "Q&A" | "Annotate" | null;
 };
 
+type RemoteHomeworkMeta = {
+  assigned: boolean;
+  dueAt?: string;
+  closed: boolean;
+  homeworkType?: "Q&A" | "Annotate";
+};
+
 
 // === Homework metadata 
 type HomeworkMeta = { dueAt: string; closed: boolean };
@@ -123,6 +130,8 @@ export default function StudentDashboard() {
   }, [activeView]);
 
   const [casesFromApi, setCasesFromApi] = useState<CaseFromApi[]>([]);
+  const [remoteHomeworkByCase, setRemoteHomeworkByCase] = useState<Record<string, RemoteHomeworkMeta>>({});
+  const [loadingMyHomework, setLoadingMyHomework] = useState(false);
 
   const loadCases = async () => {
     try {
@@ -139,10 +148,66 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    if (activeView === "cases") {
+    if (activeView === "cases" || activeView === "annotations") {
       loadCases();
     }
   }, [activeView]);
+
+  useEffect(() => {
+    if (activeView !== "annotations" || !user?.user_id) return;
+
+    let cancelled = false;
+
+    const loadHomework = async () => {
+      try {
+        setLoadingMyHomework(true);
+
+        if (casesFromApi.length === 0) {
+          setRemoteHomeworkByCase({});
+          return;
+        }
+
+        const entries = await Promise.all(
+          casesFromApi.map(async (c) => {
+            try {
+              const res = await fetch(
+                `${API_BASE}/api/instructor/homeworks/by-case?caseId=${encodeURIComponent(c.case_id)}&userId=${encodeURIComponent(user.user_id || "")}`
+              );
+              if (!res.ok) {
+                return [c.case_id, { assigned: false, closed: false } as RemoteHomeworkMeta] as const;
+              }
+
+              const data = await res.json();
+              const hw = data?.homework;
+              return [
+                c.case_id,
+                {
+                  assigned: Boolean(data?.assigned),
+                  dueAt: hw?.due_at,
+                  closed: hw ? hw.status !== "active" : false,
+                  homeworkType: hw?.homework_type,
+                } as RemoteHomeworkMeta,
+              ] as const;
+            } catch {
+              return [c.case_id, { assigned: false, closed: false } as RemoteHomeworkMeta] as const;
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setRemoteHomeworkByCase(Object.fromEntries(entries));
+        }
+      } finally {
+        if (!cancelled) setLoadingMyHomework(false);
+      }
+    };
+
+    loadHomework();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, casesFromApi, user?.user_id]);
 
   const caseLibraryCases = useMemo(() => {
     const dbCases = casesFromApi.map((c) => ({
@@ -160,6 +225,7 @@ export default function StudentDashboard() {
   }, [casesFromApi]);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [caseLibraryFilter, setCaseLibraryFilter] = useState<"all" | "Annotate" | "Q&A">("all");
 
   // Close profile menu on outside click or Escape
   useEffect(() => {
@@ -279,7 +345,7 @@ export default function StudentDashboard() {
   const navItems = [
     { id: "overview", label: "Overview", icon: Gauge },
     { id: "cases", label: "Case Library", icon: FolderOpen },
-    { id: "annotations", label: "My Annotations", icon: Edit },
+    { id: "annotations", label: "My Homework", icon: Edit },
     { id: "collaboration", label: "Forums", icon: Users },
     { id: "progress", label: "Progress", icon: ChartLine },
   ] as const;
@@ -546,58 +612,42 @@ export default function StudentDashboard() {
 
           {activeView === "annotations" && (
             <div className="p-6" data-testid="view-annotations">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">{t("myAnnotations")}</h2>
-                <Link href="/student">
-                  <Button variant="outline" size="sm">{t("backToOverview")}</Button>
-                </Link>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold">My Homework</h2>
               </div>
 
-              {myAnnotations.length === 0 ? (
+              {loadingMyHomework ? (
+                <div className="text-sm text-muted-foreground">Loading homework...</div>
+              ) : caseLibraryCases.filter((c) => remoteHomeworkByCase[c.id]?.assigned).length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  {t("youDontHaveAnnotations")}
+                  No assigned homework right now.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {myAnnotations.map((annot) => {
-                    const hw = homeworkByCase[annot.caseId];
-                    const my = mySubmissionByCase[annot.caseId];
+                  {caseLibraryCases
+                    .filter((c) => remoteHomeworkByCase[c.id]?.assigned)
+                    .map((annot) => {
+                    const hw = remoteHomeworkByCase[annot.id];
+                    const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
 
                     return (
-                      <div key={annot.caseId} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="text-sm font-semibold">{annot.caseTitle}</h4>
-                            <p className="text-xs text-muted-foreground">Last edited {annot.updatedAgo}</p>
-                          </div>
-
-                          {/* Status badge theo yêu cầu */}
+                      <div key={annot.id} className="space-y-2">
+                        <CaseCard
+                          case={annot}
+                          onClick={() => setLocation(`/annotation/${annot.id}`)}
+                          homeworkType={hw?.homeworkType}
+                        />
+                        <div className="flex items-center px-1">
                           <div className="flex items-center gap-2">
-                            {hw && <Badge>{t("homework")}</Badge>}
+                            <Badge>{t("homework")}</Badge>
                             {hw?.closed ? (
-                              my?.status === "graded" ? (
-                                <Badge variant="default">{t("score")}: {my?.score}/10</Badge>
-                              ) : (
-                                <Badge variant="secondary">{t("grading")}</Badge>
-                              )
+                              <Badge variant="destructive">{t("closed")}</Badge>
                             ) : (
-                              hw && (
-                                <Badge variant="outline">
-                                  {t("dueInDays").replace("{{days}}", String(Math.max(0, daysLeft(hw?.dueAt) ?? 0)))}
-                                </Badge>
+                              dl !== null && (
+                                <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
                               )
                             )}
                           </div>
-                        </div>
-
-                        <div className="flex justify-end">
-                          {hw?.closed ? (
-                            <Button size="sm" variant="outline" disabled>{t("closed")}</Button>
-                          ) : (
-                            <Link href={`/annotation/${annot.caseId}`}>
-                              <Button size="sm">Open</Button>
-                            </Link>
-                          )}
                         </div>
                       </div>
                     );
@@ -613,38 +663,98 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">{t("caseLibrary")}</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {caseLibraryCases.map((case_) => {
-                  const hw = homeworkByCase[case_.id];
-                  const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
-                  const hwType = homeworkTypeByCase[case_.id] || (case_ as any).homeworkType;
 
-                  return (
-                    <div key={case_.id} className="space-y-2">
-                      {/* Card gốc */}
-                      <CaseCard
-                        case={case_}
-                        onClick={() => setLocation(`/annotation/${case_.id}`)}
-                        homeworkType={hwType}
-                      />
-
-                      {/* Meta bar cho Assignment */}
-                      <div className="flex items-center px-1">
-                        <div className="flex items-center gap-2">
-                          {hw && <Badge>{t("homework")}</Badge>}
-                          {hw ? (
-                            hw.closed ? (
-                              <Badge variant="destructive">{t("closed")}</Badge>
-                            ) : (
-                              <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
-                            )
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              {/* Filter dropdown */}
+              <div className="mb-6">
+                <select
+                  value={caseLibraryFilter}
+                  onChange={(e) => setCaseLibraryFilter(e.target.value as "all" | "Annotate" | "Q&A")}
+                  className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+                  title="Filter by homework type"
+                >
+                  <option value="all">All Types</option>
+                  <option value="Annotate">Annotate</option>
+                  <option value="Q&A">Q&amp;A</option>
+                </select>
               </div>
+
+              {(() => {
+                const renderGrid = (cases: typeof caseLibraryCases) => (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {cases.map((case_) => {
+                      const hw = homeworkByCase[case_.id];
+                      const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
+                      const hwType = homeworkTypeByCase[case_.id] || (case_ as any).homeworkType;
+                      return (
+                        <div key={case_.id} className="space-y-2">
+                          <CaseCard
+                            case={case_}
+                            onClick={() => setLocation(`/annotation/${case_.id}`)}
+                            homeworkType={hwType}
+                          />
+                          <div className="flex items-center px-1">
+                            <div className="flex items-center gap-2">
+                              {hw && <Badge>{t("homework")}</Badge>}
+                              {hw ? (
+                                hw.closed ? (
+                                  <Badge variant="destructive">{t("closed")}</Badge>
+                                ) : (
+                                  <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
+                                )
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+
+                const annotateCases = caseLibraryCases.filter((c) => {
+                  const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType;
+                  return !hwType || hwType === "Annotate";
+                });
+                const qaCases = caseLibraryCases.filter((c) => {
+                  const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType;
+                  return hwType === "Q&A";
+                });
+
+                if (caseLibraryFilter === "Annotate") {
+                  return annotateCases.length === 0
+                    ? <p className="text-sm text-muted-foreground">No Annotate cases.</p>
+                    : renderGrid(annotateCases);
+                }
+                if (caseLibraryFilter === "Q&A") {
+                  return qaCases.length === 0
+                    ? <p className="text-sm text-muted-foreground">No Q&A cases.</p>
+                    : renderGrid(qaCases);
+                }
+
+                // "all" — show sectioned
+                return (
+                  <div className="space-y-8">
+                    {annotateCases.length > 0 && (
+                      <div className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 p-5">
+                        <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-sm">Annotate</span>
+                        </h3>
+                        {renderGrid(annotateCases)}
+                      </div>
+                    )}
+                    {qaCases.length > 0 && (
+                      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5">
+                        <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm">Q&amp;A</span>
+                        </h3>
+                        {renderGrid(qaCases)}
+                      </div>
+                    )}
+                    {annotateCases.length === 0 && qaCases.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No cases available.</p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
