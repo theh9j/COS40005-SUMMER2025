@@ -90,6 +90,7 @@ export default function AnnotationView() {
     classYear?: string;
     classIds?: string[];
     classLabels?: string[];
+    password?: string;
     instructions?: string;
     uploads?: any[];
     questions?: any[];
@@ -195,6 +196,7 @@ export default function AnnotationView() {
                 classYear: hwData.year || undefined,
                 classIds: Array.isArray(hwData.class_ids) ? hwData.class_ids.map((id: any) => String(id)) : [],
                 classLabels: Array.isArray(hwData.class_labels) ? hwData.class_labels.map((label: any) => String(label)) : [],
+                password: hwData.password || undefined,
                 uploads: hwData.uploads || [],
                 questions: questionList,
               });
@@ -266,6 +268,7 @@ export default function AnnotationView() {
   const [editHwDescription, setEditHwDescription] = useState(hw?.description || "");
   const [editHwPoints, setEditHwPoints] = useState(hw?.points || 0);
   const [editHwDueDate, setEditHwDueDate] = useState(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
+  const [editHwPassword, setEditHwPassword] = useState(hw?.password || "");
   const [homeworkTags, setHomeworkTags] = useState<Array<{ label: string; highlighted: boolean }>>([
     { label: "Identify structures", highlighted: true },
     { label: "Note abnormalities", highlighted: true }
@@ -440,6 +443,7 @@ export default function AnnotationView() {
       setEditHwDescription(hw.description || "");
       setEditHwPoints(hw.points || 0);
       setEditHwDueDate(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
+      setEditHwPassword(hw?.password || "");
       const tags: string[] = [];
       if (hw.audience === "All Students") {
         tags.push("All students");
@@ -457,8 +461,9 @@ export default function AnnotationView() {
       setAssignedClasses([]);
       setEditCaseClasses([]);
       setEditCaseClassIds([]);
+      setEditHwPassword("");
     }
-  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear, hw?.classIds, hw?.classLabels]);
+  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear, hw?.classIds, hw?.classLabels, hw?.password]);
 
   if (!user || pageLoading) {
     return <div>Loading...</div>;
@@ -759,7 +764,7 @@ export default function AnnotationView() {
                 <h4 className="font-semibold text-sm">Case Information</h4>
                 <div className="space-y-1 text-xs">
                   <div>
-                    <p className="text-muted-foreground">ID:</p>
+                    <p className="text-muted-foreground">Case Type:</p>
                     <p className="font-medium text-blue-600 dark:text-blue-400">{case_.category || "N/A"}</p>
                   </div>
                   <div>
@@ -989,6 +994,18 @@ export default function AnnotationView() {
                               />
                             </div>
                           </div>
+                          <div>
+                            <label htmlFor="hw-password" className="block text-xs font-medium mb-1">Change Password</label>
+                            <input
+                              id="hw-password"
+                              type="text"
+                              value={editHwPassword}
+                              onChange={(e) => setEditHwPassword(e.target.value)}
+                              title="Change Password"
+                              placeholder="Leave empty to remove password"
+                              className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
+                            />
+                          </div>
                         </div>
                       ) : (
                         <div className="bg-muted p-2 rounded-lg border border-border">
@@ -1126,6 +1143,7 @@ export default function AnnotationView() {
                                   instructions: editHwDescription,
                                   due_at: editHwDueDate ? new Date(`${editHwDueDate}T23:59:00`).toISOString() : undefined,
                                   max_points: editHwPoints,
+                                  password: editHwPassword.trim() || null,
                                   audience: useClassroomAudience ? "Classrooms" : "All Students",
                                   class_ids: editCaseClassIds,
                                   class_labels: classroomLabels,
@@ -1158,6 +1176,7 @@ export default function AnnotationView() {
                                 classLabels: classroomLabels,
                                 className: firstClass?.name || prev.className,
                                 classYear: firstClass?.year || prev.classYear,
+                                password: editHwPassword.trim() || undefined,
                               };
                             });
 

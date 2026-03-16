@@ -97,6 +97,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
   const [questions, setQuestions] = useState<HomeworkQuestion[]>([]);
   const [homeworkTags, setHomeworkTags] = useState<{ label: string; highlighted: boolean }[]>([]);
   const [newHomeworkTagInput, setNewHomeworkTagInput] = useState("");
+  const [showSuggestedFocus, setShowSuggestedFocus] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const classroomOptions = useMemo(
@@ -287,53 +288,69 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
 
       <Card>
         <CardContent className="p-4 space-y-3">
-          <div className="text-xs font-medium text-muted-foreground">Suggested focus</div>
-          <div className="flex flex-wrap gap-2">
-            {visibleFocusTags.map((tag, i) => (
-              <button
-                key={`${tag.label}-${i}`}
-                type="button"
-                onClick={() => {
-                  if (homeworkTags.length === 0) {
-                    setHomeworkTags(autoChecklist.map((label) => ({ label, highlighted: label === tag.label ? false : true })));
-                    return;
-                  }
-                  setHomeworkTags((prev) => prev.map((t, idx) => (idx === i ? { ...t, highlighted: !t.highlighted } : t)));
-                }}
-                className={[
-                  "px-2.5 py-1 text-xs rounded-full border transition",
-                  tag.highlighted ? "bg-blue-500 border-blue-500 text-white" : "border-blue-300 bg-blue-50 text-blue-700",
-                ].join(" ")}
-              >
-                {tag.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add focus area…"
-              value={newHomeworkTagInput}
-              onChange={(e) => setNewHomeworkTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newHomeworkTagInput.trim()) {
-                  addFocusTag(newHomeworkTagInput);
-                  setNewHomeworkTagInput("");
-                }
-              }}
-              className="text-xs"
-            />
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-medium text-muted-foreground">Suggested focus</div>
             <Button
+              type="button"
               size="sm"
-              variant="outline"
-              onClick={() => {
-                if (!newHomeworkTagInput.trim()) return;
-                addFocusTag(newHomeworkTagInput);
-                setNewHomeworkTagInput("");
-              }}
+              variant="ghost"
+              className="h-7 px-2 text-xs"
+              onClick={() => setShowSuggestedFocus((v) => !v)}
             >
-              +
+              {showSuggestedFocus ? "Hide" : "Show"}
             </Button>
           </div>
+
+          {showSuggestedFocus && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {visibleFocusTags.map((tag, i) => (
+                  <button
+                    key={`${tag.label}-${i}`}
+                    type="button"
+                    onClick={() => {
+                      if (homeworkTags.length === 0) {
+                        setHomeworkTags(autoChecklist.map((label) => ({ label, highlighted: label === tag.label ? false : true })));
+                        return;
+                      }
+                      setHomeworkTags((prev) => prev.map((t, idx) => (idx === i ? { ...t, highlighted: !t.highlighted } : t)));
+                    }}
+                    className={[
+                      "px-2.5 py-1 text-xs rounded-full border transition",
+                      tag.highlighted ? "bg-blue-500 border-blue-500 text-white" : "border-blue-300 bg-blue-50 text-blue-700",
+                    ].join(" ")}
+                  >
+                    {tag.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add focus area…"
+                  value={newHomeworkTagInput}
+                  onChange={(e) => setNewHomeworkTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newHomeworkTagInput.trim()) {
+                      addFocusTag(newHomeworkTagInput);
+                      setNewHomeworkTagInput("");
+                    }
+                  }}
+                  className="text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (!newHomeworkTagInput.trim()) return;
+                    addFocusTag(newHomeworkTagInput);
+                    setNewHomeworkTagInput("");
+                  }}
+                >
+                  +
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
