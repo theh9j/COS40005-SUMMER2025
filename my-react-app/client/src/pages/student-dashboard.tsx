@@ -242,6 +242,9 @@ export default function StudentDashboard() {
   const [caseLibraryFilter, setCaseLibraryFilter] = useState<"all" | "Annotate" | "Q&A">("all");
   const [caseLibrarySearch, setCaseLibrarySearch] = useState("");
   const [caseLibrarySort, setCaseLibrarySort] = useState<CaseLibrarySort>("newest");
+  const [myHomeworkFilter, setMyHomeworkFilter] = useState<"all" | "Annotate" | "Q&A">("all");
+  const [myHomeworkSearch, setMyHomeworkSearch] = useState("");
+  const [myHomeworkSort, setMyHomeworkSort] = useState<CaseLibrarySort>("newest");
 
   const caseLibraryVisibleCases = useMemo(() => {
     const q = caseLibrarySearch.trim().toLowerCase();
@@ -278,6 +281,43 @@ export default function StudentDashboard() {
       return tb - ta;
     });
   }, [caseLibraryCases, caseLibraryFilter, caseLibrarySearch, caseLibrarySort]);
+
+  const myHomeworkVisibleCases = useMemo(() => {
+    const q = myHomeworkSearch.trim().toLowerCase();
+    const assigned = caseLibraryCases.filter((c) => remoteHomeworkByCase[c.id]?.assigned);
+
+    let list = assigned;
+    if (myHomeworkFilter !== "all") {
+      list = list.filter((c) => {
+        const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        return hwType === myHomeworkFilter;
+      });
+    }
+
+    if (q) {
+      list = list.filter((c) => {
+        const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        const haystack = `${c.title} ${c.description} ${c.category} ${hwType}`.toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    const parseTime = (s?: string | null) => {
+      if (!s) return 0;
+      const t = Date.parse(s);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    return [...list].sort((a, b) => {
+      if (myHomeworkSort === "az") return a.title.localeCompare(b.title);
+      if (myHomeworkSort === "za") return b.title.localeCompare(a.title);
+
+      const ta = parseTime(a.createdAt as string | null | undefined);
+      const tb = parseTime(b.createdAt as string | null | undefined);
+      if (myHomeworkSort === "oldest") return ta - tb;
+      return tb - ta;
+    });
+  }, [caseLibraryCases, remoteHomeworkByCase, myHomeworkFilter, myHomeworkSearch, myHomeworkSort]);
 
   // Close profile menu on outside click or Escape
   useEffect(() => {
@@ -774,41 +814,156 @@ export default function StudentDashboard() {
 
               {loadingMyHomework ? (
                 <div className="text-sm text-muted-foreground">Loading homework...</div>
-              ) : caseLibraryCases.filter((c) => remoteHomeworkByCase[c.id]?.assigned).length === 0 ? (
+              ) : myHomeworkVisibleCases.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
                   No assigned homework right now.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {caseLibraryCases
-                    .filter((c) => remoteHomeworkByCase[c.id]?.assigned)
-                    .map((annot) => {
-                    const hw = remoteHomeworkByCase[annot.id];
-                    const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
-
-                    return (
-                      <div key={annot.id} className="space-y-2">
-                        <CaseCard
-                          case={annot}
-                          onClick={() => setLocation(`/annotation/${annot.id}`)}
-                          homeworkType={hw?.homeworkType}
+                <>
+                  <Card className="mb-6">
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input
+                          type="text"
+                          placeholder="Search homework by title/description..."
+                          value={myHomeworkSearch}
+                          onChange={(e) => setMyHomeworkSearch(e.target.value)}
+                          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
                         />
-                        <div className="flex items-center px-1">
-                          <div className="flex items-center gap-2">
-                            <Badge>{t("homework")}</Badge>
-                            {hw?.closed ? (
-                              <Badge variant="destructive">{t("closed")}</Badge>
-                            ) : (
-                              dl !== null && (
-                                <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
-                              )
-                            )}
-                          </div>
+                        <select
+                          value={myHomeworkFilter}
+                          onChange={(e) => setMyHomeworkFilter(e.target.value as "all" | "Annotate" | "Q&A")}
+                          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                          title="Filter my homework by type"
+                        >
+                          <option value="all">All Homework Types</option>
+                          <option value="Annotate">Annotate</option>
+                          <option value="Q&A">Q&amp;A</option>
+                        </select>
+                        <select
+                          value={myHomeworkSort}
+                          onChange={(e) => setMyHomeworkSort(e.target.value as CaseLibrarySort)}
+                          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                          title="Sort my homework"
+                        >
+                          <option value="newest">Sort: Newest</option>
+                          <option value="oldest">Sort: Oldest</option>
+                          <option value="az">Sort: A → Z</option>
+                          <option value="za">Sort: Z → A</option>
+                        </select>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                        <div>
+                          Showing <span className="font-medium">{myHomeworkVisibleCases.length}</span> homework
+                          {myHomeworkFilter !== "all" ? ` • Type: ${myHomeworkFilter}` : ""}
+                          {myHomeworkSearch.trim() ? ` • Search: "${myHomeworkSearch.trim()}"` : ""}
                         </div>
+                        <button
+                          className="hover:underline"
+                          onClick={() => {
+                            setMyHomeworkSearch("");
+                            setMyHomeworkFilter("all");
+                            setMyHomeworkSort("newest");
+                          }}
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {(() => {
+                    const renderGrid = (cases: typeof myHomeworkVisibleCases) => (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {cases.map((annot) => {
+                          const hw = remoteHomeworkByCase[annot.id];
+                          const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
+
+                          return (
+                            <div key={annot.id} className="space-y-2">
+                              <CaseCard
+                                case={annot}
+                                onClick={() => setLocation(`/annotation/${annot.id}`)}
+                                homeworkType={hw?.homeworkType}
+                              />
+                              <div className="flex items-center px-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge>{t("homework")}</Badge>
+                                  {hw?.closed ? (
+                                    <Badge variant="destructive">{t("closed")}</Badge>
+                                  ) : (
+                                    dl !== null && (
+                                      <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
-                  })}
-                </div>
+
+                    const annotateCases = myHomeworkVisibleCases.filter((c) => {
+                      const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+                      return hwType === "Annotate";
+                    });
+                    const qaCases = myHomeworkVisibleCases.filter((c) => {
+                      const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+                      return hwType === "Q&A";
+                    });
+
+                    const renderSection = (
+                      title: "Annotate" | "Q&A",
+                      cases: typeof myHomeworkVisibleCases,
+                      shellClassName: string,
+                      pillClassName: string,
+                    ) => (
+                      <div className={shellClassName}>
+                        <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                          <span className={pillClassName}>{title}</span>
+                        </h3>
+                        {renderGrid(cases)}
+                      </div>
+                    );
+
+                    if (myHomeworkFilter === "Annotate") {
+                      return renderSection(
+                        "Annotate",
+                        annotateCases,
+                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                      );
+                    }
+
+                    if (myHomeworkFilter === "Q&A") {
+                      return renderSection(
+                        "Q&A",
+                        qaCases,
+                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-6">
+                        {annotateCases.length > 0 && renderSection(
+                          "Annotate",
+                          annotateCases,
+                          "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                          "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                        )}
+                        {qaCases.length > 0 && renderSection(
+                          "Q&A",
+                          qaCases,
+                          "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                          "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                        )}
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </div>
           )}
@@ -935,8 +1090,8 @@ export default function StudentDashboard() {
                     return renderSection(
                       "Annotate",
                       annotateCases,
-                      "rounded-2xl border border-sky-200/80 bg-sky-50/70 dark:border-sky-800/70 dark:bg-sky-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200 text-sm",
+                      "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
                     );
                   }
 
@@ -944,8 +1099,8 @@ export default function StudentDashboard() {
                     return renderSection(
                       "Q&A",
                       qaCases,
-                      "rounded-2xl border border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-800/70 dark:bg-emerald-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-sm",
+                      "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
                     );
                   }
 
@@ -954,14 +1109,14 @@ export default function StudentDashboard() {
                       {annotateCases.length > 0 && renderSection(
                         "Annotate",
                         annotateCases,
-                        "rounded-2xl border border-sky-200/80 bg-sky-50/70 dark:border-sky-800/70 dark:bg-sky-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200 text-sm",
+                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
                       )}
                       {qaCases.length > 0 && renderSection(
                         "Q&A",
                         qaCases,
-                        "rounded-2xl border border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-800/70 dark:bg-emerald-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-sm",
+                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
                       )}
                     </div>
                   );

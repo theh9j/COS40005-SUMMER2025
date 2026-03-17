@@ -1535,8 +1535,8 @@ export default function InstructorDashboard() {
                     return renderSection(
                       "Annotate",
                       annotateCases,
-                      "rounded-2xl border border-sky-200/80 bg-sky-50/70 dark:border-sky-800/70 dark:bg-sky-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200 text-sm",
+                      "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
                     );
                   }
 
@@ -1544,8 +1544,8 @@ export default function InstructorDashboard() {
                     return renderSection(
                       "Q&A",
                       qaCases,
-                      "rounded-2xl border border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-800/70 dark:bg-emerald-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-sm",
+                      "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
                     );
                   }
 
@@ -1554,14 +1554,14 @@ export default function InstructorDashboard() {
                       {annotateCases.length > 0 && renderSection(
                         "Annotate",
                         annotateCases,
-                        "rounded-2xl border border-sky-200/80 bg-sky-50/70 dark:border-sky-800/70 dark:bg-sky-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200 text-sm",
+                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
                       )}
                       {qaCases.length > 0 && renderSection(
                         "Q&A",
                         qaCases,
-                        "rounded-2xl border border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-800/70 dark:bg-emerald-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-sm",
+                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
                       )}
                     </div>
                   );
