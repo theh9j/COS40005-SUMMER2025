@@ -256,7 +256,6 @@ export default function AnnotationView() {
   const [editCaseCategory, setEditCaseCategory] = useState(case_?.category || "");
   const [editCaseImageFile, setEditCaseImageFile] = useState<File | null>(null);
   const [editCaseImagePreview, setEditCaseImagePreview] = useState<string>("");
-  const [editHomeworkType, setEditHomeworkType] = useState<"Q&A" | "Annotate">("Annotate");
   const [editCaseClasses, setEditCaseClasses] = useState<string[]>([]);
   const [caseTags, setCaseTags] = useState<Array<{ label: string; highlighted: boolean }>>([
     { label: "Fix: Overlapping regions", highlighted: true },
@@ -1020,31 +1019,6 @@ export default function AnnotationView() {
                       )}
                     </div>
 
-                    {/* Homework Type Section */}
-                    <div className="space-y-2 pb-3 border-b border-border">
-                      <h4 className="text-xs font-medium text-muted-foreground">HOMEWORK TYPE</h4>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            checked={editHomeworkType === "Q&A"}
-                            onChange={() => setEditHomeworkType("Q&A")}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm">Q&A</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            checked={editHomeworkType === "Annotate"}
-                            onChange={() => setEditHomeworkType("Annotate")}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm">Annotate</span>
-                        </label>
-                      </div>
-                    </div>
-
                     {/* Class Tags Section */}
                     <div className="space-y-2 pb-3 border-b border-border">
                       <h4 className="text-xs font-medium text-muted-foreground">ASSIGNED CLASSES</h4>
@@ -1111,7 +1085,6 @@ export default function AnnotationView() {
                             form.append("title", editCaseTitle);
                             form.append("description", editCaseDesc);
                             form.append("case_type", editCaseCategory);
-                            form.append("homework_type", editHomeworkType);
                             if (user?.user_id) {
                               form.append("author_id", user.user_id);
                             }

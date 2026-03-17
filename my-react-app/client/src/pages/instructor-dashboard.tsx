@@ -1475,79 +1475,135 @@ export default function InstructorDashboard() {
                 </CardContent>
               </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {loadingCases ? (
-                  <div className="text-sm text-muted-foreground">Loading cases…</div>
-                ) : visibleCases.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
-                    No matches. Try another keyword or reset filters.
-                  </div>
-                ) : (
-                  visibleCases.map((c) => (
-                    <Card
-                      key={`${c.source}-${c.id}`}
-                      className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                      onClick={() => setLocation(`/annotation/${c.id}`)}
-                    >
-                      <div className="relative">
-                        <img
-                          src={c.imageUrl}
-                          alt={c.title}
-                          className="w-full h-48 object-cover bg-muted"
-                        />
-                        {c.source === "db" && (
-                          <button
-                            className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border border-border text-foreground bg-white/90 hover:bg-white dark:bg-black/50 dark:hover:bg-black/70"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteDbCase(c.id, c.title);
-                            }}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <h3 className="font-semibold truncate">{c.title}</h3>
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${getHomeworkTypeColor(c.homeworkType)}`}>
-                            {c.homeworkType || "Annotate"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{c.description}</p>
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {c.caseType && (
-                            <span className={`text-xs px-2 py-1 rounded font-medium ${getCaseTypeColor(c.caseType)}`}>
-                              {c.caseType}
-                            </span>
-                          )}
-                          {c.homeworkAudience === "All Students" && (
-                            <span className="text-xs px-2 py-1 rounded font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100">
-                              All students
-                            </span>
-                          )}
-                          {(!c.classInfos || c.classInfos.length === 0) && c.classInfo && c.classInfo.name && (
-                            <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800">
-                              {c.classInfo.year ? `${c.classInfo.name} (${c.classInfo.year})` : c.classInfo.name}
-                            </span>
-                          )}
-                          {(c.classInfos ?? [])
-                            .filter((ci) => !!ci?.name)
-                            .map((ci, idx) => (
-                              <span
-                                key={`${ci.name}-${ci.year ?? ""}-${idx}`}
-                                className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800"
+              {loadingCases ? (
+                <div className="text-sm text-muted-foreground">Loading cases…</div>
+              ) : visibleCases.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  No matches. Try another keyword or reset filters.
+                </div>
+              ) : (
+                (() => {
+                  const renderCards = (cases: CaseCard[]) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {cases.map((c) => (
+                        <Card
+                          key={`${c.source}-${c.id}`}
+                          className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                          onClick={() => setLocation(`/annotation/${c.id}`)}
+                        >
+                          <div className="relative">
+                            <img
+                              src={c.imageUrl}
+                              alt={c.title}
+                              className="w-full h-48 object-cover bg-muted"
+                            />
+                            {c.source === "db" && (
+                              <button
+                                className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border border-border text-foreground bg-white/90 hover:bg-white dark:bg-black/50 dark:hover:bg-black/70"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteDbCase(c.id, c.title);
+                                }}
                               >
-                                {ci.year ? `${ci.name} (${ci.year})` : ci.name}
+                                Delete
+                              </button>
+                            )}
+                          </div>
+
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <h3 className="font-semibold truncate">{c.title}</h3>
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${getHomeworkTypeColor(c.homeworkType)}`}>
+                                {c.homeworkType || "Annotate"}
                               </span>
-                            ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{c.description}</p>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {c.caseType && (
+                                <span className={`text-xs px-2 py-1 rounded font-medium ${getCaseTypeColor(c.caseType)}`}>
+                                  {c.caseType}
+                                </span>
+                              )}
+                              {c.homeworkAudience === "All Students" && (
+                                <span className="text-xs px-2 py-1 rounded font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100">
+                                  All students
+                                </span>
+                              )}
+                              {(!c.classInfos || c.classInfos.length === 0) && c.classInfo && c.classInfo.name && (
+                                <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800">
+                                  {c.classInfo.year ? `${c.classInfo.name} (${c.classInfo.year})` : c.classInfo.name}
+                                </span>
+                              )}
+                              {(c.classInfos ?? [])
+                                .filter((ci) => !!ci?.name)
+                                .map((ci, idx) => (
+                                  <span
+                                    key={`${ci.name}-${ci.year ?? ""}-${idx}`}
+                                    className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800"
+                                  >
+                                    {ci.year ? `${ci.name} (${ci.year})` : ci.name}
+                                  </span>
+                                ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  );
+
+                  const annotateCases = visibleCases.filter((c) => (c.homeworkType || "Annotate") === "Annotate");
+                  const qaCases = visibleCases.filter((c) => c.homeworkType === "Q&A");
+
+                  const renderSection = (
+                    title: "Annotate" | "Q&A",
+                    cases: CaseCard[],
+                    shellClassName: string,
+                    pillClassName: string,
+                  ) => (
+                    <div className={shellClassName}>
+                      <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                        <span className={pillClassName}>{title}</span>
+                      </h3>
+                      {renderCards(cases)}
+                    </div>
+                  );
+
+                  if (caseFilterHomeworkType === "Annotate") {
+                    return renderSection(
+                      "Annotate",
+                      annotateCases,
+                      "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                    );
+                  }
+
+                  if (caseFilterHomeworkType === "Q&A") {
+                    return renderSection(
+                      "Q&A",
+                      qaCases,
+                      "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-6">
+                      {annotateCases.length > 0 && renderSection(
+                        "Annotate",
+                        annotateCases,
+                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                      )}
+                      {qaCases.length > 0 && renderSection(
+                        "Q&A",
+                        qaCases,
+                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                      )}
+                    </div>
+                  );
+                })()
+              )}
             </div>
           )}
 
