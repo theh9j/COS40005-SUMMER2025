@@ -11,7 +11,7 @@ type SuggestStats = {
   skillGaps: string[];
 };
 
-type Upload = { name: string; url: string; type: string; size: number };
+type Upload = { name: string; url: string; type: string; size: number; file?: File };
 
 type EssayQuestion = {
   type: "essay";
@@ -154,7 +154,6 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
       next.maxPoints = "Maximum points must be at least 1.";
     }
     if (audience === "classroom") {
-      if (!password.trim()) next.password = "Homework password is required.";
       if (!className.trim()) next.className = "Class is required.";
     }
     if (builderTab === "Q&A" && questions.length === 0) next.questions = "Add at least one Q&A question.";
@@ -167,7 +166,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     Boolean(due) &&
     (builderTab === "Q&A" ? qnaMaxPoints > 0 : annotateMaxPoints > 0) &&
     (builderTab === "Q&A" ? questions.length > 0 : Boolean(caseImageFile)) &&
-    (audience === "all" || (password.trim() && className.trim() && selectedClassroomId));
+    (audience === "all" || (className.trim() && selectedClassroomId));
 
   const toISO = (d: string) => (d ? new Date(`${d}T23:59:00`).toISOString() : "");
 
@@ -189,6 +188,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
       url: URL.createObjectURL(f),
       type: f.type || "application/octet-stream",
       size: f.size,
+      file: f,
     }));
     setReferenceUploads((prev) => [...prev, ...list]);
   };
@@ -453,7 +453,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                 {audience === "classroom" && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Homework Password</label>
+                      <label className="text-sm font-medium">Homework Password <span className="text-muted-foreground">(optional)</span></label>
                       <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="e.g., week7pass" />
                       {errors.password && <p className="text-xs text-red-600">{errors.password}</p>}
                     </div>
@@ -732,7 +732,10 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                       description: caseDesc || undefined,
                       type: caseType || undefined,
                       imageFile: builderTab === "Annotate" ? caseImageFile : null,
-                      imagePreviewUrl: builderTab === "Annotate" ? caseImagePreview : undefined,
+                      imagePreviewUrl:
+                        builderTab === "Annotate"
+                          ? caseImagePreview
+                          : "/images/default-qna-homework.svg",
                     },
                     dueAtISO: toISO(due),
                     audience,
@@ -758,4 +761,5 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     </div>
   );
 }
+
 
