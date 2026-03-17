@@ -93,6 +93,8 @@ export default function AnnotationView() {
     password?: string;
     instructions?: string;
     uploads?: any[];
+    referenceImages?: string[];
+    annotationImage?: string;
     questions?: any[];
   };
 
@@ -198,6 +200,8 @@ export default function AnnotationView() {
                 classLabels: Array.isArray(hwData.class_labels) ? hwData.class_labels.map((label: any) => String(label)) : [],
                 password: hwData.password || undefined,
                 uploads: hwData.uploads || [],
+                referenceImages: Array.isArray(homeworkData?.annot?.reference_images) ? homeworkData.annot.reference_images : [],
+                annotationImage: homeworkData?.annot?.annotation_image || found?.image_url || found?.imageUrl,
                 questions: questionList,
               });
             } else {
@@ -1610,6 +1614,29 @@ export default function AnnotationView() {
                           <p><strong>Status:</strong> {hw.closed ? <span className="text-red-600 font-semibold">Closed</span> : <span className="text-green-600 font-semibold">Open</span>}</p>
                         </div>
                       </div>
+
+                      {hw.homeworkType === "Annotate" && Array.isArray(hw.referenceImages) && hw.referenceImages.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="font-semibold text-xs">Reference Images</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {hw.referenceImages.map((imageUrl, idx) => (
+                              <a
+                                key={`${imageUrl}-${idx}`}
+                                href={imageUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block overflow-hidden rounded-md border bg-muted/30"
+                              >
+                                <img
+                                  src={imageUrl}
+                                  alt={`Reference ${idx + 1}`}
+                                  className="h-24 w-full object-cover"
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   <SubmissionPanel
@@ -1619,6 +1646,7 @@ export default function AnnotationView() {
                     notes={submission?.notes}
                     files={submission?.files}
                     questions={hw?.questions || []}
+                    uploads={hw?.uploads || []}
                     answers={submission?.answers || []}
                     homeworkType={hw?.homeworkType || "Annotate"}
                     closed={hw?.closed ?? false}
@@ -1737,4 +1765,5 @@ export default function AnnotationView() {
     </div>
   );
 }
+
 

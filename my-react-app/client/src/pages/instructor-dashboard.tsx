@@ -1300,6 +1300,7 @@ export default function InstructorDashboard() {
 
                     // For Annotation homework: upload image first and get the URL
                     let imageUrl: string | undefined;
+                    let uploadedReferenceUploads: any[] = payload.referenceUploads || [];
                     if (payload.homeworkType === "Annotate" && payload.newCase?.imageFile) {
                       const formData = new FormData();
                       formData.append("file", payload.newCase.imageFile);
@@ -1325,6 +1326,42 @@ export default function InstructorDashboard() {
                       imageUrl = uploadData.url || uploadData.filename || uploadData.path;
                     }
 
+                    if (Array.isArray(payload.referenceUploads) && payload.referenceUploads.length > 0) {
+                      uploadedReferenceUploads = [];
+                      for (const refFile of payload.referenceUploads as any[]) {
+                        const rawFile = (refFile as any)?.file;
+                        if (!rawFile) {
+                          uploadedReferenceUploads.push(refFile);
+                          continue;
+                        }
+
+                        const formData = new FormData();
+                        formData.append("file", rawFile);
+
+                        const uploadParams = new URLSearchParams({
+                          caseId: payload.newCase?.title || `temp-${Date.now()}`,
+                          userId: user?.user_id || "",
+                        });
+
+                        const uploadRes = await fetch(`${API_BASE}/api/instructor/homeworks/upload?${uploadParams}`, {
+                          method: "POST",
+                          body: formData,
+                        });
+
+                        if (!uploadRes.ok) {
+                          console.error("Reference upload failed", await uploadRes.text());
+                          alert(`Failed to upload reference file: ${refFile.name || "file"}`);
+                          return;
+                        }
+
+                        const uploadData = await uploadRes.json();
+                        uploadedReferenceUploads.push({
+                          ...refFile,
+                          url: uploadData.url || uploadData.filename || uploadData.path,
+                        });
+                      }
+                    }
+
                     // Build the homework payload with new simplified structure
                     const homeworkPayload = {
                       newCase: {
@@ -1340,7 +1377,7 @@ export default function InstructorDashboard() {
                       autoChecklist: payload.autoChecklist || [],
                       suggestedFocusTags: payload.suggestedFocusTags || [],
                       homeworkType: payload.homeworkType || "Q&A",
-                      referenceUploads: payload.referenceUploads || [],
+                      referenceUploads: uploadedReferenceUploads,
                       questions: payload.questions || [],
                       password: payload.password || "",
                       className: payload.className || "",
