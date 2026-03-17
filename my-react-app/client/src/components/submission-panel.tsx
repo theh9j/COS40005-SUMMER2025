@@ -11,6 +11,7 @@ type HomeworkQuestion = {
   points: number;
   guidance?: string;
   options?: string[];
+  imageIndex?: number;
 };
 
 interface SubmissionPanelProps {
@@ -21,6 +22,7 @@ interface SubmissionPanelProps {
   files?: SubmissionFile[];
   questions?: HomeworkQuestion[];
   answers?: { index: number; value: any }[];
+  uploads?: { url?: string; name?: string }[];
   homeworkType?: "Q&A" | "Annotate";
   onSubmit: (
     notes: string,
@@ -41,6 +43,7 @@ export default function SubmissionPanel({
   files: initialFiles = [],
   questions = [],
   answers: initialAnswers = [],
+  uploads = [],
   homeworkType = "Annotate",
   onSubmit,
   onUploadFile,
@@ -223,6 +226,16 @@ export default function SubmissionPanel({
                 </div>
                 <Badge variant="outline">{q.points} pts</Badge>
               </div>
+
+              {typeof q.imageIndex === "number" && uploads[q.imageIndex]?.url && (
+                <div className="overflow-hidden rounded-md border bg-muted/30">
+                  <img
+                    src={uploads[q.imageIndex]?.url}
+                    alt={`Question ${idx + 1} reference`}
+                    className="max-h-64 w-full object-contain bg-background"
+                  />
+                </div>
+              )}
 
               {q.guidance && (
                 <div className="text-xs text-muted-foreground whitespace-pre-wrap">
