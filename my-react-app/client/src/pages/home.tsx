@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { Stethoscope, FolderOpen, Gauge, LogIn, LogOut } from "lucide-react";
+import { Stethoscope, FolderOpen, Gauge, LogIn, LogOut, Sparkles, GraduationCap, ClipboardCheck } from "lucide-react";
 import { useI18n } from "@/i18n";
 
 export default function Home() {
@@ -24,114 +24,110 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navbar */}
-      <header className="bg-card border-b border-border h-16 px-6 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center space-x-3">
-          <Stethoscope className="h-6 w-6 text-primary" />
-          <span className="font-semibold">{t("appName")}</span>
+    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/30">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+          <div className="flex items-center space-x-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
+              <Stethoscope className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <div className="font-semibold">{t("appName")}</div>
+              <div className="text-xs text-muted-foreground">Medical imaging learning workspace</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                <Button variant="outline" onClick={goDashboard}>
+                  <Gauge className="mr-2 h-4 w-4" />
+                  Dashboard
+                </Button>
+                <Button variant="ghost" onClick={logout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  {t("logout")}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setLocation("/login")}>
+                  <LogIn className="mr-2 h-4 w-4" />
+                  {t("login")}
+                </Button>
+                <Button onClick={() => setLocation("/signup")}>{t("createAccount")}</Button>
+              </>
+            )}
+          </div>
         </div>
-
-        <nav className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            onClick={goDashboard}
-            className="hidden sm:inline-flex"
-          >
-            <Gauge className="h-4 w-4 mr-2" />
-            {t("dashboard")}
-          </Button>
-
-          <Button
-            variant="ghost"
-            onClick={() =>
-              user ? setLocation("/student") : setLocation("/login")
-            }
-            className="hidden sm:inline-flex"
-          >
-            <FolderOpen className="h-4 w-4 mr-2" />
-            {t("cases")}
-          </Button>
-
-          {!user ? (
-            <Button onClick={() => setLocation("/login")}>
-              <LogIn className="h-4 w-4 mr-2" />
-              {t("signIn")}
-            </Button>
-          ) : (
-            <Button variant="secondary" onClick={logout} disabled={isLoading}>
-              <LogOut className="h-4 w-4 mr-2" />
-              {t("logout")}
-            </Button>
-          )}
-        </nav>
       </header>
 
-      {/* Hero */}
-      <main className="px-6 py-10 max-w-6xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-6 mb-8">
-          <Card className="border">
-            <CardContent className="p-8">
-              <h1 className="text-3xl font-bold mb-3">
-                {t("heroTitle")}
-              </h1>
-              <p className="text-muted-foreground mb-6">
-                {t("heroDescription")}
-              </p>
-              <div className="flex gap-3">
-                <Button
-                  onClick={goDashboard}
-                  className="bg-primary text-primary-foreground"
-                >
-                  {t("getStarted")}
-                </Button>
-                {!user && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setLocation("/signup")}
-                  >
-                    {t("createAccount")}
-                  </Button>
-                )}
+      <main className="mx-auto max-w-7xl px-6 py-10">
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <Card className="overflow-hidden border-0 bg-card shadow-sm">
+            <CardContent className="p-8 md:p-10">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Smarter homework, grading, and annotation workflows
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border">
-            <CardContent className="p-8 space-y-4">
-              <h2 className="text-xl font-semibold">
-                {t("quickLinks")}
-              </h2>
-
-              <div className="grid sm:grid-cols-2 gap-3">
-                <Button
-                  variant="secondary"
-                  className="justify-start"
-                  onClick={goDashboard}
-                >
-                  <Gauge className="h-4 w-4 mr-2" />
-                  {user?.role === "instructor"
-                    ? t("instructorDashboard")
-                    : t("studentDashboard")}
+              <h1 className="max-w-3xl text-4xl font-bold tracking-tight md:text-5xl">
+                Build, grade, and review medical imaging homework in one place
+              </h1>
+              <p className="mt-4 max-w-2xl text-muted-foreground">
+                Create Q&amp;A and annotation assignments, manage grading, and give students a cleaner workflow from case library to feedback.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button onClick={goDashboard} size="lg">
+                  <Gauge className="mr-2 h-4 w-4" />
+                  {user ? "Open dashboard" : t("getStarted")}
                 </Button>
-
-                <Button
-                  variant="secondary"
-                  className="justify-start"
-                  onClick={() =>
-                    user ? setLocation("/student") : setLocation("/login")
-                  }
-                >
-                  <FolderOpen className="h-4 w-4 mr-2" />
+                <Button variant="outline" size="lg" onClick={() => setLocation(user ? "/student" : "/login")}>
+                  <FolderOpen className="mr-2 h-4 w-4" />
                   {t("caseLibrary")}
                 </Button>
               </div>
-
-              <p className="text-xs text-muted-foreground">
-                {t("tipNavbar")}
-              </p>
             </CardContent>
           </Card>
+
+          <div className="grid gap-4">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-primary/10 p-2"><ClipboardCheck className="h-5 w-5 text-primary" /></div>
+                  <div>
+                    <h2 className="font-semibold">For instructors</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">Create homework, manage submissions, and improve grading pages with less friction.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-primary/10 p-2"><GraduationCap className="h-5 w-5 text-primary" /></div>
+                  <div>
+                    <h2 className="font-semibold">For students</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">Review cases, answer homework, annotate images, and keep everything in one submission flow.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <h2 className="font-semibold">Quick links</h2>
+                <div className="mt-4 grid gap-3">
+                  <Button variant="secondary" className="justify-start" onClick={goDashboard}>
+                    <Gauge className="mr-2 h-4 w-4" />
+                    {user?.role === "instructor" ? t("instructorDashboard") : t("studentDashboard")}
+                  </Button>
+                  <Button variant="secondary" className="justify-start" onClick={() => setLocation(user ? "/student" : "/login")}>
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    {t("caseLibrary")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </main>
     </div>
