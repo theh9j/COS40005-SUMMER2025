@@ -82,6 +82,20 @@ const myAnnotations = mockCases
 
 type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "progress" | "settings";
 
+type SubmissionRecord = {
+  id: string;
+  homework_id: string;
+  case_id: string;
+  case_title: string;
+  student_id: string;
+  status: "none" | "submitted" | "grading" | "graded";
+  score?: number;
+  feedback?: string;
+  notes?: string;
+  updated_at?: string;
+  created_at?: string;
+};
+
 type StudentStats = {
   casesCompleted: number;
   activeAnnotations: number;
@@ -244,6 +258,110 @@ export default function StudentDashboard() {
   // One source of truth for stats (cards + CSV both consume this)
   const [stats, setStats] = useState<StudentStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [studentSubmissions, setStudentSubmissions] = useState<SubmissionRecord[]>([]);
+  const [forumContributionCount, setForumContributionCount] = useState<number>(0);
+
+  useEffect(() => {
+    const loadProgress = async () => {
+      if (!user?.user_id) return;
+      try {
+        const submissionsRes = await fetch(`${API_BASE}/api/instructor/submissions`);
+        if (!submissionsRes.ok) throw new Error("Submissions load failed");
+        const rawSubmissions: SubmissionRecord[] = await submissionsRes.json();
+        const mine = rawSubmissions.filter((sub) => sub.student_id === user.user_id);
+        setStudentSubmissions(mine);
+
+        const forumRes = await fetch(`${API_BASE}/forum`);
+        if (forumRes.ok) {
+          const threads = await forumRes.json();
+          const contributions = (threads || []).filter((thread: any) => thread.author?.user_id === user.user_id).length;
+          setForumContributionCount(contributions);
+        }
+      } catch (e) {
+        console.warn("Unable to load live student progress", e);
+      }
+    };
+    loadProgress();
+  }, [user?.user_id]);
+
+  useEffect(() => {
+    const getDayKey = (iso?: string) => {
+      if (!iso) return null;
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}-${d.getDate().toString().padStart(2, "0")}`;
+    };
+
+    const computeStats = () => {
+      const submissions = studentSubmissions;
+      const totalCases = Math.max(caseLibraryCases.length, 1);
+      const graded = submissions.filter((s) => s.status === "graded");
+      const active = submissions.filter((s) => s.status === "submitted" || s.status === "grading");
+      const daysWithActivity = new Set(
+        submissions
+          .map((s) => getDayKey(s.updated_at ?? s.created_at))
+          .filter((d): d is string => Boolean(d))
+      );
+
+      let streak = 0;
+      const today = new Date();
+      while (true) {
+        const dayKey = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, "0")}-${today.getDate().toString().padStart(2, "0")}`;
+        if (!daysWithActivity.has(dayKey)) break;
+        streak += 1;
+        today.setDate(today.getDate() - 1);
+      }
+
+      const accuracy = graded.length
+        ? Math.round(graded.reduce((acc, cur) => acc + (cur.score ?? 0), 0) / graded.length)
+        : 75;
+
+      const casesCompleted = new Set(graded.map((s) => s.case_id)).size;
+      const completionRate = Math.min(100, Math.max(0, Math.round((casesCompleted / totalCases) * 100)));
+      const collab = Math.min(100, 40 + forumContributionCount * 5 + Math.round((submissions.length / totalCases) * 50));
+
+      setStats({
+        casesCompleted,
+        activeAnnotations: active.length,
+        feedbackReceived: submissions.filter((s) => !!s.feedback || !!s.notes).length,
+        studyStreakDays: streak,
+        annotationAccuracyPct: accuracy,
+        completionRatePct: completionRate,
+        collaborationScorePct: collab,
+      });
+    };
+
+    computeStats();
+  }, [studentSubmissions, caseLibraryCases.length, forumContributionCount]);
+
+  const recentActivities = useMemo(() => {
+    return studentSubmissions
+      .slice() // keep original as-is
+      .sort((a, b) => {
+        const aDate = new Date(a.updated_at ?? a.created_at ?? "").getTime();
+        const bDate = new Date(b.updated_at ?? b.created_at ?? "").getTime();
+        return bDate - aDate;
+      })
+      .slice(0, 5)
+      .map((entry) => {
+        const at = new Date(entry.updated_at ?? entry.created_at ?? Date.now());
+        return {
+          title:
+            entry.status === "graded"
+              ? `Graded: ${entry.case_title}`
+              : entry.status === "submitted"
+              ? `Submitted: ${entry.case_title}`
+              : `In progress: ${entry.case_title}`,
+          detail:
+            entry.score != null
+              ? `Score ${entry.score}%` // assuming 0-100
+              : entry.feedback
+              ? "Feedback available"
+              : "Awaiting review",
+          date: at.toLocaleString(),
+        };
+      });
+  }, [studentSubmissions]);
 
   useEffect(() => {
     console.log("Current user in dashboard:", user);
@@ -760,47 +878,64 @@ export default function StudentDashboard() {
 
           {activeView === "progress" && stats && (
             <div className="p-6" data-testid="view-progress">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">{t("learningProgress")}</h2>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-2xl font-bold">{t("learningProgress")}</h2>
+                  <p className="text-sm text-muted-foreground">Updated {new Date().toLocaleString()}</p>
+                </div>
                 <Button onClick={exportStudentProgressCSV}>{t("exportCSV")}</Button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">{t("overallPerformance")}</h3>
-                    <div className="space-y-4">
-                      <div><div className="flex justify-between text-sm mb-1"><span>Annotation Accuracy</span><span data-testid="accuracy-percentage">{stats.annotationAccuracyPct}%</span></div><Progress value={stats.annotationAccuracyPct} className="h-2" /></div>
-                      <div><div className="flex justify-between text-sm mb-1"><span>Case Completion Rate</span><span data-testid="completion-percentage">{stats.completionRatePct}%</span></div><Progress value={stats.completionRatePct} className="h-2" /></div>
-                      <div><div className="flex justify-between text-sm mb-1"><span>Collaboration Score</span><span data-testid="collaboration-percentage">{stats.collaborationScorePct}%</span></div><Progress value={stats.collaborationScorePct} className="h-2" /></div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">{t("recentAchievements")}</h3>
-                    <div className="space-y-3 text-sm text-muted-foreground">
-                      <div>{t("caseMaster")} — {t("completedCases").replace("{{count}}", String(Math.max(1, Math.round(stats.casesCompleted / 2))))}</div>
-                      <div>{t("perfectAnnotation")} — {t("accuracyOnStrokeCase").replace("{{accuracy}}", String(stats.annotationAccuracyPct))}</div>
-                      <div>{t("teamPlayer")} — {t("collaborationScore")}: {stats.collaborationScorePct}%</div>
-                    </div>
-                  </CardContent>
-                </Card>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <StatCard label="Cases Completed" value={stats.casesCompleted} icon={FolderOpen} testId="stat-cases-completed" />
+                <StatCard label="Active Annotations" value={stats.activeAnnotations} icon={Edit} testId="stat-active-annotations" />
+                <StatCard label="Study Streak" value={`${stats.studyStreakDays} days`} icon={Calendar} testId="stat-study-streak" />
+                <StatCard label="Collaboration" value={`${stats.collaborationScorePct}%`} icon={Users} testId="stat-collaboration" />
               </div>
+
+              <Card className="mb-6">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Performance Progress</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1"><span>Annotation Accuracy</span><span data-testid="accuracy-percentage">{stats.annotationAccuracyPct}%</span></div>
+                      <Progress value={stats.annotationAccuracyPct} className="h-2" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1"><span>Case Completion</span><span data-testid="completion-percentage">{stats.completionRatePct}%</span></div>
+                      <Progress value={stats.completionRatePct} className="h-2" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1"><span>Collaboration Impact</span><span data-testid="collaboration-percentage">{stats.collaborationScorePct}%</span></div>
+                      <Progress value={stats.collaborationScorePct} className="h-2" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mb-6">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Recent activity</h3>
+                  <ul className="space-y-3 text-sm text-muted-foreground">
+                    {recentActivities.length === 0 && <li>No activity yet. Start your first assignment to activate progress updates.</li>}
+                    {recentActivities.map((item, index) => (
+                      <li key={index} className="rounded-lg bg-slate-100 dark:bg-slate-800 p-3">
+                        <div className="font-medium text-sm text-foreground">{item.title}</div>
+                        <div>{item.detail}</div>
+                        <small className="text-xs text-muted-foreground">{item.date}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
 
               <Card>
                 <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">{t("studyTimeline")}</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4 p-3 border-l-4 border-green-500 bg-green-500/10">
-                      <div className="flex-shrink-0"><div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm"><CheckCircle className="h-4 w-4" /></div></div>
-                      <div className="flex-1"><p className="font-medium">{t("completedBrainMRICase")}</p><p className="text-sm text-muted-foreground">2 hours ago - {t("scoreLabel")}</p></div>
-                    </div>
-                    <div className="flex items-center space-x-4 p-3 border-l-4 border-primary bg-primary/10">
-                      <div className="flex-shrink-0"><div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm"><MessageCircle className="h-4 w-4" /></div></div>
-                      <div className="flex-1"><p className="font-medium">{t("receivedFeedback")}</p><p className="text-sm text-muted-foreground">4 hours ago - {t("doctorReviewedYourWork").replace("{{doctor}}", "Dr. Smith")}</p></div>
-                    </div>
+                  <h3 className="text-lg font-semibold mb-4">Milestones</h3>
+                  <div className="space-y-4 text-sm text-muted-foreground">
+                    <div>🔥 {stats.casesCompleted >= 1 ? "First case complete" : "Complete your first case"}</div>
+                    <div>🎯 {stats.completionRatePct >= 80 ? "On track for course mastery" : "Focus on finishing pending assessments"}</div>
+                    <div>👥 {forumContributionCount >= 1 ? `${forumContributionCount} forum contributions` : "Engage in forums to increase collaboration score"}</div>
                   </div>
                 </CardContent>
               </Card>
