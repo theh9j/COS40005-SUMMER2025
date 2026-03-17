@@ -426,7 +426,6 @@ export default function InstructorDashboard() {
   const [loadingCases, setLoadingCases] = useState(false);
 
   const [caseSearch, setCaseSearch] = useState("");
-  const [caseFilterClass, setCaseFilterClass] = useState("");
   const [caseFilterHomeworkType, setCaseFilterHomeworkType] = useState("");
   const [caseSort, setCaseSort] = useState<CaseSort>("newest");
 
@@ -1399,20 +1398,6 @@ export default function InstructorDashboard() {
 
                     <select
                       className="h-10 rounded-md border border-border bg-background px-3 text-sm"
-                      value={caseFilterClass}
-                      onChange={(e) => setCaseFilterClass(e.target.value)}
-                    >
-                      <option value="">All Classes</option>
-                      <option value="all-classes">All Classes (assigned)</option>
-                      {classrooms.map((cls) => (
-                        <option key={cls.id} value={cls.name}>
-                          {cls.display}
-                        </option>
-                      ))}
-                    </select>
-
-                    <select
-                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
                       value={caseFilterHomeworkType}
                       onChange={(e) => setCaseFilterHomeworkType(e.target.value)}
                     >
@@ -1436,7 +1421,6 @@ export default function InstructorDashboard() {
                   <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                     <div>
                       Showing <span className="font-medium">{visibleCases.length}</span> cases
-                      {caseFilterClass ? ` • Class: ${classrooms.find((c) => c.id === caseFilterClass)?.display || caseFilterClass}` : ""}
                       {caseFilterHomeworkType ? ` • Type: ${caseFilterHomeworkType}` : ""}
                       {caseSearch.trim() ? ` • Search: "${caseSearch.trim()}"` : ""}
                     </div>
@@ -1444,7 +1428,6 @@ export default function InstructorDashboard() {
                       className="hover:underline"
                       onClick={() => {
                         setCaseSearch("");
-                        setCaseFilterClass("");
                         setCaseFilterHomeworkType("");
                         setCaseSort("newest");
                       }}
