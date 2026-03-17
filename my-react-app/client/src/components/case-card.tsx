@@ -45,6 +45,8 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
     }
   };
 
+  const fallbackImage = homeworkType === "Q&A" ? "/images/default-qna-homework.svg" : "/images/default-annotation-homework.svg";
+
   return (
     <Card 
       className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
@@ -52,7 +54,7 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
       data-testid={`case-card-${medicalCase.id}`}
     >
       <img 
-        src={medicalCase.imageUrl} 
+        src={medicalCase.imageUrl || fallbackImage} 
         alt={medicalCase.title}
         className="w-full h-48 object-cover"
       />
