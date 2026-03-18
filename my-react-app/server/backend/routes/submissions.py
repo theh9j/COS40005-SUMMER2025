@@ -143,20 +143,43 @@ async def create_or_update_submission(
     if audience == "All Students":
         assigned = True
     elif audience == "Classrooms":
-        classroom = await classrooms_collection.find_one({
-            "name": hw.get("class_name"),
-            "year": hw.get("year")
-        })
-        if classroom:
-            member_ids = [str(x) for x in classroom.get("members", [])]
-            student_ids = [str(x) for x in classroom.get("students", [])]
-            assigned = userId in member_ids or userId in student_ids
+        class_ids = [str(x) for x in (hw.get("class_ids") or []) if x]
+        if class_ids:
+            # Check membership across any selected classroom
+            valid_ids = []
+            for class_id in class_ids:
+                try:
+                    valid_ids.append(ObjectId(class_id))
+                except Exception:
+                    continue
+
+            if valid_ids:
+                cursor = classrooms_collection.find({"_id": {"$in": valid_ids}})
+                async for classroom in cursor:
+                    member_ids = [str(x) for x in classroom.get("members", [])]
+                    student_ids = [str(x) for x in classroom.get("students", [])]
+                    if userId in member_ids or userId in student_ids:
+                        assigned = True
+                        break
+        else:
+            # Legacy fallback for older homework docs that used class_name/year
+            classroom = await classrooms_collection.find_one({
+                "name": hw.get("class_name"),
+                "year": hw.get("year")
+            })
+            if classroom:
+                member_ids = [str(x) for x in classroom.get("members", [])]
+                student_ids = [str(x) for x in classroom.get("students", [])]
+                assigned = userId in member_ids or userId in student_ids
 
     if not assigned:
         raise HTTPException(status_code=403, detail="Not assigned")
 
     files_list = [f.model_dump() for f in payload.files] if payload.files else []
     answers_list = [a.model_dump() for a in payload.answers] if payload.answers else []
+
+    class_ids = [str(x) for x in (hw.get("class_ids") or []) if x]
+    class_labels = [str(x) for x in (hw.get("class_labels") or []) if x]
 
     update_doc = {
         "homework_id": homeworkId,
@@ -166,6 +189,8 @@ async def create_or_update_submission(
         "files": files_list,
         "answers": answers_list,
         "status": "submitted",
+        "class_ids": class_ids,
+        "class_labels": class_labels,
         "updated_at": timestamp,
     }
 

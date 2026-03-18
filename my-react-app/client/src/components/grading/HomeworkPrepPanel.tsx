@@ -50,8 +50,8 @@ type PublishPayload = {
   referenceUploads: Upload[];
   questions: HomeworkQuestion[];
   password: string;
-  className: string;
-  year: string;
+  classIds: string[];
+  classLabels: string[];
   maxPoints: number;
 };
 
@@ -746,8 +746,8 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                     referenceUploads,
                     questions: builderTab === "Q&A" ? questions : [],
                     password,
-                    className,
-                    year: classroomOptions.find((c) => c.id === selectedClassroomId)?.year,
+                    classIds: selectedClassroomId ? [selectedClassroomId] : [],
+                    classLabels: selectedClassroomId ? [classroomOptions.find((c) => c.id === selectedClassroomId)?.display || ""] : [],
                     maxPoints: builderTab === "Q&A" ? qnaMaxPoints : annotateMaxPoints,
                   });
                 }}

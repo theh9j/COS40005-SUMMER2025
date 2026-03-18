@@ -1380,8 +1380,8 @@ export default function InstructorDashboard() {
                       referenceUploads: uploadedReferenceUploads,
                       questions: payload.questions || [],
                       password: payload.password || "",
-                      className: payload.className || "",
-                      year: payload.year || "",
+                      classIds: payload.classIds || [],
+                      classLabels: payload.classLabels || [],
                       maxPoints: payload.maxPoints || 100,
                     };
 

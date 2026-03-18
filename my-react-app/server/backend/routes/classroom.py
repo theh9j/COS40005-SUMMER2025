@@ -39,7 +39,7 @@ async def create_classroom(data: dict):
     return {
         "message": "Classroom created",
         "id": str(result.inserted_id),
-        "display": f"Class {name} ({year})"
+        "display": name
     }
 
 
@@ -78,7 +78,7 @@ async def add_student_to_classroom(data: dict):
 
     return {
         "message": "Student added",
-        "classroom": f"Class {classroom['name']} ({classroom['year']})"
+        "classroom": f"{classroom['name']} ({classroom['year']})"
     }
 
 
@@ -132,7 +132,7 @@ async def get_classroom_students(classroom_id: str):
         })
 
     return {
-        "classroom": f"Class {classroom['name']} ({classroom['year']})",
+        "classroom": classroom['name'],
         "students": students
     }
 
@@ -211,7 +211,7 @@ async def get_all_students():
             # grab the first classroom name/year
             cls = await classrooms_collection.find_one({"_id": {"$in": cls_ids}})
             if cls:
-                label = f"Class {cls.get('name')} ({cls.get('year')})"
+                label = f"{cls.get('name')} ({cls.get('year')})"
         students.append({
             "id": str(u["_id"]),
             "firstName": u.get("firstName"),

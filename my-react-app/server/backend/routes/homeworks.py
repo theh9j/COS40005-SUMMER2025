@@ -47,26 +47,37 @@ async def create_homework(payload: dict):
     reference_uploads = payload.get("referenceUploads") or payload.get("uploads") or []
     questions = payload.get("questions") or []
     password = payload.get("password") or ""
-    class_name = payload.get("className") or payload.get("class_name") or ""
-    year = payload.get("year") or ""
-    classroom_id = payload.get("classroomId") or payload.get("classroom_id") or ""
     class_ids = payload.get("classIds") or payload.get("class_ids") or []
     class_labels = payload.get("classLabels") or payload.get("class_labels") or []
     max_points = payload.get("maxPoints")
 
-    if classroom_id and classroom_id not in class_ids:
-        class_ids = [*class_ids, classroom_id]
-
     class_ids = [str(cid) for cid in class_ids if cid]
     class_labels = [str(label) for label in class_labels if label]
+
+    # If labels were not provided, resolve them from the classroom records
+    if not class_labels and class_ids:
+        valid_ids = []
+        for cid in class_ids:
+            try:
+                valid_ids.append(ObjectId(cid))
+            except Exception:
+                continue
+
+        if valid_ids:
+            cursor = classrooms_collection.find({"_id": {"$in": valid_ids}})
+            async for cls in cursor:
+                name = cls.get("name")
+                year = cls.get("year")
+                if name:
+                    if year:
+                        class_labels.append(f"{name} ({year})")
+                    else:
+                        class_labels.append(name)
 
     if not case_id and not new_case.get("title"):
         raise HTTPException(status_code=400, detail="Case title is required")
     if not due_at_iso:
         raise HTTPException(status_code=400, detail="Due date is required")
-
-    if audience_raw in ("classroom", "classrooms") and not class_name:
-        raise HTTPException(status_code=400, detail="Class name is required for classroom audience")
 
     audience = "Classrooms" if audience_raw in ("classroom", "classrooms") else "All Students"
 
@@ -103,8 +114,6 @@ async def create_homework(payload: dict):
     }
 
     if audience == "Classrooms":
-        homework_doc["class_name"] = class_name
-        homework_doc["year"] = year
         if class_ids:
             homework_doc["class_ids"] = class_ids
         if class_labels:
@@ -276,9 +285,9 @@ async def update_homework_by_case(case_id: str, payload: dict):
         audience_norm = str(audience_payload).strip().lower()
         update_doc["audience"] = "Classrooms" if audience_norm in ("classroom", "classrooms") else "All Students"
 
-    class_ids_payload = payload.get("class_ids")
-    class_labels_payload = payload.get("class_labels")
-    class_name_payload = payload.get("class_name")
+    class_ids_payload = payload.get("class_ids") or payload.get("classIds")
+    class_labels_payload = payload.get("class_labels") or payload.get("classLabels")
+    class_name_payload = payload.get("class_name") or payload.get("className")
     year_payload = payload.get("year")
     password_payload = payload.get("password")
 
@@ -300,29 +309,11 @@ async def update_homework_by_case(case_id: str, payload: dict):
                 label = f"{cls.get('name')} ({cls.get('year')})"
                 resolved_labels.append(label)
 
-            if not class_name_payload or not year_payload:
-                first_class = await classrooms_collection.find_one({"_id": valid_ids[0]})
-                if first_class:
-                    update_doc["class_name"] = first_class.get("name")
-                    update_doc["year"] = first_class.get("year")
-
         if resolved_labels:
             update_doc["class_labels"] = resolved_labels
 
     if class_labels_payload is not None:
         update_doc["class_labels"] = [str(label) for label in class_labels_payload if label]
-
-    if class_name_payload is not None:
-        if class_name_payload:
-            update_doc["class_name"] = class_name_payload
-        else:
-            unset_doc["class_name"] = ""
-
-    if year_payload is not None:
-        if year_payload:
-            update_doc["year"] = year_payload
-        else:
-            unset_doc["year"] = ""
 
     if password_payload is not None:
         password_text = str(password_payload).strip() if password_payload is not None else ""
@@ -333,8 +324,6 @@ async def update_homework_by_case(case_id: str, payload: dict):
 
     effective_audience = update_doc.get("audience", hw.get("audience"))
     if effective_audience == "All Students":
-        unset_doc["class_name"] = ""
-        unset_doc["year"] = ""
         unset_doc["class_ids"] = ""
         unset_doc["class_labels"] = ""
         unset_doc["password"] = ""
