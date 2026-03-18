@@ -273,13 +273,14 @@ async def update_homework_by_case(case_id: str, payload: dict):
 
     audience_payload = payload.get("audience")
     if audience_payload is not None:
-                audience_norm = str(audience_payload).strip().lower()
-                update_doc["audience"] = "Classrooms" if audience_norm in ("classroom", "classrooms") else "All Students"
+        audience_norm = str(audience_payload).strip().lower()
+        update_doc["audience"] = "Classrooms" if audience_norm in ("classroom", "classrooms") else "All Students"
 
     class_ids_payload = payload.get("class_ids")
     class_labels_payload = payload.get("class_labels")
     class_name_payload = payload.get("class_name")
     year_payload = payload.get("year")
+    password_payload = payload.get("password")
 
     if class_ids_payload is not None:
         class_ids = [str(cid) for cid in class_ids_payload if cid]
@@ -323,12 +324,20 @@ async def update_homework_by_case(case_id: str, payload: dict):
         else:
             unset_doc["year"] = ""
 
+    if password_payload is not None:
+        password_text = str(password_payload).strip() if password_payload is not None else ""
+        if password_text:
+            update_doc["password"] = password_text
+        else:
+            unset_doc["password"] = ""
+
     effective_audience = update_doc.get("audience", hw.get("audience"))
     if effective_audience == "All Students":
         unset_doc["class_name"] = ""
         unset_doc["year"] = ""
         unset_doc["class_ids"] = ""
         unset_doc["class_labels"] = ""
+        unset_doc["password"] = ""
 
     if effective_audience == "Classrooms":
         if update_doc.get("class_ids") == []:

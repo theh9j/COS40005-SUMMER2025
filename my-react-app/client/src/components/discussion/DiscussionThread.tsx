@@ -18,6 +18,7 @@ interface InitialPostPrefill {
   message?: string;
   tags?: string[];
   caseId?: string;
+  imageUrl?: string;
 }
 
 const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ initialPost }) => {
@@ -44,10 +45,12 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
   const [newPostImageFile, setNewPostImageFile] = useState<File | null>(null);
 
   useEffect(() => {
-    if (initialPost && (initialPost.title || initialPost.message || (initialPost.tags && initialPost.tags.length))) {
+    if (initialPost && (initialPost.title || initialPost.message || (initialPost.tags && initialPost.tags.length) || initialPost.imageUrl)) {
       setNewPostTitle(initialPost.title || '');
       setNewPostMessage(initialPost.message || '');
       setNewPostTags(initialPost.tags || []);
+      setNewPostImagePreview(initialPost.imageUrl || null);
+      setNewPostImageFile(null);
       setIsCreatingPost(true);
       try {
         sessionStorage.removeItem('discussionPrefill');
@@ -78,10 +81,12 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
       const raw = sessionStorage.getItem('discussionPrefill');
       if (!raw) return;
       const p = JSON.parse(raw);
-      if (p && (p.title || p.message || (p.tags && p.tags.length))) {
+      if (p && (p.title || p.message || (p.tags && p.tags.length) || p.imageUrl)) {
         setNewPostTitle(p.title || '');
         setNewPostMessage(p.message || '');
         setNewPostTags(p.tags || []);
+        setNewPostImagePreview(p.imageUrl || null);
+        setNewPostImageFile(null);
         setIsCreatingPost(true);
         sessionStorage.removeItem('discussionPrefill');
       }
@@ -107,6 +112,8 @@ const DiscussionThread: React.FC<{ initialPost?: InitialPostPrefill }> = ({ init
     formData.append("tags", newPostTags.join(","));
     if (newPostImagePreview && newPostImageFile) {
       formData.append("image", newPostImageFile);
+    } else if (newPostImagePreview) {
+      formData.append("image_url", newPostImagePreview);
     }
 
     try {

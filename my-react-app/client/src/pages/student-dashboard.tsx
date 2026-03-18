@@ -21,7 +21,6 @@ import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 // icon Assignments
 import { Badge } from "@/components/ui/badge";
-import { Link } from "wouter";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -32,6 +31,13 @@ type CaseFromApi = {
   image_url?: string | null;
   case_type?: string | null;
   homework_type?: "Q&A" | "Annotate" | null;
+};
+
+type RemoteHomeworkMeta = {
+  assigned: boolean;
+  dueAt?: string;
+  closed: boolean;
+  homeworkType?: "Q&A" | "Annotate";
 };
 
 
@@ -74,6 +80,21 @@ const myAnnotations = mockCases
 
 
 type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "progress" | "settings";
+type CaseLibrarySort = "newest" | "oldest" | "az" | "za";
+
+type SubmissionRecord = {
+  id: string;
+  homework_id: string;
+  case_id: string;
+  case_title: string;
+  student_id: string;
+  status: "none" | "submitted" | "grading" | "graded";
+  score?: number;
+  feedback?: string;
+  notes?: string;
+  updated_at?: string;
+  created_at?: string;
+};
 
 type StudentStats = {
   casesCompleted: number;
@@ -123,6 +144,8 @@ export default function StudentDashboard() {
   }, [activeView]);
 
   const [casesFromApi, setCasesFromApi] = useState<CaseFromApi[]>([]);
+  const [remoteHomeworkByCase, setRemoteHomeworkByCase] = useState<Record<string, RemoteHomeworkMeta>>({});
+  const [loadingMyHomework, setLoadingMyHomework] = useState(false);
 
   const loadCases = async () => {
     try {
@@ -139,10 +162,66 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    if (activeView === "cases") {
+    if (activeView === "cases" || activeView === "annotations") {
       loadCases();
     }
   }, [activeView]);
+
+  useEffect(() => {
+    if (activeView !== "annotations" || !user?.user_id) return;
+
+    let cancelled = false;
+
+    const loadHomework = async () => {
+      try {
+        setLoadingMyHomework(true);
+
+        if (casesFromApi.length === 0) {
+          setRemoteHomeworkByCase({});
+          return;
+        }
+
+        const entries = await Promise.all(
+          casesFromApi.map(async (c) => {
+            try {
+              const res = await fetch(
+                `${API_BASE}/api/instructor/homeworks/by-case?caseId=${encodeURIComponent(c.case_id)}&userId=${encodeURIComponent(user.user_id || "")}`
+              );
+              if (!res.ok) {
+                return [c.case_id, { assigned: false, closed: false } as RemoteHomeworkMeta] as const;
+              }
+
+              const data = await res.json();
+              const hw = data?.homework;
+              return [
+                c.case_id,
+                {
+                  assigned: Boolean(data?.assigned),
+                  dueAt: hw?.due_at,
+                  closed: hw ? hw.status !== "active" : false,
+                  homeworkType: hw?.homework_type,
+                } as RemoteHomeworkMeta,
+              ] as const;
+            } catch {
+              return [c.case_id, { assigned: false, closed: false } as RemoteHomeworkMeta] as const;
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setRemoteHomeworkByCase(Object.fromEntries(entries));
+        }
+      } finally {
+        if (!cancelled) setLoadingMyHomework(false);
+      }
+    };
+
+    loadHomework();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, casesFromApi, user?.user_id]);
 
   const caseLibraryCases = useMemo(() => {
     const dbCases = casesFromApi.map((c) => ({
@@ -160,6 +239,85 @@ export default function StudentDashboard() {
   }, [casesFromApi]);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [caseLibraryFilter, setCaseLibraryFilter] = useState<"all" | "Annotate" | "Q&A">("all");
+  const [caseLibrarySearch, setCaseLibrarySearch] = useState("");
+  const [caseLibrarySort, setCaseLibrarySort] = useState<CaseLibrarySort>("newest");
+  const [myHomeworkFilter, setMyHomeworkFilter] = useState<"all" | "Annotate" | "Q&A">("all");
+  const [myHomeworkSearch, setMyHomeworkSearch] = useState("");
+  const [myHomeworkSort, setMyHomeworkSort] = useState<CaseLibrarySort>("newest");
+
+  const caseLibraryVisibleCases = useMemo(() => {
+    const q = caseLibrarySearch.trim().toLowerCase();
+
+    let list = caseLibraryCases;
+    if (caseLibraryFilter !== "all") {
+      list = list.filter((c) => {
+        const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        return hwType === caseLibraryFilter;
+      });
+    }
+
+    if (q) {
+      list = list.filter((c) => {
+        const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        const haystack = `${c.title} ${c.description} ${c.category} ${hwType}`.toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    const parseTime = (s?: string | null) => {
+      if (!s) return 0;
+      const t = Date.parse(s);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    return [...list].sort((a, b) => {
+      if (caseLibrarySort === "az") return a.title.localeCompare(b.title);
+      if (caseLibrarySort === "za") return b.title.localeCompare(a.title);
+
+      const ta = parseTime(a.createdAt as string | null | undefined);
+      const tb = parseTime(b.createdAt as string | null | undefined);
+      if (caseLibrarySort === "oldest") return ta - tb;
+      return tb - ta;
+    });
+  }, [caseLibraryCases, caseLibraryFilter, caseLibrarySearch, caseLibrarySort]);
+
+  const myHomeworkVisibleCases = useMemo(() => {
+    const q = myHomeworkSearch.trim().toLowerCase();
+    const assigned = caseLibraryCases.filter((c) => remoteHomeworkByCase[c.id]?.assigned);
+
+    let list = assigned;
+    if (myHomeworkFilter !== "all") {
+      list = list.filter((c) => {
+        const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        return hwType === myHomeworkFilter;
+      });
+    }
+
+    if (q) {
+      list = list.filter((c) => {
+        const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        const haystack = `${c.title} ${c.description} ${c.category} ${hwType}`.toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    const parseTime = (s?: string | null) => {
+      if (!s) return 0;
+      const t = Date.parse(s);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    return [...list].sort((a, b) => {
+      if (myHomeworkSort === "az") return a.title.localeCompare(b.title);
+      if (myHomeworkSort === "za") return b.title.localeCompare(a.title);
+
+      const ta = parseTime(a.createdAt as string | null | undefined);
+      const tb = parseTime(b.createdAt as string | null | undefined);
+      if (myHomeworkSort === "oldest") return ta - tb;
+      return tb - ta;
+    });
+  }, [caseLibraryCases, remoteHomeworkByCase, myHomeworkFilter, myHomeworkSearch, myHomeworkSort]);
 
   // Close profile menu on outside click or Escape
   useEffect(() => {
@@ -178,6 +336,110 @@ export default function StudentDashboard() {
   // One source of truth for stats (cards + CSV both consume this)
   const [stats, setStats] = useState<StudentStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [studentSubmissions, setStudentSubmissions] = useState<SubmissionRecord[]>([]);
+  const [forumContributionCount, setForumContributionCount] = useState<number>(0);
+
+  useEffect(() => {
+    const loadProgress = async () => {
+      if (!user?.user_id) return;
+      try {
+        const submissionsRes = await fetch(`${API_BASE}/api/instructor/submissions`);
+        if (!submissionsRes.ok) throw new Error("Submissions load failed");
+        const rawSubmissions: SubmissionRecord[] = await submissionsRes.json();
+        const mine = rawSubmissions.filter((sub) => sub.student_id === user.user_id);
+        setStudentSubmissions(mine);
+
+        const forumRes = await fetch(`${API_BASE}/forum`);
+        if (forumRes.ok) {
+          const threads = await forumRes.json();
+          const contributions = (threads || []).filter((thread: any) => thread.author?.user_id === user.user_id).length;
+          setForumContributionCount(contributions);
+        }
+      } catch (e) {
+        console.warn("Unable to load live student progress", e);
+      }
+    };
+    loadProgress();
+  }, [user?.user_id]);
+
+  useEffect(() => {
+    const getDayKey = (iso?: string) => {
+      if (!iso) return null;
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}-${d.getDate().toString().padStart(2, "0")}`;
+    };
+
+    const computeStats = () => {
+      const submissions = studentSubmissions;
+      const totalCases = Math.max(caseLibraryCases.length, 1);
+      const graded = submissions.filter((s) => s.status === "graded");
+      const active = submissions.filter((s) => s.status === "submitted" || s.status === "grading");
+      const daysWithActivity = new Set(
+        submissions
+          .map((s) => getDayKey(s.updated_at ?? s.created_at))
+          .filter((d): d is string => Boolean(d))
+      );
+
+      let streak = 0;
+      const today = new Date();
+      while (true) {
+        const dayKey = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, "0")}-${today.getDate().toString().padStart(2, "0")}`;
+        if (!daysWithActivity.has(dayKey)) break;
+        streak += 1;
+        today.setDate(today.getDate() - 1);
+      }
+
+      const accuracy = graded.length
+        ? Math.round(graded.reduce((acc, cur) => acc + (cur.score ?? 0), 0) / graded.length)
+        : 75;
+
+      const casesCompleted = new Set(graded.map((s) => s.case_id)).size;
+      const completionRate = Math.min(100, Math.max(0, Math.round((casesCompleted / totalCases) * 100)));
+      const collab = Math.min(100, 40 + forumContributionCount * 5 + Math.round((submissions.length / totalCases) * 50));
+
+      setStats({
+        casesCompleted,
+        activeAnnotations: active.length,
+        feedbackReceived: submissions.filter((s) => !!s.feedback || !!s.notes).length,
+        studyStreakDays: streak,
+        annotationAccuracyPct: accuracy,
+        completionRatePct: completionRate,
+        collaborationScorePct: collab,
+      });
+    };
+
+    computeStats();
+  }, [studentSubmissions, caseLibraryCases.length, forumContributionCount]);
+
+  const recentActivities = useMemo(() => {
+    return studentSubmissions
+      .slice() // keep original as-is
+      .sort((a, b) => {
+        const aDate = new Date(a.updated_at ?? a.created_at ?? "").getTime();
+        const bDate = new Date(b.updated_at ?? b.created_at ?? "").getTime();
+        return bDate - aDate;
+      })
+      .slice(0, 5)
+      .map((entry) => {
+        const at = new Date(entry.updated_at ?? entry.created_at ?? Date.now());
+        return {
+          title:
+            entry.status === "graded"
+              ? `Graded: ${entry.case_title}`
+              : entry.status === "submitted"
+              ? `Submitted: ${entry.case_title}`
+              : `In progress: ${entry.case_title}`,
+          detail:
+            entry.score != null
+              ? `Score ${entry.score}%` // assuming 0-100
+              : entry.feedback
+              ? "Feedback available"
+              : "Awaiting review",
+          date: at.toLocaleString(),
+        };
+      });
+  }, [studentSubmissions]);
 
   useEffect(() => {
     console.log("Current user in dashboard:", user);
@@ -279,7 +541,7 @@ export default function StudentDashboard() {
   const navItems = [
     { id: "overview", label: "Overview", icon: Gauge },
     { id: "cases", label: "Case Library", icon: FolderOpen },
-    { id: "annotations", label: "My Annotations", icon: Edit },
+    { id: "annotations", label: "My Homework", icon: Edit },
     { id: "collaboration", label: "Forums", icon: Users },
     { id: "progress", label: "Progress", icon: ChartLine },
   ] as const;
@@ -546,63 +808,162 @@ export default function StudentDashboard() {
 
           {activeView === "annotations" && (
             <div className="p-6" data-testid="view-annotations">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">{t("myAnnotations")}</h2>
-                <Link href="/student">
-                  <Button variant="outline" size="sm">{t("backToOverview")}</Button>
-                </Link>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold">My Homework</h2>
               </div>
 
-              {myAnnotations.length === 0 ? (
+              {loadingMyHomework ? (
+                <div className="text-sm text-muted-foreground">Loading homework...</div>
+              ) : myHomeworkVisibleCases.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  {t("youDontHaveAnnotations")}
+                  No assigned homework right now.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {myAnnotations.map((annot) => {
-                    const hw = homeworkByCase[annot.caseId];
-                    const my = mySubmissionByCase[annot.caseId];
+                <>
+                  <Card className="mb-6">
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input
+                          type="text"
+                          placeholder="Search homework by title/description..."
+                          value={myHomeworkSearch}
+                          onChange={(e) => setMyHomeworkSearch(e.target.value)}
+                          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                        />
+                        <select
+                          value={myHomeworkFilter}
+                          onChange={(e) => setMyHomeworkFilter(e.target.value as "all" | "Annotate" | "Q&A")}
+                          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                          title="Filter my homework by type"
+                        >
+                          <option value="all">All Homework Types</option>
+                          <option value="Annotate">Annotate</option>
+                          <option value="Q&A">Q&amp;A</option>
+                        </select>
+                        <select
+                          value={myHomeworkSort}
+                          onChange={(e) => setMyHomeworkSort(e.target.value as CaseLibrarySort)}
+                          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                          title="Sort my homework"
+                        >
+                          <option value="newest">Sort: Newest</option>
+                          <option value="oldest">Sort: Oldest</option>
+                          <option value="az">Sort: A → Z</option>
+                          <option value="za">Sort: Z → A</option>
+                        </select>
+                      </div>
 
-                    return (
-                      <div key={annot.caseId} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="text-sm font-semibold">{annot.caseTitle}</h4>
-                            <p className="text-xs text-muted-foreground">Last edited {annot.updatedAgo}</p>
-                          </div>
-
-                          {/* Status badge theo yêu cầu */}
-                          <div className="flex items-center gap-2">
-                            {hw && <Badge>{t("homework")}</Badge>}
-                            {hw?.closed ? (
-                              my?.status === "graded" ? (
-                                <Badge variant="default">{t("score")}: {my?.score}/10</Badge>
-                              ) : (
-                                <Badge variant="secondary">{t("grading")}</Badge>
-                              )
-                            ) : (
-                              hw && (
-                                <Badge variant="outline">
-                                  {t("dueInDays").replace("{{days}}", String(Math.max(0, daysLeft(hw?.dueAt) ?? 0)))}
-                                </Badge>
-                              )
-                            )}
-                          </div>
+                      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                        <div>
+                          Showing <span className="font-medium">{myHomeworkVisibleCases.length}</span> homework
+                          {myHomeworkFilter !== "all" ? ` • Type: ${myHomeworkFilter}` : ""}
+                          {myHomeworkSearch.trim() ? ` • Search: "${myHomeworkSearch.trim()}"` : ""}
                         </div>
+                        <button
+                          className="hover:underline"
+                          onClick={() => {
+                            setMyHomeworkSearch("");
+                            setMyHomeworkFilter("all");
+                            setMyHomeworkSort("newest");
+                          }}
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-                        <div className="flex justify-end">
-                          {hw?.closed ? (
-                            <Button size="sm" variant="outline" disabled>{t("closed")}</Button>
-                          ) : (
-                            <Link href={`/annotation/${annot.caseId}`}>
-                              <Button size="sm">Open</Button>
-                            </Link>
-                          )}
-                        </div>
+                  {(() => {
+                    const renderGrid = (cases: typeof myHomeworkVisibleCases) => (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {cases.map((annot) => {
+                          const hw = remoteHomeworkByCase[annot.id];
+                          const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
+
+                          return (
+                            <div key={annot.id} className="space-y-2">
+                              <CaseCard
+                                case={annot}
+                                onClick={() => setLocation(`/annotation/${annot.id}`)}
+                                homeworkType={hw?.homeworkType}
+                              />
+                              <div className="flex items-center px-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge>{t("homework")}</Badge>
+                                  {hw?.closed ? (
+                                    <Badge variant="destructive">{t("closed")}</Badge>
+                                  ) : (
+                                    dl !== null && (
+                                      <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
-                  })}
-                </div>
+
+                    const annotateCases = myHomeworkVisibleCases.filter((c) => {
+                      const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+                      return hwType === "Annotate";
+                    });
+                    const qaCases = myHomeworkVisibleCases.filter((c) => {
+                      const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+                      return hwType === "Q&A";
+                    });
+
+                    const renderSection = (
+                      title: "Annotate" | "Q&A",
+                      cases: typeof myHomeworkVisibleCases,
+                      shellClassName: string,
+                      pillClassName: string,
+                    ) => (
+                      <div className={shellClassName}>
+                        <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                          <span className={pillClassName}>{title}</span>
+                        </h3>
+                        {renderGrid(cases)}
+                      </div>
+                    );
+
+                    if (myHomeworkFilter === "Annotate") {
+                      return renderSection(
+                        "Annotate",
+                        annotateCases,
+                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                      );
+                    }
+
+                    if (myHomeworkFilter === "Q&A") {
+                      return renderSection(
+                        "Q&A",
+                        qaCases,
+                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-6">
+                        {annotateCases.length > 0 && renderSection(
+                          "Annotate",
+                          annotateCases,
+                          "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                          "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                        )}
+                        {qaCases.length > 0 && renderSection(
+                          "Q&A",
+                          qaCases,
+                          "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                          "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                        )}
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </div>
           )}
@@ -613,84 +974,217 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">{t("caseLibrary")}</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {caseLibraryCases.map((case_) => {
-                  const hw = homeworkByCase[case_.id];
-                  const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
-                  const hwType = homeworkTypeByCase[case_.id] || (case_ as any).homeworkType;
 
-                  return (
-                    <div key={case_.id} className="space-y-2">
-                      {/* Card gốc */}
-                      <CaseCard
-                        case={case_}
-                        onClick={() => setLocation(`/annotation/${case_.id}`)}
-                        homeworkType={hwType}
-                      />
+              <Card className="mb-6">
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Search cases by title/description..."
+                      value={caseLibrarySearch}
+                      onChange={(e) => setCaseLibrarySearch(e.target.value)}
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                    />
+                    <select
+                      value={caseLibraryFilter}
+                      onChange={(e) => setCaseLibraryFilter(e.target.value as "all" | "Annotate" | "Q&A")}
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      title="Filter by homework type"
+                    >
+                      <option value="all">All Homework Types</option>
+                      <option value="Annotate">Annotate</option>
+                      <option value="Q&A">Q&amp;A</option>
+                    </select>
+                    <select
+                      value={caseLibrarySort}
+                      onChange={(e) => setCaseLibrarySort(e.target.value as CaseLibrarySort)}
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      title="Sort case library"
+                    >
+                      <option value="newest">Sort: Newest</option>
+                      <option value="oldest">Sort: Oldest</option>
+                      <option value="az">Sort: A → Z</option>
+                      <option value="za">Sort: Z → A</option>
+                    </select>
+                  </div>
 
-                      {/* Meta bar cho Assignment */}
-                      <div className="flex items-center px-1">
-                        <div className="flex items-center gap-2">
-                          {hw && <Badge>{t("homework")}</Badge>}
-                          {hw ? (
-                            hw.closed ? (
-                              <Badge variant="destructive">{t("closed")}</Badge>
-                            ) : (
-                              <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
-                            )
-                          ) : null}
-                        </div>
-                      </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <div>
+                      Showing <span className="font-medium">{caseLibraryVisibleCases.length}</span> cases
+                      {caseLibraryFilter !== "all" ? ` • Type: ${caseLibraryFilter}` : ""}
+                      {caseLibrarySearch.trim() ? ` • Search: "${caseLibrarySearch.trim()}"` : ""}
+                    </div>
+                    <button
+                      className="hover:underline"
+                      onClick={() => {
+                        setCaseLibrarySearch("");
+                        setCaseLibraryFilter("all");
+                        setCaseLibrarySort("newest");
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {caseLibraryVisibleCases.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No matches. Try another keyword or reset filters.</p>
+              ) : (
+                (() => {
+                  const renderGrid = (cases: typeof caseLibraryVisibleCases) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {cases.map((case_) => {
+                        const hw = homeworkByCase[case_.id];
+                        const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
+                        const hwType = homeworkTypeByCase[case_.id] || (case_ as any).homeworkType;
+                        return (
+                          <div key={case_.id} className="space-y-2">
+                            <CaseCard
+                              case={case_}
+                              onClick={() => setLocation(`/annotation/${case_.id}`)}
+                              homeworkType={hwType}
+                            />
+                            <div className="flex items-center px-1">
+                              <div className="flex items-center gap-2">
+                                {hw && <Badge>{t("homework")}</Badge>}
+                                {hw ? (
+                                  hw.closed ? (
+                                    <Badge variant="destructive">{t("closed")}</Badge>
+                                  ) : (
+                                    <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
+                                  )
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
-                })}
-              </div>
+
+                  const annotateCases = caseLibraryVisibleCases.filter((c) => {
+                    const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+                    return hwType === "Annotate";
+                  });
+                  const qaCases = caseLibraryVisibleCases.filter((c) => {
+                    const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+                    return hwType === "Q&A";
+                  });
+
+                  const renderSection = (
+                    title: "Annotate" | "Q&A",
+                    cases: typeof caseLibraryVisibleCases,
+                    shellClassName: string,
+                    pillClassName: string,
+                  ) => (
+                    <div className={shellClassName}>
+                      <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                        <span className={pillClassName}>{title}</span>
+                      </h3>
+                      {renderGrid(cases)}
+                    </div>
+                  );
+
+                  if (caseLibraryFilter === "Annotate") {
+                    return renderSection(
+                      "Annotate",
+                      annotateCases,
+                      "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                    );
+                  }
+
+                  if (caseLibraryFilter === "Q&A") {
+                    return renderSection(
+                      "Q&A",
+                      qaCases,
+                      "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                      "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-6">
+                      {annotateCases.length > 0 && renderSection(
+                        "Annotate",
+                        annotateCases,
+                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
+                      )}
+                      {qaCases.length > 0 && renderSection(
+                        "Q&A",
+                        qaCases,
+                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
+                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
+                      )}
+                    </div>
+                  );
+                })()
+              )}
             </div>
           )}
 
           {activeView === "progress" && stats && (
             <div className="p-6" data-testid="view-progress">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">{t("learningProgress")}</h2>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-2xl font-bold">{t("learningProgress")}</h2>
+                  <p className="text-sm text-muted-foreground">Updated {new Date().toLocaleString()}</p>
+                </div>
                 <Button onClick={exportStudentProgressCSV}>{t("exportCSV")}</Button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">{t("overallPerformance")}</h3>
-                    <div className="space-y-4">
-                      <div><div className="flex justify-between text-sm mb-1"><span>Annotation Accuracy</span><span data-testid="accuracy-percentage">{stats.annotationAccuracyPct}%</span></div><Progress value={stats.annotationAccuracyPct} className="h-2" /></div>
-                      <div><div className="flex justify-between text-sm mb-1"><span>Case Completion Rate</span><span data-testid="completion-percentage">{stats.completionRatePct}%</span></div><Progress value={stats.completionRatePct} className="h-2" /></div>
-                      <div><div className="flex justify-between text-sm mb-1"><span>Collaboration Score</span><span data-testid="collaboration-percentage">{stats.collaborationScorePct}%</span></div><Progress value={stats.collaborationScorePct} className="h-2" /></div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">{t("recentAchievements")}</h3>
-                    <div className="space-y-3 text-sm text-muted-foreground">
-                      <div>{t("caseMaster")} — {t("completedCases").replace("{{count}}", String(Math.max(1, Math.round(stats.casesCompleted / 2))))}</div>
-                      <div>{t("perfectAnnotation")} — {t("accuracyOnStrokeCase").replace("{{accuracy}}", String(stats.annotationAccuracyPct))}</div>
-                      <div>{t("teamPlayer")} — {t("collaborationScore")}: {stats.collaborationScorePct}%</div>
-                    </div>
-                  </CardContent>
-                </Card>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <StatCard label="Cases Completed" value={stats.casesCompleted} icon={FolderOpen} testId="stat-cases-completed" />
+                <StatCard label="Active Annotations" value={stats.activeAnnotations} icon={Edit} testId="stat-active-annotations" />
+                <StatCard label="Study Streak" value={`${stats.studyStreakDays} days`} icon={Calendar} testId="stat-study-streak" />
+                <StatCard label="Collaboration" value={`${stats.collaborationScorePct}%`} icon={Users} testId="stat-collaboration" />
               </div>
+
+              <Card className="mb-6">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Performance Progress</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1"><span>Annotation Accuracy</span><span data-testid="accuracy-percentage">{stats.annotationAccuracyPct}%</span></div>
+                      <Progress value={stats.annotationAccuracyPct} className="h-2" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1"><span>Case Completion</span><span data-testid="completion-percentage">{stats.completionRatePct}%</span></div>
+                      <Progress value={stats.completionRatePct} className="h-2" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1"><span>Collaboration Impact</span><span data-testid="collaboration-percentage">{stats.collaborationScorePct}%</span></div>
+                      <Progress value={stats.collaborationScorePct} className="h-2" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mb-6">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Recent activity</h3>
+                  <ul className="space-y-3 text-sm text-muted-foreground">
+                    {recentActivities.length === 0 && <li>No activity yet. Start your first assignment to activate progress updates.</li>}
+                    {recentActivities.map((item, index) => (
+                      <li key={index} className="rounded-lg bg-slate-100 dark:bg-slate-800 p-3">
+                        <div className="font-medium text-sm text-foreground">{item.title}</div>
+                        <div>{item.detail}</div>
+                        <small className="text-xs text-muted-foreground">{item.date}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
 
               <Card>
                 <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">{t("studyTimeline")}</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4 p-3 border-l-4 border-green-500 bg-green-500/10">
-                      <div className="flex-shrink-0"><div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm"><CheckCircle className="h-4 w-4" /></div></div>
-                      <div className="flex-1"><p className="font-medium">{t("completedBrainMRICase")}</p><p className="text-sm text-muted-foreground">2 hours ago - {t("scoreLabel")}</p></div>
-                    </div>
-                    <div className="flex items-center space-x-4 p-3 border-l-4 border-primary bg-primary/10">
-                      <div className="flex-shrink-0"><div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm"><MessageCircle className="h-4 w-4" /></div></div>
-                      <div className="flex-1"><p className="font-medium">{t("receivedFeedback")}</p><p className="text-sm text-muted-foreground">4 hours ago - {t("doctorReviewedYourWork").replace("{{doctor}}", "Dr. Smith")}</p></div>
-                    </div>
+                  <h3 className="text-lg font-semibold mb-4">Milestones</h3>
+                  <div className="space-y-4 text-sm text-muted-foreground">
+                    <div>🔥 {stats.casesCompleted >= 1 ? "First case complete" : "Complete your first case"}</div>
+                    <div>🎯 {stats.completionRatePct >= 80 ? "On track for course mastery" : "Focus on finishing pending assessments"}</div>
+                    <div>👥 {forumContributionCount >= 1 ? `${forumContributionCount} forum contributions` : "Engage in forums to increase collaboration score"}</div>
                   </div>
                 </CardContent>
               </Card>
