@@ -1556,6 +1556,7 @@ export default function AnnotationView() {
                           message: case_.description || "",
                           tags: [case_.category].filter(Boolean),
                           caseId: caseId,
+                          imageUrl: hw?.annotationImage || case_.imageUrl || undefined,
                         };
                         try {
                           sessionStorage.setItem("discussionPrefill", JSON.stringify(prefill));

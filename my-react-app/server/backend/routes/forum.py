@@ -67,6 +67,32 @@ async def get_all_tags():
         tags.update(doc.get("tags", []))
     return sorted(tags)
 
+async def resolve_forum_author(author):
+    """Return latest author info, falling back to stored values."""
+    if not author or not author.get("user_id"):
+        return author
+
+    try:
+        user = await users_collection.find_one({"_id": ObjectId(author.get("user_id"))})
+    except Exception:
+        user = None
+
+    if not user:
+        return author
+
+    avatar_url = None
+    if user.get("profile_photo"):
+        avatar_url = f"http://127.0.0.1:8000/api/user/profile-photo/{user['profile_photo']}" 
+
+    name = f"{user.get('firstName', '')} {user.get('lastName', '')}".strip() or author.get("name")
+
+    return {
+        "user_id": str(user.get("_id")),
+        "name": name,
+        "avatarUrl": avatar_url,
+    }
+
+
 def serialize_doc(doc):
     """Convert MongoDB _id to string and handle nested replies."""
     if not doc:
@@ -81,13 +107,43 @@ def serialize_doc(doc):
                 reply["id"] = str(reply["id"])
     return doc
 
+async def hydrate_thread(thread):
+    if not thread:
+        return thread
+
+    thread = serialize_doc(thread)
+
+    if "author" in thread and isinstance(thread["author"], dict):
+        thread["author"] = await resolve_forum_author(thread["author"])
+
+    if "replies" in thread and isinstance(thread["replies"], list):
+        updated_replies = []
+        for reply in thread["replies"]:
+            if "author" in reply and isinstance(reply["author"], dict):
+                reply["author"] = await resolve_forum_author(reply["author"])
+            updated_replies.append(reply)
+        thread["replies"] = updated_replies
+
+    return thread
+
 @router.get("")
 async def get_all_threads():
     """Fetch all forum threads sorted by latest first."""
     threads = []
     async for thread in forum_collection.find().sort("timestamp", -1):
-        threads.append(serialize_doc(thread))
+        hydrated = await hydrate_thread(thread)
+        threads.append(hydrated)
     return threads
+
+
+@router.get("/{thread_id}")
+async def get_thread(thread_id: str):
+    """Fetch a single thread by ID."""
+    thread = await forum_collection.find_one({"_id": ObjectId(thread_id)})
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    return await hydrate_thread(thread)
 
 
 @router.post("/create")
@@ -97,8 +153,9 @@ async def create_thread(
     content: str = Form(...),
     tags: str = Form(""),
     image: Optional[UploadFile] = None,
+    image_url: Optional[str] = Form(None),
 ):
-    """Create a new thread with optional image upload."""
+    """Create a new thread with optional image upload or image URL."""
 
     user = await users_collection.find_one({"_id": ObjectId(user_id)})
     if not user:
@@ -107,14 +164,16 @@ async def create_thread(
     user_folder = BASE_UPLOAD_DIR / str(user_id) / "forums"
     user_folder.mkdir(parents=True, exist_ok=True)
 
-    image_url = None
+    resolved_image_url = None
     if image:
         ext = os.path.splitext(image.filename)[1]
         filename = f"forum_post_{int(datetime.now().timestamp())}{ext}"
         file_path = user_folder / filename
         with open(file_path, "wb") as f:
             f.write(await image.read())
-        image_url = f"http://127.0.0.1:8000/uploads/{user_id}/forums/{filename}"
+        resolved_image_url = f"http://127.0.0.1:8000/uploads/{user_id}/forums/{filename}"
+    elif image_url:
+        resolved_image_url = image_url.strip() or None
 
     tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
@@ -138,7 +197,7 @@ async def create_thread(
         title=title,
         content=content,
         tags=tags_list,
-        imageUrl=image_url,
+        imageUrl=resolved_image_url,
         replies=[],
         timestamp=datetime.now(),
     )
@@ -200,11 +259,3 @@ async def add_reply(
         status_code=200,
         content={"status": "success", "reply": jsonable_encoder(reply)}
     )
-
-@router.get("/{thread_id}")
-async def get_thread(thread_id: str):
-    """Fetch a single thread by ID."""
-    thread = await forum_collection.find_one({"_id": ObjectId(thread_id)})
-    if not thread:
-        raise HTTPException(status_code=404, detail="Thread not found")
-    return serialize_doc(thread)
