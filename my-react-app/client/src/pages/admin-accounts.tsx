@@ -177,7 +177,7 @@ export default function AdminAccounts() {
   if (!user || user.role !== "admin") return null;
 
   return (
-    <div className="min-h-screen bg-background" data-testid="admin-accounts">
+    <div className="min-h-screen silver-ambient" data-testid="admin-accounts">
       <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
         <div className="flex items-center justify-between w-full">
           <button

@@ -93,7 +93,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen silver-ambient flex flex-col">
       <header className="bg-card border-b border-border h-16 px-6 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <Button variant="ghost" size="sm" onClick={() => setLocation("/student")}>

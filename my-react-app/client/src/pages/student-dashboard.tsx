@@ -654,7 +654,7 @@ export default function StudentDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-background" data-testid="student-dashboard">
+    <div className="min-h-screen silver-ambient" data-testid="student-dashboard">
       {/* Sticky Header */}
       <header className="bg-card border-b border-border px-6 h-16 flex items-center sticky top-0 z-40">
         <div className="flex items-center justify-between w-full">
@@ -700,9 +700,9 @@ export default function StudentDashboard() {
         </div>
       </header>
 
-      <div className="flex">
+      <div className="flex min-h-[calc(100vh-4rem)]">
         <aside
-          className="group/sidebar w-16 hover:w-64 transition-all duration-300 bg-card border-r border-border sticky top-16 h-[calc(100vh-4rem)] overflow-hidden hover:overflow-auto"
+          className="group/sidebar w-16 hover:w-64 transition-all duration-300 bg-card border-r border-border self-stretch overflow-hidden hover:overflow-auto"
         >
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
