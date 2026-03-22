@@ -55,6 +55,14 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+function roundPoint(v: number) {
+  return Math.round(v * 10) / 10;
+}
+
+function formatPoint(v: number) {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
 function timeAgo(iso?: string) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -71,7 +79,16 @@ function timeAgo(iso?: string) {
   return `${day}d ago`;
 }
 
-export function buildDefaultCriteria(): Criterion[] {
+export function buildDefaultCriteria(maxPoints = 10): Criterion[] {
+  const safeMax = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : 10;
+  const ratio = safeMax / 10;
+
+  const scale = (value: number, criterionMax: number) => {
+    if (value === 0) return 0;
+    if (value === criterionMax) return roundPoint(criterionMax * ratio);
+    return roundPoint(value * ratio);
+  };
+
   const correctnessLevels: Level[] = [
     {
       key: "excellent",
@@ -157,9 +174,12 @@ export function buildDefaultCriteria(): Criterion[] {
     {
       id: "correctness",
       title: "Correctness",
-      max: 5,
+      max: roundPoint(5 * ratio),
       help: "Accuracy of findings & reasoning.",
-      levels: correctnessLevels,
+      levels: correctnessLevels.map((l) => ({
+        ...l,
+        points: scale(l.points, 5),
+      })),
       selectedKey: "poor",
       points: 0,
       comment: "",
@@ -167,9 +187,12 @@ export function buildDefaultCriteria(): Criterion[] {
     {
       id: "completeness",
       title: "Completeness",
-      max: 3,
+      max: roundPoint(3 * ratio),
       help: "Coverage of requirements & steps.",
-      levels: completenessLevels,
+      levels: completenessLevels.map((l) => ({
+        ...l,
+        points: scale(l.points, 3),
+      })),
       selectedKey: "poor",
       points: 0,
       comment: "",
@@ -177,9 +200,12 @@ export function buildDefaultCriteria(): Criterion[] {
     {
       id: "presentation",
       title: "Presentation",
-      max: 2,
+      max: roundPoint(2 * ratio),
       help: "Clarity & structure of response.",
-      levels: presentationLevels,
+      levels: presentationLevels.map((l) => ({
+        ...l,
+        points: scale(l.points, 2),
+      })),
       selectedKey: "poor",
       points: 0,
       comment: "",
@@ -198,6 +224,7 @@ export default function RubricPanel({
   externalAiLoading,
   onRequestExternalAi,
   applyAiTrigger,
+  maxPoints = 10,
 }: {
   onSubmit: (total: number, rubric: RubricItem[]) => void;
   disabled?: boolean;
@@ -211,9 +238,11 @@ export default function RubricPanel({
   onRequestExternalAi?: () => void;
   /** Increment to auto-apply the current AI suggestion */
   applyAiTrigger?: number;
+  maxPoints?: number;
 }) {
-  const [criteria, setCriteria] = useState<Criterion[]>(() => buildDefaultCriteria());
+  const [criteria, setCriteria] = useState<Criterion[]>(() => buildDefaultCriteria(maxPoints));
   const [openComment, setOpenComment] = useState<Record<string, boolean>>({});
+  const [editingPointsFor, setEditingPointsFor] = useState<string | null>(null);
   const [ai, setAi] = useState<AiSuggestion | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -262,7 +291,7 @@ export default function RubricPanel({
   );
 
   useEffect(() => {
-    const base = buildDefaultCriteria();
+    const base = buildDefaultCriteria(maxPoints);
     if (!initialRubric || !Array.isArray(initialRubric) || initialRubric.length === 0) {
       setCriteria(base);
       lastSavedSnapshot.current = JSON.stringify(
@@ -273,7 +302,7 @@ export default function RubricPanel({
 
     const hydrated = base.map((c) => {
       const hit = initialRubric.find((x: any) => x?.id === c.id);
-      const pts = clamp(Number(hit?.points ?? 0), 0, c.max);
+      const pts = clamp(roundPoint(Number(hit?.points ?? 0)), 0, c.max);
       const comment = String(hit?.comment ?? "");
 
       const exact = c.levels.find((l) => l.points === pts);
@@ -284,7 +313,7 @@ export default function RubricPanel({
       }, c.levels[0]);
 
       const chosen = exact ?? nearest;
-      return { ...c, points: chosen.points, selectedKey: chosen.key, comment };
+      return { ...c, points: pts, selectedKey: chosen.key, comment };
     });
 
     setCriteria(hydrated);
@@ -292,7 +321,7 @@ export default function RubricPanel({
       hydrated.map((c) => ({ id: c.id, points: c.points, comment: c.comment ?? "", key: c.selectedKey }))
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(initialRubric ?? [])]);
+  }, [JSON.stringify(initialRubric ?? []), maxPoints]);
 
   const isDirty = useMemo(() => {
     const snapNow = JSON.stringify(
@@ -315,6 +344,21 @@ export default function RubricPanel({
         if (c.id !== criterionId) return c;
         const lvl = c.levels.find((l) => l.key === levelKey) ?? c.levels[0];
         return { ...c, selectedKey: lvl.key, points: lvl.points };
+      })
+    );
+  };
+
+  const setCustomPoints = (criterionId: string, raw: number) => {
+    setCriteria((prev) =>
+      prev.map((c) => {
+        if (c.id !== criterionId) return c;
+        const points = clamp(roundPoint(raw), 0, c.max);
+        const nearest = c.levels.reduce((best, l) => {
+          const db = Math.abs(l.points - points);
+          const da = Math.abs(best.points - points);
+          return db < da ? l : best;
+        }, c.levels[0]);
+        return { ...c, points, selectedKey: nearest.key };
       })
     );
   };
@@ -388,7 +432,7 @@ export default function RubricPanel({
   };
 
   const save = () => {
-    onSubmit(total, rubricPayload);
+    onSubmit(Math.round(total), rubricPayload);
     lastSavedSnapshot.current = JSON.stringify(
       criteria.map((c) => ({ id: c.id, points: c.points, comment: c.comment ?? "", key: c.selectedKey }))
     );
@@ -404,7 +448,7 @@ export default function RubricPanel({
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold">Rubric</h3>
                   <Badge variant="secondary">
-                    {total} / {maxTotal}
+                    {formatPoint(total)} / {formatPoint(maxTotal)}
                   </Badge>
                   <Badge variant="outline" className="text-xs">
                     {isDirty ? "Unsaved changes" : "Saved"}
@@ -412,7 +456,7 @@ export default function RubricPanel({
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button className="text-muted-foreground hover:text-foreground">
+                      <button className="text-muted-foreground hover:text-foreground" title="Rubric help">
                         <Info className="h-4 w-4" />
                       </button>
                     </TooltipTrigger>
@@ -534,9 +578,49 @@ export default function RubricPanel({
                                 </div>
                               ) : null}
                             </div>
-                            <Badge variant="outline" className="shrink-0">
-                              {c.points}/{c.max}
-                            </Badge>
+                            {editingPointsFor === c.id ? (
+                              <input
+                                type="number"
+                                step="0.1"
+                                min={0}
+                                max={c.max}
+                                value={c.points}
+                                className="h-8 w-[92px] rounded-md border bg-background px-2 text-xs"
+                                onChange={(e) => {
+                                  const parsed = Number(e.target.value);
+                                  if (!Number.isFinite(parsed)) return;
+                                  setCustomPoints(c.id, parsed);
+                                }}
+                                onBlur={(e) => {
+                                  const parsed = Number(e.target.value);
+                                  setCustomPoints(c.id, Number.isFinite(parsed) ? parsed : c.points);
+                                  setEditingPointsFor(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    const parsed = Number((e.currentTarget as HTMLInputElement).value);
+                                    setCustomPoints(c.id, Number.isFinite(parsed) ? parsed : c.points);
+                                    setEditingPointsFor(null);
+                                  }
+                                  if (e.key === "Escape") {
+                                    setEditingPointsFor(null);
+                                  }
+                                }}
+                                autoFocus
+                                title={`Adjust points for ${c.title}`}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => !disabled && setEditingPointsFor(c.id)}
+                                title="Click to edit criterion points"
+                                disabled={disabled}
+                              >
+                                <Badge variant="outline" className="shrink-0 cursor-pointer">
+                                  {formatPoint(c.points)}/{formatPoint(c.max)}
+                                </Badge>
+                              </button>
+                            )}
                           </div>
                         </div>
 

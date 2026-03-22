@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -106,6 +107,7 @@ export default function AnnotationView() {
   const case_ = remoteCase ?? mockCases.find((c) => c.id === caseId);
   const hw = remoteHomework;
   const isQnAHomework = hw?.homeworkType === "Q&A";
+  const isQnAStudentMode = user?.role === "student" && isQnAHomework;
 
   // Timer key scoped to case + user so timers are not shared between users
   const timerKey = `timer_${caseId}_${user?.user_id ?? 'guest'}`;
@@ -330,6 +332,8 @@ export default function AnnotationView() {
   // Sidebar tab state: "annotate" | "collaborate" | "ai-assistant" | "homework"
   const [activeSidebarTab, setActiveSidebarTab] = useState<"annotate" | "collaborate" | "ai-assistant" | "homework">("collaborate");
   const [showTabDropdown, setShowTabDropdown] = useState(false);
+  const [qnaNotes, setQnaNotes] = useState("");
+  const [qnaAnswers, setQnaAnswers] = useState<Array<{ index: number; value: any }>>([]);
 
   // Assignment requirements screen - check if already accepted (per-user per-case)
   const [showRequirements, setShowRequirements] = useState(() => {
@@ -367,6 +371,21 @@ export default function AnnotationView() {
 
   // Only run the timer for student users and after requirements are accepted
   useEffect(() => {
+    if (!isQnAStudentMode) return;
+    setActiveSidebarTab((prev) => (prev === "annotate" ? "homework" : prev));
+    setShowHistory(false);
+    setShowComparison(false);
+    setShowProperties(false);
+    setShowAIVision(false);
+  }, [isQnAStudentMode]);
+
+  useEffect(() => {
+    if (!isQnAStudentMode) return;
+    setQnaNotes(submission?.notes || "");
+    setQnaAnswers(submission?.answers || []);
+  }, [isQnAStudentMode, submission?.notes, submission?.answers]);
+
+  useEffect(() => {
     if (showRequirements) return;
     if (user?.role !== "student") return; // instructors don't have per-user timers here
     const timer = setInterval(() => {
@@ -392,6 +411,7 @@ export default function AnnotationView() {
 
   // Keyboard shortcuts
   useEffect(() => {
+    if (isQnAStudentMode) return;
     const handleKeyboard = (e: KeyboardEvent) => {
       if (e.key === "Delete" && annotation.selectedAnnotationIds.length > 0) {
         annotation.deleteSelectedAnnotations();
@@ -417,16 +437,20 @@ export default function AnnotationView() {
 
     window.addEventListener("keydown", handleKeyboard);
     return () => window.removeEventListener("keydown", handleKeyboard);
-  }, [annotation]);
+  }, [annotation, isQnAStudentMode]);
 
   // Fix 3: Auto-show/hide properties when selecting/deselecting
   useEffect(() => {
+    if (isQnAStudentMode) {
+      setShowProperties(false);
+      return;
+    }
     if (annotation.selectedAnnotationIds.length > 0) {
       setShowProperties(true);
     } else {
       setShowProperties(false); // This hides the panel when deselecting
     }
-  }, [annotation.selectedAnnotationIds]);
+  }, [annotation.selectedAnnotationIds, isQnAStudentMode]);
 
   const handleBack = () => {
     if (user?.role === "student") setLocation("/student");
@@ -553,6 +577,57 @@ export default function AnnotationView() {
     },
   ];
 
+  const qnaQuestions = Array.isArray(hw?.questions) ? hw.questions : [];
+  const qnaStatusLabel = submission?.status === "graded"
+    ? "Graded"
+    : submission?.status === "grading"
+    ? "Under review"
+    : submission?.status === "submitted"
+    ? "Submitted"
+    : "Not submitted";
+
+  const getQnaAnswerValue = (index: number) =>
+    qnaAnswers.find((answer) => answer.index === index)?.value ?? "";
+
+  const setQnaAnswerValue = (index: number, value: any) => {
+    setQnaAnswers((prev) => {
+      const next = [...prev];
+      const foundIndex = next.findIndex((answer) => answer.index === index);
+      if (foundIndex >= 0) {
+        next[foundIndex] = { index, value };
+      } else {
+        next.push({ index, value });
+      }
+      return next;
+    });
+  };
+
+  const submitQnAResponses = async () => {
+    if (!hw?.id) {
+      toast({
+        title: "No homework assigned",
+        description: "This case does not have an active homework yet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (hw.closed) {
+      toast({
+        title: "Assignment closed",
+        description: "This assignment is closed and cannot accept submissions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await submitHomework({
+      notes: qnaNotes,
+      files: submission?.files || [],
+      answers: qnaAnswers,
+    });
+  };
+
   return (
     <div className="h-screen bg-background flex flex-col" data-testid="annotation-view">
       {/* Case Locked Notification (students only) */}
@@ -580,7 +655,7 @@ export default function AnnotationView() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-lg font-semibold">
-              {case_.title} - Annotation
+              {case_.title} - {isQnAStudentMode ? "Q&A Assignment" : "Annotation"}
             </h1>
           </div>
 
@@ -606,15 +681,17 @@ export default function AnnotationView() {
                   <span className="text-sm font-mono font-medium">{formatTime(elapsedSeconds)}</span>
                 </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAIVision(!showAIVision)}
-                  className={showAIVision ? "bg-purple-50 border-purple-200" : ""}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  AI Vision
-                </Button>
+                {!isQnAStudentMode && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAIVision(!showAIVision)}
+                    className={showAIVision ? "bg-purple-50 border-purple-200" : ""}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    AI Vision
+                  </Button>
+                )}
               </>
             )}
             <div className="flex items-center space-x-2 pl-3 border-l border-border">
@@ -625,7 +702,7 @@ export default function AnnotationView() {
                   : "You"}
               </span>
             </div>
-            {user?.role === 'student' && (
+            {user?.role === 'student' && !isQnAStudentMode && (
               <Button
                 className="bg-primary text-primary-foreground hover:opacity-90"
                 onClick={handleSaveVersion}
@@ -640,7 +717,7 @@ export default function AnnotationView() {
       </header>
 
       {/* Annotation Toolbar (Horizontal at top) */}
-      {user?.role === 'student' && (
+      {user?.role === 'student' && !isQnAStudentMode && (
         <AnnotationToolbar
           annotation={annotation}
           onToggleHistory={() => setShowHistory(!showHistory)}
@@ -660,11 +737,93 @@ export default function AnnotationView() {
               <div className="p-6 space-y-6">
                 <Card>
                   <CardContent className="p-6 space-y-4">
-                    <div>
-                      <h2 className="text-2xl font-semibold">{case_.title}</h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {case_.description || "Answer the questions below and submit your work."}
-                      </p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h2 className="text-2xl font-semibold">{case_.title}</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {case_.description || "Answer the questions below and submit your work."}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="whitespace-nowrap">{qnaStatusLabel}</Badge>
+                    </div>
+
+                    {hw?.instructions && (
+                      <div className="rounded-lg border p-4 bg-card">
+                        <div className="font-medium mb-2">Instructions</div>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {hw.instructions}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Questions</h3>
+                      {qnaQuestions.length === 0 ? (
+                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                          No questions are available for this homework yet.
+                        </div>
+                      ) : (
+                        qnaQuestions.map((question: any, index: number) => (
+                          <div key={index} className="rounded-lg border bg-card p-4 space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-medium">Question {index + 1}</p>
+                                <p className="text-sm mt-1 whitespace-pre-wrap">{question.prompt}</p>
+                              </div>
+                              <Badge variant="secondary">{Number(question.points || 0)} pts</Badge>
+                            </div>
+
+                            {question.guidance && (
+                              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{question.guidance}</p>
+                            )}
+
+                            {question.type === "mcq" && Array.isArray(question.options) ? (
+                              <div className="space-y-2">
+                                {question.options.map((option: string, optionIndex: number) => (
+                                  <label key={optionIndex} className="flex items-center gap-2 rounded-md border p-2 text-sm cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name={`qna-question-${index}`}
+                                      checked={String(getQnaAnswerValue(index)) === String(optionIndex)}
+                                      onChange={() => setQnaAnswerValue(index, optionIndex)}
+                                      disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                                    />
+                                    <span>{option}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <Textarea
+                                value={String(getQnaAnswerValue(index) || "")}
+                                onChange={(e) => setQnaAnswerValue(index, e.target.value)}
+                                placeholder="Type your answer here..."
+                                className="min-h-[120px]"
+                                disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                              />
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Additional Notes</label>
+                      <Textarea
+                        value={qnaNotes}
+                        onChange={(e) => setQnaNotes(e.target.value)}
+                        placeholder="Optional notes for your instructor..."
+                        className="min-h-[100px]"
+                        disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={submitQnAResponses}
+                        disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                      >
+                        {subLoading ? "Submitting..." : "Submit Q&A Answers"}
+                      </Button>
                     </div>
 
                     {case_.imageUrl && (
@@ -677,14 +836,6 @@ export default function AnnotationView() {
                       </div>
                     )}
 
-                    {hw?.instructions && (
-                      <div className="rounded-lg border p-4 bg-card">
-                        <div className="font-medium mb-2">Instructions</div>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {hw.instructions}
-                        </p>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -1347,7 +1498,7 @@ export default function AnnotationView() {
             </aside>
           )}
 
-          {user?.role === 'student' && showComparison && (
+          {user?.role === 'student' && !isQnAStudentMode && showComparison && (
             <PeerComparison
               peerAnnotations={mockPeerAnnotations}
               currentUserId={user?.user_id || "current-user"}
@@ -1356,7 +1507,7 @@ export default function AnnotationView() {
             />
           )}
 
-          {user?.role === 'student' && showProperties && annotation.selectedAnnotationIds.length > 0 && (
+          {user?.role === 'student' && !isQnAStudentMode && showProperties && annotation.selectedAnnotationIds.length > 0 && (
             <AnnotationPropertiesPanel
               selectedAnnotations={annotation.annotations.filter((a) =>
                 annotation.selectedAnnotationIds.includes(a.id)
@@ -1371,7 +1522,7 @@ export default function AnnotationView() {
           )}
 
           {/* AI Vision Assistant Panel */}
-          {user?.role === 'student' && showAIVision && (
+          {user?.role === 'student' && !isQnAStudentMode && showAIVision && (
             <aside className="w-80 bg-card border-l border-border overflow-y-auto">
               <AIAnnotationSuggestions
                 imageUrl={case_.imageUrl}
@@ -1427,7 +1578,7 @@ export default function AnnotationView() {
                     onClick={() => setShowTabDropdown(!showTabDropdown)}
                   >
                     <span className="flex items-center gap-2">
-                      {activeSidebarTab === "annotate" && <span className="text-base">📝</span>}
+                      {!isQnAStudentMode && activeSidebarTab === "annotate" && <span className="text-base">📝</span>}
                       {activeSidebarTab === "collaborate" && <span className="text-base">👥</span>}
                       {activeSidebarTab === "ai-assistant" && <span className="text-base">🤖</span>}
                       {activeSidebarTab === "homework" && <span className="text-base">📋</span>}
@@ -1441,18 +1592,20 @@ export default function AnnotationView() {
                   {/* Dropdown Menu with Smooth Animation */}
                   {showTabDropdown && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
-                      <button
-                        className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
-                          activeSidebarTab === "annotate" ? "bg-primary/10" : ""
-                        }`}
-                        onClick={() => {
-                          setActiveSidebarTab("annotate");
-                          setShowTabDropdown(false);
-                        }}
-                      >
-                        <span className="text-base">📝</span>
-                        <span>Annotate</span>
-                      </button>
+                      {!isQnAStudentMode && (
+                        <button
+                          className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
+                            activeSidebarTab === "annotate" ? "bg-primary/10" : ""
+                          }`}
+                          onClick={() => {
+                            setActiveSidebarTab("annotate");
+                            setShowTabDropdown(false);
+                          }}
+                        >
+                          <span className="text-base">📝</span>
+                          <span>Annotate</span>
+                        </button>
+                      )}
                       <button
                         className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "collaborate" ? "bg-primary/10" : ""
@@ -1495,7 +1648,7 @@ export default function AnnotationView() {
               </div>
 
               {/* Tab Content - Annotate */}
-              {activeSidebarTab === "annotate" && (
+              {!isQnAStudentMode && activeSidebarTab === "annotate" && (
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   <div className="border rounded-lg p-2 bg-muted/50">
                     <h4 className="font-semibold text-xs mb-1">Current Annotations</h4>
@@ -1640,7 +1793,8 @@ export default function AnnotationView() {
                       )}
                     </div>
                   )}
-                  <SubmissionPanel
+                  {!isQnAStudentMode && (
+                    <SubmissionPanel
                     status={submission?.status || "none"}
                     dueDate={hw?.dueAt}
                     score={submission?.score}
@@ -1699,7 +1853,8 @@ export default function AnnotationView() {
 
                       return uploadFile(file);
                     }}
-                  />
+                    />
+                  )}
                   {!hw && (
                     <div className="text-center py-2">
                       <p className="text-xs text-muted-foreground">

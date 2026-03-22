@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { mockCases, mockPerformanceData, mockUpcomingAssignments } from "@/lib/mock-data";
+import { mockCases } from "@/lib/mock-data";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import CaseCard from "@/components/case-card";
 import {
@@ -40,43 +40,11 @@ type RemoteHomeworkMeta = {
   homeworkType?: "Q&A" | "Annotate";
 };
 
-
-// === Homework metadata 
-type HomeworkMeta = { dueAt: string; closed: boolean };
-const homeworkByCase: Record<string, HomeworkMeta> = {
-  "case-1": { dueAt: new Date(Date.now() + 2 * 86400000).toISOString(), closed: false },
-  "case-2": { dueAt: new Date(Date.now() + 5 * 86400000).toISOString(), closed: false },
-  "case-3": { dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), closed: true },
-};
-
-const homeworkTypeByCase: Record<string, "Q&A" | "Annotate"> = {
-  "case-1": "Annotate",
-  "case-2": "Annotate",
-  "case-3": "Q&A",
-};
-
-// === Trạng thái bài nộp của riêng học sinh 
-type MySubmissionStatus = { score?: number; status: "grading" | "graded" | "none" };
-const mySubmissionByCase: Record<string, MySubmissionStatus> = {
-  "case-1": { status: "grading" },          // đã nộp, đang chấm
-  "case-2": { status: "none" },             // chưa nộp
-  "case-3": { status: "graded", score: 9 }, // đã chấm
-};
-
 const daysLeft = (iso?: string) => {
   if (!iso) return null;
   const ms = new Date(iso).getTime() - Date.now();
   return Math.ceil(ms / (1000 * 60 * 60 * 24));
 };
-
-// === Danh sách "My Annotations" 
-const myAnnotations = mockCases
-  .filter(c => (mySubmissionByCase[c.id]?.status ?? "none") !== "none")
-  .map(c => ({
-    caseId: c.id,
-    caseTitle: c.title,
-    updatedAgo: "today",
-  }));
 
 
 type StudentView = "overview" | "cases" | "annotations" | "collaboration" | "progress" | "settings";
@@ -90,6 +58,9 @@ type SubmissionRecord = {
   student_id: string;
   status: "none" | "submitted" | "grading" | "graded";
   score?: number;
+  max_points?: number;
+  published?: boolean;
+  published_at?: string;
   feedback?: string;
   notes?: string;
   updated_at?: string;
@@ -162,13 +133,13 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    if (activeView === "cases" || activeView === "annotations") {
+    if (activeView === "cases" || activeView === "annotations" || activeView === "overview") {
       loadCases();
     }
   }, [activeView]);
 
   useEffect(() => {
-    if (activeView !== "annotations" || !user?.user_id) return;
+    if (!["annotations", "overview", "cases"].includes(activeView) || !user?.user_id) return;
 
     let cancelled = false;
 
@@ -223,6 +194,9 @@ export default function StudentDashboard() {
     };
   }, [activeView, casesFromApi, user?.user_id]);
 
+  const getHomeworkType = (caseItem: { id: string; homeworkType?: "Q&A" | "Annotate" | null }) =>
+    remoteHomeworkByCase[caseItem.id]?.homeworkType || caseItem.homeworkType || "Annotate";
+
   const caseLibraryCases = useMemo(() => {
     const dbCases = casesFromApi.map((c) => ({
       id: c.case_id,
@@ -245,6 +219,88 @@ export default function StudentDashboard() {
   const [myHomeworkFilter, setMyHomeworkFilter] = useState<"all" | "Annotate" | "Q&A">("all");
   const [myHomeworkSearch, setMyHomeworkSearch] = useState("");
   const [myHomeworkSort, setMyHomeworkSort] = useState<CaseLibrarySort>("newest");
+  const [stats, setStats] = useState<StudentStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [studentSubmissions, setStudentSubmissions] = useState<SubmissionRecord[]>([]);
+  const [forumContributionCount, setForumContributionCount] = useState<number>(0);
+
+  const submissionByCase = useMemo(() => {
+    const map: Record<string, SubmissionRecord> = {};
+    for (const submission of studentSubmissions) {
+      const current = map[submission.case_id];
+      const currentTs = new Date(current?.updated_at ?? current?.created_at ?? 0).getTime();
+      const nextTs = new Date(submission.updated_at ?? submission.created_at ?? 0).getTime();
+      if (!current || nextTs >= currentTs) {
+        map[submission.case_id] = submission;
+      }
+    }
+    return map;
+  }, [studentSubmissions]);
+
+  const upcomingHomework = useMemo(() => {
+    return caseLibraryCases
+      .filter((caseItem) => {
+        const hw = remoteHomeworkByCase[caseItem.id];
+        return hw?.assigned && !hw.closed;
+      })
+      .map((caseItem) => ({
+        id: caseItem.id,
+        title: caseItem.title,
+        category: caseItem.category,
+        dueAt: remoteHomeworkByCase[caseItem.id]?.dueAt,
+      }))
+      .sort((left, right) => {
+        const l = new Date(left.dueAt ?? "9999-12-31").getTime();
+        const r = new Date(right.dueAt ?? "9999-12-31").getTime();
+        return l - r;
+      })
+      .slice(0, 4);
+  }, [caseLibraryCases, remoteHomeworkByCase]);
+
+  const recentFeedbackItems = useMemo(() => {
+    return studentSubmissions
+      .filter((submission) => Boolean(submission.feedback || submission.notes))
+      .sort((left, right) => {
+        const l = new Date(left.updated_at ?? left.created_at ?? 0).getTime();
+        const r = new Date(right.updated_at ?? right.created_at ?? 0).getTime();
+        return r - l;
+      })
+      .slice(0, 4);
+  }, [studentSubmissions]);
+
+  const performanceTrend = useMemo(() => {
+    const graded = studentSubmissions
+      .filter((submission) => submission.status === "graded" && submission.score != null)
+      .sort((left, right) => {
+        const l = new Date(left.updated_at ?? left.created_at ?? 0).getTime();
+        const r = new Date(right.updated_at ?? right.created_at ?? 0).getTime();
+        return l - r;
+      })
+      .slice(-8);
+
+    if (graded.length === 0) {
+      return [{ point: "Start", score: 0 }];
+    }
+
+    return graded.map((submission, index) => ({
+      point: `S${index + 1}`,
+      score: Number(submission.score ?? 0),
+    }));
+  }, [studentSubmissions]);
+
+  const overviewMetrics = useMemo(() => {
+    const assignedCount = Object.values(remoteHomeworkByCase).filter((hw) => hw.assigned).length;
+    const pendingReviews = studentSubmissions.filter((submission) => submission.status === "submitted" || submission.status === "grading").length;
+    const graded = studentSubmissions.filter((submission) => submission.status === "graded").length;
+    const completionRate = assignedCount === 0 ? 0 : Math.round((graded / assignedCount) * 100);
+
+    return {
+      assignedCount,
+      pendingReviews,
+      graded,
+      completionRate,
+    };
+  }, [remoteHomeworkByCase, studentSubmissions]);
 
   const caseLibraryVisibleCases = useMemo(() => {
     const q = caseLibrarySearch.trim().toLowerCase();
@@ -252,14 +308,14 @@ export default function StudentDashboard() {
     let list = caseLibraryCases;
     if (caseLibraryFilter !== "all") {
       list = list.filter((c) => {
-        const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        const hwType = getHomeworkType(c as any);
         return hwType === caseLibraryFilter;
       });
     }
 
     if (q) {
       list = list.filter((c) => {
-        const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        const hwType = getHomeworkType(c as any);
         const haystack = `${c.title} ${c.description} ${c.category} ${hwType}`.toLowerCase();
         return haystack.includes(q);
       });
@@ -289,14 +345,14 @@ export default function StudentDashboard() {
     let list = assigned;
     if (myHomeworkFilter !== "all") {
       list = list.filter((c) => {
-        const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        const hwType = getHomeworkType(c as any);
         return hwType === myHomeworkFilter;
       });
     }
 
     if (q) {
       list = list.filter((c) => {
-        const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
+        const hwType = getHomeworkType(c as any);
         const haystack = `${c.title} ${c.description} ${c.category} ${hwType}`.toLowerCase();
         return haystack.includes(q);
       });
@@ -334,10 +390,6 @@ export default function StudentDashboard() {
   }, []);
 
   // One source of truth for stats (cards + CSV both consume this)
-  const [stats, setStats] = useState<StudentStats | null>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
-  const [studentSubmissions, setStudentSubmissions] = useState<SubmissionRecord[]>([]);
-  const [forumContributionCount, setForumContributionCount] = useState<number>(0);
 
   useEffect(() => {
     const loadProgress = async () => {
@@ -696,103 +748,135 @@ export default function StudentDashboard() {
                 <p className="text-muted-foreground">Continue your medical imaging studies</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard label="Cases Completed" value={stats.casesCompleted} icon={CheckCircle} valueClass="text-primary" testId="stat-cases-completed" />
-                <StatCard label="Active Annotations" value={stats.activeAnnotations} icon={Edit} valueClass="text-accent" testId="stat-active-annotations" />
-                <StatCard label="Feedback Received" value={stats.feedbackReceived} icon={MessageCircle} valueClass="text-yellow-500" testId="stat-feedback-received" />
-                <StatCard label="Average Score" value={`${Math.round(stats.annotationAccuracyPct)}%`} icon={ChartLine} valueClass="text-accent" testId="stat-average-score" />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <Card>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Performance Trend</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <LineChart data={mockPerformanceData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="week" />
-                        <YAxis domain={[0, 100]} />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    <p className="text-sm text-muted-foreground mt-2">{t("yourPerformanceImproved")}</p>
+                    <div className="flex items-start justify-between">
+                      <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Assigned Homework</p>
+                      <FolderOpen className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <p className="mt-8 text-4xl font-bold tracking-tight">{overviewMetrics.assignedCount}</p>
+                    <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">{upcomingHomework.length} active due items</p>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4 flex items-center">
-                      <Calendar className="h-5 w-5 mr-2 text-primary" />
-                      {t("upcomingAssignments")}
-                    </h3>
+                    <div className="flex items-start justify-between">
+                      <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Pending Reviews</p>
+                      <MessageCircle className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <p className="mt-8 text-4xl font-bold tracking-tight">{overviewMetrics.pendingReviews}</p>
+                    <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">Waiting for instructor feedback</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Completion Rate</p>
+                      <CheckCircle className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <p className="mt-8 text-4xl font-bold tracking-tight">{overviewMetrics.completionRate}%</p>
+                    <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">{overviewMetrics.graded} graded submissions</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Average Score</p>
+                      <ChartLine className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <p className="mt-8 text-4xl font-bold tracking-tight">{Math.round(stats.annotationAccuracyPct)}%</p>
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Based on graded work</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+                <Card className="xl:col-span-2 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Upcoming Homework</h3>
+                      <Button variant="outline" size="sm" onClick={() => setActiveView("annotations")}>Open My Homework</Button>
+                    </div>
                     <div className="space-y-3">
-                      {mockUpcomingAssignments.map((assignment) => {
-                        const daysUntilDue = Math.ceil((assignment.dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                        const isUrgent = daysUntilDue <= 2;
-                        return (
-                          <div key={assignment.id} className={`p-3 rounded-lg border ${isUrgent ? 'border-destructive/30 bg-destructive/10' : 'border-border bg-muted'}`}>
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <p className="font-medium text-sm">{assignment.title}</p>
-                                <p className="text-xs text-muted-foreground mt-1">{assignment.category}</p>
+                      {upcomingHomework.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-muted-foreground dark:border-slate-700">
+                          No active homework deadlines right now.
+                        </div>
+                      ) : (
+                        upcomingHomework.map((item) => {
+                          const dl = Math.max(0, daysLeft(item.dueAt) ?? 0);
+                          return (
+                            <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="font-medium">{item.title}</p>
+                                  <p className="text-sm text-muted-foreground">{item.category}</p>
+                                </div>
+                                <Badge variant={dl <= 2 ? "destructive" : "secondary"}>Due in {dl} days</Badge>
                               </div>
-                              {isUrgent && <AlertCircle className="h-4 w-4 text-red-500" />}
                             </div>
-                            <div className="flex items-center justify-between mt-2">
-                              <span className={`text-xs px-2 py-1 rounded ${assignment.priority === 'high' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                {assignment.priority}
-                              </span>
-                              <span className="text-xs text-muted-foreground">Due in {daysUntilDue} days</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Quick Actions</h3>
+                      <Flame className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <Button className="justify-start" onClick={() => setActiveView("annotations")}>My Homework</Button>
+                      <Button variant="outline" className="justify-start" onClick={() => setActiveView("cases")}>Case Library</Button>
+                      <Button variant="outline" className="justify-start" onClick={() => setActiveView("progress")}>Progress Analytics</Button>
+                      <Button variant="outline" className="justify-start" onClick={() => setActiveView("collaboration")}>Open Forums</Button>
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
+                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">{t("recentCases")}</h3>
-                    <div className="space-y-4">
-                      {mockCases.slice(0, 2).map((case_) => (
-                        <div
-                          key={case_.id}
-                          className="flex items-center space-x-4 p-3 rounded-lg hover:bg-secondary cursor-pointer"
-                          onClick={() => setLocation(`/annotation/${case_.id}`)}
-                          data-testid={`recent-case-${case_.id}`}
-                        >
-                          <img src={case_.imageUrl} alt={case_.title} className="w-12 h-12 rounded object-cover" />
-                          <div className="flex-1">
-                            <p className="font-medium">{case_.title}</p>
-                            <p className="text-sm text-muted-foreground">{t("lastReviewedHoursAgo")}</p>
-                          </div>
-                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">{t("completed")}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <h3 className="text-lg font-semibold mb-4">Performance Trend</h3>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={performanceTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="point" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">{t("recentFeedback")}</h3>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
-                        <div className="flex items-start space-x-3">
-                          <Avatar src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" size={32} />
-                          <div><p className="font-medium text-sm">Dr. Smith</p><p className="text-sm text-muted-foreground">Great work on identifying the lesion. Consider the surrounding tissue changes.</p></div>
+                    <h3 className="text-lg font-semibold mb-4">Recent Activity & Feedback</h3>
+                    <div className="space-y-3">
+                      {recentActivities.slice(0, 3).map((item, index) => (
+                        <div key={`act-${index}`} className="rounded-2xl bg-slate-50 p-4 text-sm dark:bg-slate-900/60">
+                          <p className="font-medium text-foreground">{item.title}</p>
+                          <p className="text-muted-foreground">{item.detail}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{item.date}</p>
                         </div>
-                      </div>
-                      <div className="p-4 bg-primary/10 rounded-lg border-l-4 border-primary hover:bg-secondary cursor-pointer">
-                        <div className="flex items-start space-x-3">
-                          <Avatar src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&auto=format&fit=crop&w=40&h=40" size={32} />
-                          <div><p className="font-medium text-sm">Dr. Johnson</p><p className="text-sm text-muted-foreground">Excellent annotation accuracy. Your diagnostic skills are improving!</p></div>
+                      ))}
+                      {recentFeedbackItems.length > 0 && (
+                        <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-sm">
+                          <p className="font-medium">Latest Instructor Note</p>
+                          <p className="text-muted-foreground mt-1">
+                            {recentFeedbackItems[0]?.feedback || recentFeedbackItems[0]?.notes}
+                          </p>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -878,18 +962,47 @@ export default function StudentDashboard() {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {cases.map((annot) => {
                           const hw = remoteHomeworkByCase[annot.id];
+                          const submission = submissionByCase[annot.id];
                           const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
 
                           return (
                             <div key={annot.id} className="space-y-2">
-                              <CaseCard
-                                case={annot}
-                                onClick={() => setLocation(`/annotation/${annot.id}`)}
-                                homeworkType={hw?.homeworkType}
-                              />
+                              <div className="relative">
+                                <CaseCard
+                                  case={annot}
+                                  onClick={() => setLocation(`/annotation/${annot.id}`)}
+                                  homeworkType={getHomeworkType(annot as any)}
+                                />
+                                {submission?.status === "submitted" && (
+                                  <Badge className="absolute top-3 left-3 bg-blue-600 text-white hover:bg-blue-600">
+                                    Submitted
+                                  </Badge>
+                                )}
+                                {submission?.status === "grading" && (
+                                  <Badge className="absolute top-3 left-3 bg-amber-600 text-white hover:bg-amber-600">
+                                    Under review
+                                  </Badge>
+                                )}
+                                {submission?.status === "graded" && (
+                                  <Badge className="absolute top-3 left-3 bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-700 dark:text-emerald-50">
+                                    Marked: {submission.score ?? 0}%
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="flex items-center px-1">
                                 <div className="flex items-center gap-2">
                                   <Badge>{t("homework")}</Badge>
+                                  {submission?.status === "submitted" && (
+                                    <Badge variant="secondary">Submitted</Badge>
+                                  )}
+                                  {submission?.status === "grading" && (
+                                    <Badge variant="outline">Under review</Badge>
+                                  )}
+                                  {submission?.status === "graded" && submission?.published && (
+                                    <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-700 dark:text-emerald-50">
+                                      Published Grade: {submission.score ?? 0}/{submission.max_points ?? 100}
+                                    </Badge>
+                                  )}
                                   {hw?.closed ? (
                                     <Badge variant="destructive">{t("closed")}</Badge>
                                   ) : (
@@ -905,14 +1018,8 @@ export default function StudentDashboard() {
                       </div>
                     );
 
-                    const annotateCases = myHomeworkVisibleCases.filter((c) => {
-                      const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
-                      return hwType === "Annotate";
-                    });
-                    const qaCases = myHomeworkVisibleCases.filter((c) => {
-                      const hwType = remoteHomeworkByCase[c.id]?.homeworkType || homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
-                      return hwType === "Q&A";
-                    });
+                    const annotateCases = myHomeworkVisibleCases.filter((c) => getHomeworkType(c as any) === "Annotate");
+                    const qaCases = myHomeworkVisibleCases.filter((c) => getHomeworkType(c as any) === "Q&A");
 
                     const renderSection = (
                       title: "Annotate" | "Q&A",
@@ -1035,9 +1142,9 @@ export default function StudentDashboard() {
                   const renderGrid = (cases: typeof caseLibraryVisibleCases) => (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {cases.map((case_) => {
-                        const hw = homeworkByCase[case_.id];
-                        const dl = hw ? Math.max(0, daysLeft(hw?.dueAt) ?? 0) : null;
-                        const hwType = homeworkTypeByCase[case_.id] || (case_ as any).homeworkType;
+                        const hw = remoteHomeworkByCase[case_.id];
+                        const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
+                        const hwType = getHomeworkType(case_ as any);
                         return (
                           <div key={case_.id} className="space-y-2">
                             <CaseCard
@@ -1047,12 +1154,12 @@ export default function StudentDashboard() {
                             />
                             <div className="flex items-center px-1">
                               <div className="flex items-center gap-2">
-                                {hw && <Badge>{t("homework")}</Badge>}
-                                {hw ? (
+                                {hw?.assigned && <Badge>{t("homework")}</Badge>}
+                                {hw?.assigned ? (
                                   hw.closed ? (
                                     <Badge variant="destructive">{t("closed")}</Badge>
                                   ) : (
-                                    <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
+                                    <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl ?? 0))}</Badge>
                                   )
                                 ) : null}
                               </div>
@@ -1063,14 +1170,8 @@ export default function StudentDashboard() {
                     </div>
                   );
 
-                  const annotateCases = caseLibraryVisibleCases.filter((c) => {
-                    const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
-                    return hwType === "Annotate";
-                  });
-                  const qaCases = caseLibraryVisibleCases.filter((c) => {
-                    const hwType = homeworkTypeByCase[c.id] || (c as any).homeworkType || "Annotate";
-                    return hwType === "Q&A";
-                  });
+                  const annotateCases = caseLibraryVisibleCases.filter((c) => getHomeworkType(c as any) === "Annotate");
+                  const qaCases = caseLibraryVisibleCases.filter((c) => getHomeworkType(c as any) === "Q&A");
 
                   const renderSection = (
                     title: "Annotate" | "Q&A",
