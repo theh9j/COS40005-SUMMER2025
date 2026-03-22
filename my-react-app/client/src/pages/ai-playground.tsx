@@ -202,7 +202,7 @@ export default function AIPlayground() {
   };
 
   return (
-    <div className="min-h-screen bg-background" data-testid="ai-playground">
+    <div className="min-h-screen silver-ambient" data-testid="ai-playground">
       {/* Header */}
       <header className="bg-card border-b border-border h-16 px-6 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
