@@ -80,7 +80,9 @@ type Submission = {
   caseId: string;
   caseTitle: string;
   caseImageUrl?: string;
+  maxPoints?: number;
   studentId: string;
+  studentName?: string;
   classId?: string;
   className?: string;
   year?: string;
@@ -148,7 +150,7 @@ function getInitials(name: string) {
 }
 
 // ===== Helpers: hook-safe components =====
-function GroupCompareCard({ submission }: { submission: Submission }) {
+function GroupCompareCard({ submission, studentName }: { submission: Submission; studentName: string }) {
   const caseObj = mockCases.find((c) => c.id === submission.caseId);
   const ann = useAnnotation(submission.caseId, submission.studentId);
 
@@ -156,7 +158,7 @@ function GroupCompareCard({ submission }: { submission: Submission }) {
     <Card>
       <CardContent className="p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">{submission.studentId}</div>
+          <div className="text-sm font-medium">{studentName}</div>
           <div className="text-xs text-muted-foreground">
             {submission.score != null ? `Score ${submission.score}` : submission.status}
             {submission.published ? " • Published" : ""}
@@ -239,6 +241,7 @@ function OverviewMetricCard({
 
 export default function InstructorDashboard() {
   const [onlineCount, setOnlineCount] = useState<number>(0);
+  const [studentNameMap, setStudentNameMap] = useState<Record<string, string>>({});
 
   // handle discussion prefill from outside events or query params
   useEffect(() => {
@@ -284,6 +287,17 @@ export default function InstructorDashboard() {
         const data = await res.json();
         const online = data.filter((u: any) => u.online).length;
         setOnlineCount(online);
+
+        const nextMap: Record<string, string> = {};
+        for (const entry of Array.isArray(data) ? data : []) {
+          const id = String(entry.user_id ?? entry.id ?? "").trim();
+          if (!id) continue;
+          const first = String(entry.firstName ?? entry.first_name ?? "").trim();
+          const last = String(entry.lastName ?? entry.last_name ?? "").trim();
+          const full = `${first} ${last}`.trim();
+          if (full) nextMap[id] = full;
+        }
+        setStudentNameMap(nextMap);
       } catch {
         setOnlineCount(0);
       }
@@ -627,10 +641,15 @@ export default function InstructorDashboard() {
       list = list.filter((s) => s.caseId === gradingCaseId);
     }
 
-    return list.filter(
-      (s) => s.studentId.toLowerCase().includes(q) || s.caseTitle.toLowerCase().includes(q)
-    );
-  }, [query, submissions, gradingCaseId]);
+    return list.filter((s) => {
+      const displayName = getStudentDisplayName(s.studentId).toLowerCase();
+      return (
+        displayName.includes(q) ||
+        s.studentId.toLowerCase().includes(q) ||
+        s.caseTitle.toLowerCase().includes(q)
+      );
+    });
+  }, [query, submissions, gradingCaseId, studentNameMap, availableStudents, classroomStudents]);
 
   const selected = useMemo(
     () => filtered.find((s) => s.id === (activeIds[0] ?? "")) ?? filtered[0],
@@ -720,6 +739,7 @@ export default function InstructorDashboard() {
 
   const selectedCaseId = selected?.caseId ?? "case-1";
   const selectedStudentId = selected?.studentId ?? "unknown";
+  const selectedStudentName = selected ? getStudentDisplayName(selected.studentId) : "Unknown student";
   const selectedCase =
     mergedCases.find((c) => c.id === selectedCaseId) ??
     mockCases.find((c) => c.id === selectedCaseId);
@@ -730,6 +750,26 @@ export default function InstructorDashboard() {
     "";
 
   const selectedAnn = useAnnotation(selectedCaseId, selectedStudentId);
+
+  function getStudentDisplayName(studentId: string) {
+    if (!studentId) return "Unknown student";
+    if (studentNameMap[studentId]) return studentNameMap[studentId];
+
+    const fromAvailable = availableStudents.find((student) => student.id === studentId);
+    if (fromAvailable) {
+      const full = `${fromAvailable.firstName ?? ""} ${fromAvailable.lastName ?? ""}`.trim();
+      if (full) return full;
+    }
+
+    const fromClassroom = classroomStudents.find((student) => student.id === studentId);
+    if (fromClassroom) {
+      const full = `${fromClassroom.firstName ?? ""} ${fromClassroom.lastName ?? ""}`.trim();
+      if (full) return full;
+    }
+
+    const fromSubmission = submissions.find((submission) => submission.studentId === studentId)?.studentName;
+    return fromSubmission || studentId;
+  }
 
 
 
@@ -783,7 +823,9 @@ export default function InstructorDashboard() {
           caseId: s.case_id,
           caseTitle: s.case_title ?? "Unknown case",
           caseImageUrl: s.case_image_url ?? "",
+          maxPoints: Number(s.max_points) || 100,
           studentId: s.student_id,
+          studentName: s.student_name ?? s.studentName ?? s.student_full_name ?? undefined,
           classId: s.class_id ?? undefined,
           className: s.class_name ?? undefined,
           year: s.year ?? undefined,
@@ -1081,7 +1123,7 @@ export default function InstructorDashboard() {
                             <div>
                               <p className="font-medium text-slate-900 dark:text-slate-100">{submission.caseTitle}</p>
                               <p className="text-sm text-muted-foreground">
-                                Student {submission.studentId}
+                                {getStudentDisplayName(submission.studentId)}
                                 {submission.classroom ? ` • ${submission.classroom}` : ""}
                               </p>
                             </div>
@@ -1369,7 +1411,7 @@ export default function InstructorDashboard() {
                         className="justify-start"
                         onClick={() => onPick(s.id)}
                       >
-                        {s.studentId} — {s.caseTitle}{" "}
+                        {getStudentDisplayName(s.studentId)} — {s.caseTitle}{" "}
                         {s.score != null ? `(Score ${s.score})` : `(${s.status})`}
                         {s.published ? " • Published" : ""}
                       </Button>
@@ -1389,7 +1431,7 @@ export default function InstructorDashboard() {
                     <CardContent className="p-0">
                       <div className="p-4 border-b">
                         <div className="text-sm text-muted-foreground">
-                          {selected.studentId} • {selected.caseTitle}
+                          {selectedStudentName} • {selected.caseTitle}
                         </div>
                         <div className="text-[12px] text-muted-foreground mt-1">
                           Use toolbar to annotate • wheel/controls to zoom • select shapes to manage in list
@@ -1422,13 +1464,14 @@ export default function InstructorDashboard() {
                     <RubricPanel
                       disabled={isSaving}
                       initialRubric={selected.rubric ?? []}
+                      maxPoints={selected.maxPoints || 100}
                       lastSavedAt={selected.updatedAt}
                       onSubmit={(score: number, rubric: any[]) => saveDraft(selected.id, score, rubric)}
                       externalAiSuggestion={aiGrading.rubricSuggestion}
                       externalAiLoading={aiGrading.isAnalyzing}
                       applyAiTrigger={applyAiTrigger}
                       onRequestExternalAi={() => {
-                        const rubricDef = buildDefaultCriteria().map((c) => ({
+                        const rubricDef = buildDefaultCriteria(selected.maxPoints || 100).map((c) => ({
                           id: c.id,
                           title: c.title,
                           max: c.max,
@@ -1540,7 +1583,9 @@ export default function InstructorDashboard() {
                       Select 2–4 submissions from the list to compare.
                     </div>
                   ) : (
-                    activeGroup.map((s) => <GroupCompareCard key={s.id} submission={s} />)
+                    activeGroup.map((s) => (
+                      <GroupCompareCard key={s.id} submission={s} studentName={getStudentDisplayName(s.studentId)} />
+                    ))
                   )}
                 </div>
               )}
@@ -1552,7 +1597,7 @@ export default function InstructorDashboard() {
                 submissions={filtered.map((s) => ({
                   id: s.id,
                   caseTitle: s.caseTitle,
-                  studentId: s.studentId,
+                  studentName: getStudentDisplayName(s.studentId),
                   status: s.status,
                   score: s.score,
                 }))}

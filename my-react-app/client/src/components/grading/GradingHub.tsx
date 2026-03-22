@@ -147,7 +147,7 @@ export default function GradingHub({
     let list = Array.from(map.values());
     const query = q.trim().toLowerCase();
     if (query) {
-      list = list.filter((g) => g.caseTitle.toLowerCase().includes(query) || g.caseId.toLowerCase().includes(query));
+      list = list.filter((g) => g.caseTitle.toLowerCase().includes(query));
     }
 
     if (classFilter) {
@@ -231,7 +231,7 @@ export default function GradingHub({
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{g.caseTitle}</div>
                     <div className="text-xs text-muted-foreground">
-                      {g.caseId} • {timeAgo(g.lastUpdated)}
+                      Updated {timeAgo(g.lastUpdated)}
                     </div>
                     {g.classroom && <div className="mt-1 text-xs text-muted-foreground">{g.classroom}</div>}
                   </div>

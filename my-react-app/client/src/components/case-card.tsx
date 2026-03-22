@@ -67,7 +67,7 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
               {medicalCase.category}
             </span>
             <span className="text-xs text-muted-foreground">
-              12 annotations
+              {homeworkType === "Q&A" ? "Question set" : "12 annotations"}
             </span>
           </div>
           {homeworkType && (

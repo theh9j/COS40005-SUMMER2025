@@ -25,7 +25,7 @@ import type { AIGradingResult, BatchGradingJob } from "@/types/ai-grading";
 interface Submission {
   id: string;
   caseTitle: string;
-  studentId: string;
+  studentName: string;
   status: string;
   score?: number;
 }
@@ -120,7 +120,7 @@ export default function BatchGradingDialog({
                       onCheckedChange={() => toggleSelect(s.id)}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{s.studentId}</div>
+                      <div className="text-sm font-medium truncate">{s.studentName}</div>
                       <div className="text-[11px] text-muted-foreground truncate">{s.caseTitle}</div>
                     </div>
                     <Badge variant="outline" className="text-[10px]">{s.status}</Badge>
@@ -175,7 +175,7 @@ export default function BatchGradingDialog({
                   >
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">
-                        {sub?.studentId || id.slice(0, 8)}
+                        {sub?.studentName || id.slice(0, 8)}
                       </div>
                       {res && (
                         <div className="text-[11px] text-muted-foreground">
