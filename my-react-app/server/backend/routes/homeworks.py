@@ -50,6 +50,7 @@ async def create_homework(payload: dict):
     class_ids = payload.get("classIds") or payload.get("class_ids") or []
     class_labels = payload.get("classLabels") or payload.get("class_labels") or []
     max_points = payload.get("maxPoints")
+    visibility_raw = str(payload.get("visibility") or "public").strip().lower()
 
     class_ids = [str(cid) for cid in class_ids if cid]
     class_labels = [str(label) for label in class_labels if label]
@@ -88,6 +89,7 @@ async def create_homework(payload: dict):
             "description": new_case.get("description"),
             "case_type": new_case.get("type", "Cardiology"),
             "homework_type": homework_type,
+            "visibility": "private" if visibility_raw == "private" else "public",
             "created_at": now(),
         }
         if new_case.get("imagePreviewUrl"):
@@ -107,6 +109,7 @@ async def create_homework(payload: dict):
         "homework_type": homework_type,
         "focus": suggested_focus_tags or auto_checklist,
         "audience": audience,
+        "visibility": "private" if visibility_raw == "private" else "public",
         "due_at": due_at_iso,
         "status": "active",
         "max_points": int(max_points),
@@ -130,6 +133,7 @@ async def create_homework(payload: dict):
         qna_doc = {
             "case_id": case_id,
             "instructions": instructions,
+            "case_image": new_case.get("imagePreviewUrl", ""),
             "total_questions": len(questions),
             "questions": questions,
         }
@@ -204,6 +208,16 @@ async def homework_by_case(
 
     audience = (hw.get("audience") or "All Students")
     audience_norm = str(audience).strip().lower()
+    visibility_norm = str(hw.get("visibility") or "public").strip().lower()
+
+    if not is_instructor_like and visibility_norm == "private":
+        return {
+            "case": case,
+            "homework": None,
+            "qna": None,
+            "annot": None,
+            "assigned": False
+        }
 
     if not assigned and audience_norm in ("all students", "all"):
         assigned = True
@@ -280,6 +294,10 @@ async def update_homework_by_case(case_id: str, payload: dict):
         except Exception:
             raise HTTPException(status_code=400, detail="max_points must be a number")
 
+    if payload.get("visibility") is not None:
+        visibility_norm = str(payload.get("visibility")).strip().lower()
+        update_doc["visibility"] = "private" if visibility_norm == "private" else "public"
+
     audience_payload = payload.get("audience")
     if audience_payload is not None:
         audience_norm = str(audience_payload).strip().lower()
@@ -342,6 +360,32 @@ async def update_homework_by_case(case_id: str, payload: dict):
 
     if update_ops:
         await homeworks_collection.update_one({"_id": hw["_id"]}, update_ops)
+
+    if update_doc.get("visibility") is not None:
+        try:
+            await cases_collection.update_one(
+                {"_id": ObjectId(case_id)},
+                {"$set": {"visibility": update_doc.get("visibility")}},
+            )
+        except Exception:
+            pass
+
+    # Update Q&A content when provided from case edit flow.
+    if payload.get("questions") is not None or payload.get("instructions") is not None:
+        qna_update = {}
+        if payload.get("instructions") is not None:
+            qna_update["instructions"] = payload.get("instructions")
+        if payload.get("questions") is not None:
+            questions = payload.get("questions") or []
+            qna_update["questions"] = questions
+            qna_update["total_questions"] = len(questions)
+
+        if qna_update:
+            await qna_collection.update_one(
+                {"case_id": case_id},
+                {"$set": qna_update},
+                upsert=True,
+            )
 
     return {"status": "ok", "homework_id": str(hw["_id"])}
 

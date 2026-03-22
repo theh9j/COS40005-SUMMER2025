@@ -12,12 +12,15 @@ type HomeworkQuestion = {
   guidance?: string;
   options?: string[];
   imageIndex?: number;
+  image_url?: string;
+  imageUrl?: string;
 };
 
 interface SubmissionPanelProps {
   status: "none" | "submitted" | "grading" | "graded";
   dueDate?: string;
   score?: number;
+  maxPoints?: number;
   notes?: string;
   files?: SubmissionFile[];
   questions?: HomeworkQuestion[];
@@ -39,6 +42,7 @@ export default function SubmissionPanel({
   status,
   dueDate,
   score,
+  maxPoints = 100,
   notes: initialNotes = "",
   files: initialFiles = [],
   questions = [],
@@ -69,6 +73,13 @@ export default function SubmissionPanel({
   useEffect(() => {
     setAnswers(initialAnswers);
   }, [initialAnswers]);
+
+  useEffect(() => {
+    setSubmitted(status !== "none");
+  }, [status]);
+
+  const effectiveStatus: "none" | "submitted" | "grading" | "graded" =
+    status === "none" && submitted ? "submitted" : status;
 
   const getAnswerValue = (index: number) => {
     return answers.find((a) => a.index === index)?.value ?? "";
@@ -128,7 +139,7 @@ export default function SubmissionPanel({
   };
 
   const getStatusColor = () => {
-    switch (status) {
+    switch (effectiveStatus) {
       case "graded":
         return "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-700";
       case "grading":
@@ -141,7 +152,7 @@ export default function SubmissionPanel({
   };
 
   const getStatusLabel = () => {
-    switch (status) {
+    switch (effectiveStatus) {
       case "graded":
         return "Graded";
       case "grading":
@@ -153,7 +164,7 @@ export default function SubmissionPanel({
     }
   };
 
-  if (closed && status === "graded") {
+  if (closed && effectiveStatus === "graded") {
     return (
       <div className="border rounded-lg p-3 bg-card">
         <div className="flex items-center justify-between mb-3">
@@ -161,7 +172,7 @@ export default function SubmissionPanel({
             <CheckCircle className="h-4 w-4 text-green-600" />
             Assignment Complete
           </h4>
-          <Badge variant="default">Score: {score}/10</Badge>
+          <Badge variant="default">Marked: {score ?? 0}/{maxPoints}</Badge>
         </div>
         <div className="p-3 bg-muted/50 rounded border border-border">
           <p className="text-sm font-medium mb-2">Your Submission:</p>
@@ -187,10 +198,16 @@ export default function SubmissionPanel({
     <div className="border rounded-lg p-3 bg-card space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="font-semibold text-sm">Homework Submission</h4>
-        <Badge variant={status === "grading" ? "secondary" : status === "graded" ? "default" : "outline"}>
+        <Badge variant={effectiveStatus === "grading" ? "secondary" : effectiveStatus === "graded" ? "default" : "outline"}>
           {getStatusLabel()}
         </Badge>
       </div>
+
+      {effectiveStatus === "graded" && (
+        <div className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+          Marked: {score ?? 0}/{maxPoints}
+        </div>
+      )}
 
       {/* Due date info */}
       {dueDate && (
@@ -227,10 +244,10 @@ export default function SubmissionPanel({
                 <Badge variant="outline">{q.points} pts</Badge>
               </div>
 
-              {typeof q.imageIndex === "number" && uploads[q.imageIndex]?.url && (
+              {(q.image_url || q.imageUrl || (typeof q.imageIndex === "number" ? uploads[q.imageIndex]?.url : undefined)) && (
                 <div className="overflow-hidden rounded-md border bg-muted/30">
                   <img
-                    src={uploads[q.imageIndex]?.url}
+                    src={q.image_url || q.imageUrl || (typeof q.imageIndex === "number" ? uploads[q.imageIndex]?.url : "")}
                     alt={`Question ${idx + 1} reference`}
                     className="max-h-64 w-full object-contain bg-background"
                   />
@@ -255,7 +272,7 @@ export default function SubmissionPanel({
                         name={`question-${idx}`}
                         checked={String(getAnswerValue(idx)) === String(optionIndex)}
                         onChange={() => setAnswerValue(idx, optionIndex)}
-                        disabled={closed || status === "graded" || loading}
+                        disabled={closed || effectiveStatus === "graded" || loading}
                       />
                       <span>{opt}</span>
                     </label>
@@ -266,7 +283,7 @@ export default function SubmissionPanel({
                   placeholder="Type your answer here..."
                   value={getAnswerValue(idx)}
                   onChange={(e) => setAnswerValue(idx, e.target.value)}
-                  disabled={closed || status === "graded" || loading}
+                  disabled={closed || effectiveStatus === "graded" || loading}
                   className="min-h-[120px]"
                 />
               )}
@@ -288,7 +305,7 @@ export default function SubmissionPanel({
           }
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          disabled={closed || status === "graded" || loading}
+          disabled={closed || effectiveStatus === "graded" || loading}
           className="min-h-[100px]"
         />
       </div>
@@ -303,7 +320,7 @@ export default function SubmissionPanel({
               type="file"
               multiple
               onChange={handleFileSelect}
-              disabled={closed || status === "graded" || uploading}
+              disabled={closed || effectiveStatus === "graded" || uploading}
               className="hidden"
               aria-label="Select files to upload"
             />
@@ -322,7 +339,7 @@ export default function SubmissionPanel({
                     <span className="text-xs text-muted-foreground">
                       {(file.size / 1024).toFixed(1)} KB
                     </span>
-                    {!closed && status !== "graded" && (
+                    {!closed && effectiveStatus !== "graded" && (
                       <button
                         onClick={() => removeFile(idx)}
                         disabled={loading}
@@ -339,7 +356,7 @@ export default function SubmissionPanel({
             </div>
           )}
 
-          {!closed && status !== "graded" && (
+          {!closed && effectiveStatus !== "graded" && (
             <Button
               variant="outline"
               size="sm"
@@ -363,7 +380,7 @@ export default function SubmissionPanel({
         </div>
 
         {/* Submit button */}
-        {!closed && status !== "graded" && (
+        {!closed && effectiveStatus !== "graded" && (
           <Button
             onClick={handleSubmit}
             disabled={loading || uploading}
@@ -389,9 +406,9 @@ export default function SubmissionPanel({
         )}
 
         {/* Submitted state info */}
-        {submitted && status !== "graded" && (
+        {submitted && effectiveStatus !== "graded" && (
           <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-700 rounded text-sm text-blue-700 dark:text-blue-300">
-            ✓ Your submission has been saved. {status === "grading" && "It's currently being graded."}
+            ✓ Your submission has been saved. {effectiveStatus === "grading" && "It's currently being graded."}
           </div>
         )}
       </div>

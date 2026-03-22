@@ -5,6 +5,7 @@ import Avatar from "@/components/Avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useI18n } from "@/i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -94,6 +95,9 @@ type Submission = {
   feedback?: string;
   rubric?: any[];
   modelAnswers?: any[];
+  answers?: Array<{ index: number; value: any }>;
+  notes?: string;
+  homeworkType?: "Q&A" | "Annotate";
 
   published?: boolean;
   publishedAt?: string;
@@ -115,6 +119,7 @@ type CaseFromApi = {
   homework_audience?: string | null;
   class_info?: { name?: string; year?: string };
   class_infos?: Array<{ name?: string; year?: string | null }>;
+  visibility?: "public" | "private" | string | null;
 };
 
 type CaseCard = {
@@ -128,6 +133,7 @@ type CaseCard = {
   homeworkAudience?: string;
   classInfo?: { name?: string; year?: string };
   classInfos?: Array<{ name?: string; year?: string | null }>;
+  visibility?: "public" | "private";
   createdAt?: string;
 };
 
@@ -189,32 +195,32 @@ function GroupCompareCard({ submission, studentName }: { submission: Submission;
 function getHomeworkTypeColor(type: "Q&A" | "Annotate" = "Annotate") {
   switch (type) {
     case "Annotate":
-      return "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200";
+      return "text-purple-700 dark:text-purple-300";
     case "Q&A":
-      return "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200";
+      return "text-amber-700 dark:text-amber-300";
     default:
-      return "bg-muted text-muted-foreground";
+      return "text-muted-foreground";
   }
 }
 
 function getCaseTypeColor(caseType?: string) {
   switch (caseType?.toLowerCase()) {
     case "neurology":
-      return "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200";
+      return "text-blue-700 dark:text-blue-300";
     case "pulmonology":
-      return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200";
+      return "text-green-700 dark:text-green-300";
     case "cardiology":
-      return "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200";
+      return "text-red-700 dark:text-red-300";
     case "gastroenterology":
-      return "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200";
+      return "text-orange-700 dark:text-orange-300";
     case "oncology":
-      return "bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200";
+      return "text-rose-700 dark:text-rose-300";
     case "radiology":
-      return "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200";
+      return "text-indigo-700 dark:text-indigo-300";
     case "orthopedics":
-      return "bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200";
+      return "text-cyan-700 dark:text-cyan-300";
     default:
-      return "bg-muted text-muted-foreground";
+      return "text-muted-foreground";
   }
 }
 
@@ -552,6 +558,7 @@ export default function InstructorDashboard() {
       homeworkAudience: c.homework_audience ?? undefined,
       classInfo: c.class_info,
       classInfos: c.class_infos ?? (c.class_info ? [c.class_info] : []),
+      visibility: String(c.visibility || "public").toLowerCase() === "private" ? "private" : "public",
       createdAt: c.created_at,
     }));
 
@@ -857,6 +864,38 @@ export default function InstructorDashboard() {
     "";
 
   const selectedAnn = useAnnotation(selectedCaseId, selectedStudentId);
+  const selectedIsQnA = selected?.homeworkType === "Q&A";
+
+  const selectedAnswerMap = useMemo(() => {
+    const map = new Map<number, any>();
+    for (const answer of selected?.answers ?? []) {
+      if (typeof answer?.index === "number") {
+        map.set(answer.index, answer.value);
+      }
+    }
+    return map;
+  }, [selected?.answers]);
+
+  const selectedSubmissionText = useMemo(() => {
+    if (!selected) return "";
+    if (!selectedIsQnA) return draftFeedback || selected.feedback || "";
+
+    const lines = (selected.modelAnswers ?? []).map((question: any, idx: number) => {
+      const answerValue = selectedAnswerMap.get(Number(question?.index ?? idx));
+      const renderedAnswer =
+        question?.type === "mcq" && Array.isArray(question?.options)
+          ? question.options[Number(answerValue)] ?? String(answerValue ?? "")
+          : String(answerValue ?? "");
+
+      return `Q${idx + 1}: ${question?.prompt || ""}\nA: ${renderedAnswer}`;
+    });
+
+    if (selected.notes) {
+      lines.push(`Additional notes: ${selected.notes}`);
+    }
+
+    return lines.join("\n\n").trim();
+  }, [selected, selectedIsQnA, selectedAnswerMap, draftFeedback]);
 
   function getStudentDisplayName(studentId: string) {
     if (!studentId) return "Unknown student";
@@ -950,6 +989,9 @@ export default function InstructorDashboard() {
           feedback: s.feedback ?? "",
           rubric: s.rubric ?? [],
           modelAnswers: s.model_answers ?? [],
+          answers: Array.isArray(s.answers) ? s.answers : [],
+          notes: s.notes ?? "",
+          homeworkType: (s.homework_type || "Annotate") as "Q&A" | "Annotate",
           published: Boolean(s.published),
           publishedAt: s.published_at ?? undefined,
           updatedAt: s.updated_at ?? "",
@@ -1121,6 +1163,8 @@ export default function InstructorDashboard() {
                   setShowProfileMenu((v) => !v);
                 }}
                 className="focus:outline-none"
+                title="Open profile menu"
+                aria-label="Open profile menu"
               >
                 <Avatar size={32} className="border-2 border-primary" />
               </button>
@@ -1132,7 +1176,6 @@ export default function InstructorDashboard() {
                 }}
                 className="text-sm font-medium hover:underline focus:outline-none"
                 aria-haspopup="menu"
-                aria-expanded={showProfileMenu}
               >
                 Dr. {user.lastName}
               </button>
@@ -1567,38 +1610,115 @@ export default function InstructorDashboard() {
 
               {mode === "one" && selected && (
                 <div className="grid md:grid-cols-3 gap-4">
-                  {/* ✅ upgraded left workspace (toolbar + inspector) */}
-                  <Card className="md:col-span-2">
-                    <CardContent className="p-0">
-                      <div className="p-4 border-b">
-                        <div className="text-sm text-muted-foreground">
-                          {selectedStudentName} • {selected.caseTitle}
-                        </div>
-                        <div className="text-[12px] text-muted-foreground mt-1">
-                          Use toolbar to annotate • wheel/controls to zoom • select shapes to manage in list
-                        </div>
-                      </div>
-
-                      <div className="px-4 pt-3">
-                        <AnnotationToolbar annotation={selectedAnn} />
-                      </div>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 p-4">
-                        <div className="min-h-[560px]">
-                      
-                          <AnnotationCanvas
-                            imageUrl={selectedImageUrl}
-                            annotation={selectedAnn}
-                            peerAnnotations={selectedAnn.peerAnnotations}
-                          />
+                  {selectedIsQnA ? (
+                    <Card className="md:col-span-2">
+                      <CardContent className="p-0">
+                        <div className="p-4 border-b">
+                          <div className="text-sm text-muted-foreground">
+                            {selectedStudentName} • {selected.caseTitle} • Q&A Submission
+                          </div>
+                          <div className="text-[12px] text-muted-foreground mt-1">
+                            Grade by comparing each student answer with the question prompt and expected answer.
+                          </div>
                         </div>
 
-                        <div className="space-y-3">
-                          <AnnotationInspector annotation={selectedAnn} />
+                        <div className="p-4 space-y-3 max-h-[720px] overflow-auto">
+                          {(selected.modelAnswers ?? []).length === 0 ? (
+                            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                              No Q&A questions found for this submission.
+                            </div>
+                          ) : (
+                            (selected.modelAnswers ?? []).map((question: any, idx: number) => {
+                              const answerValue = selectedAnswerMap.get(Number(question?.index ?? idx));
+                              const points = Number(question?.points || 0);
+
+                              return (
+                                <div key={idx} className="rounded-lg border bg-card p-4 space-y-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="font-medium">Question {idx + 1}</p>
+                                      <p className="text-sm mt-1 whitespace-pre-wrap">{question?.prompt || ""}</p>
+                                    </div>
+                                    <Badge variant="secondary">{points} pts</Badge>
+                                  </div>
+
+                                  {question?.type === "mcq" && Array.isArray(question?.options) ? (
+                                    <div className="space-y-1">
+                                      <p className="text-xs font-medium text-muted-foreground">Options</p>
+                                      {question.options.map((option: string, optionIndex: number) => (
+                                        <div key={optionIndex} className="text-sm rounded-md border p-2">
+                                          <span className="font-medium mr-2">{optionIndex + 1}.</span>
+                                          <span>{option}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : null}
+
+                                  <div className="space-y-1">
+                                    <p className="text-xs font-medium text-muted-foreground">Student answer</p>
+                                    <div className="rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
+                                      {question?.type === "mcq" && Array.isArray(question?.options)
+                                        ? (question.options[Number(answerValue)] ?? (answerValue != null ? String(answerValue) : "No answer"))
+                                        : (answerValue != null && String(answerValue).trim().length > 0 ? String(answerValue) : "No answer")}
+                                    </div>
+                                  </div>
+
+                                  {(question?.expectedAnswer != null || (question?.type === "mcq" && typeof question?.correctIndex === "number")) && (
+                                    <div className="space-y-1">
+                                      <p className="text-xs font-medium text-muted-foreground">Expected answer</p>
+                                      <div className="rounded-md border bg-emerald-50 dark:bg-emerald-950/40 p-3 text-sm whitespace-pre-wrap">
+                                        {question?.type === "mcq" && Array.isArray(question?.options) && typeof question?.correctIndex === "number"
+                                          ? question.options[question.correctIndex] ?? `Option ${question.correctIndex + 1}`
+                                          : String(question?.expectedAnswer ?? "")}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+
+                          {selected.notes && (
+                            <div className="rounded-lg border p-4 space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">Student additional notes</p>
+                              <p className="text-sm whitespace-pre-wrap">{selected.notes}</p>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="md:col-span-2">
+                      <CardContent className="p-0">
+                        <div className="p-4 border-b">
+                          <div className="text-sm text-muted-foreground">
+                            {selectedStudentName} • {selected.caseTitle}
+                          </div>
+                          <div className="text-[12px] text-muted-foreground mt-1">
+                            Use toolbar to annotate • wheel/controls to zoom • select shapes to manage in list
+                          </div>
+                        </div>
+
+                        <div className="px-4 pt-3">
+                          <AnnotationToolbar annotation={selectedAnn} />
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 p-4">
+                          <div className="min-h-[560px]">
+                            <AnnotationCanvas
+                              imageUrl={selectedImageUrl}
+                              annotation={selectedAnn}
+                              peerAnnotations={selectedAnn.peerAnnotations}
+                            />
+                          </div>
+
+                          <div className="space-y-3">
+                            <AnnotationInspector annotation={selectedAnn} />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <div className="space-y-3">
                     {/* ✅ RubricPanel now saves rubric + comment */}
@@ -1626,7 +1746,7 @@ export default function InstructorDashboard() {
                         aiGrading.analyzeSubmission(
                           selected.id,
                           selectedAnn.annotations ?? [],
-                          draftFeedback || selected.feedback,
+                          selectedSubmissionText,
                           rubricDef,
                           selected.caseTitle
                         );
@@ -1654,7 +1774,7 @@ export default function InstructorDashboard() {
                         aiGrading.analyzeSubmission(
                           selected.id,
                           selectedAnn.annotations ?? [],
-                          draftFeedback || selected.feedback,
+                          selectedSubmissionText,
                           rubricDef,
                           selected.caseTitle
                         );
@@ -1815,15 +1935,12 @@ export default function InstructorDashboard() {
                     };
                     const mappedAudience = audienceMap[payload.audience] || payload.audience;
 
-                    // For Annotation homework: upload image first and get the URL
-                    let imageUrl: string | undefined;
-                    let uploadedReferenceUploads: any[] = payload.referenceUploads || [];
-                    if (payload.homeworkType === "Annotate" && payload.newCase?.imageFile) {
+                    const uploadImage = async (file: File, caseHint: string) => {
                       const formData = new FormData();
-                      formData.append("file", payload.newCase.imageFile);
+                      formData.append("file", file);
 
                       const uploadParams = new URLSearchParams({
-                        caseId: "temp",
+                        caseId: caseHint || `temp-${Date.now()}`,
                         userId: user?.user_id || "",
                       });
 
@@ -1833,51 +1950,42 @@ export default function InstructorDashboard() {
                       });
 
                       if (!uploadRes.ok) {
-                        console.error("Image upload failed", await uploadRes.text());
-                        alert("Failed to upload image");
-                        return;
+                        const txt = await uploadRes.text();
+                        throw new Error(txt || "Image upload failed");
                       }
 
                       const uploadData = await uploadRes.json();
-                      // Use full URL from upload response
-                      imageUrl = uploadData.url || uploadData.filename || uploadData.path;
+                      return uploadData.url || uploadData.filename || uploadData.path;
+                    };
+
+                    let imageUrl: string | undefined;
+                    if (payload.newCase?.imageFile) {
+                      imageUrl = await uploadImage(payload.newCase.imageFile, payload.newCase?.title || "temp");
                     }
 
-                    if (Array.isArray(payload.referenceUploads) && payload.referenceUploads.length > 0) {
-                      uploadedReferenceUploads = [];
-                      for (const refFile of payload.referenceUploads as any[]) {
-                        const rawFile = (refFile as any)?.file;
-                        if (!rawFile) {
-                          uploadedReferenceUploads.push(refFile);
-                          continue;
+                    const uploadedQuestions = await Promise.all(
+                      (payload.questions || []).map(async (question: any) => {
+                        if (question?.imageFile) {
+                          const qUrl = await uploadImage(
+                            question.imageFile,
+                            `${payload.newCase?.title || "question"}-${Date.now()}`,
+                          );
+                          return {
+                            ...question,
+                            image_url: qUrl,
+                            imageUrl: qUrl,
+                            imageFile: undefined,
+                            imagePreviewUrl: undefined,
+                          };
                         }
-
-                        const formData = new FormData();
-                        formData.append("file", rawFile);
-
-                        const uploadParams = new URLSearchParams({
-                          caseId: payload.newCase?.title || `temp-${Date.now()}`,
-                          userId: user?.user_id || "",
-                        });
-
-                        const uploadRes = await fetch(`${API_BASE}/api/instructor/homeworks/upload?${uploadParams}`, {
-                          method: "POST",
-                          body: formData,
-                        });
-
-                        if (!uploadRes.ok) {
-                          console.error("Reference upload failed", await uploadRes.text());
-                          alert(`Failed to upload reference file: ${refFile.name || "file"}`);
-                          return;
-                        }
-
-                        const uploadData = await uploadRes.json();
-                        uploadedReferenceUploads.push({
-                          ...refFile,
-                          url: uploadData.url || uploadData.filename || uploadData.path,
-                        });
-                      }
-                    }
+                        return {
+                          ...question,
+                          image_url: question?.imageUrl || question?.image_url,
+                          imageFile: undefined,
+                          imagePreviewUrl: undefined,
+                        };
+                      })
+                    );
 
                     // Build the homework payload with new simplified structure
                     const homeworkPayload = {
@@ -1890,12 +1998,12 @@ export default function InstructorDashboard() {
                       },
                       dueAtISO: payload.dueAtISO,
                       audience: mappedAudience,
+                      visibility: payload.visibility || "public",
                       instructions: payload.instructions,
                       autoChecklist: payload.autoChecklist || [],
                       suggestedFocusTags: payload.suggestedFocusTags || [],
                       homeworkType: payload.homeworkType || "Q&A",
-                      referenceUploads: uploadedReferenceUploads,
-                      questions: payload.questions || [],
+                      questions: uploadedQuestions,
                       password: payload.password || "",
                       classIds: payload.classIds || [],
                       classLabels: payload.classLabels || [],
@@ -1952,6 +2060,7 @@ export default function InstructorDashboard() {
 
                     <select
                       className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      aria-label="Filter by homework type"
                       value={caseFilterHomeworkType}
                       onChange={(e) => setCaseFilterHomeworkType(e.target.value)}
                     >
@@ -1962,6 +2071,7 @@ export default function InstructorDashboard() {
 
                     <select
                       className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+                      aria-label="Sort cases"
                       value={caseSort}
                       onChange={(e) => setCaseSort(e.target.value as CaseSort)}
                     >
@@ -2003,122 +2113,134 @@ export default function InstructorDashboard() {
                   const renderCards = (cases: CaseCard[]) => (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {cases.map((c) => (
-                        <Card
-                          key={`${c.source}-${c.id}`}
-                          className="border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                          onClick={() => setLocation(`/annotation/${c.id}`)}
-                        >
-                          <div className="relative">
-                            <img
-                              src={c.imageUrl}
-                              alt={c.title}
-                              className="w-full h-48 object-cover bg-muted"
-                            />
-                            {c.source === "db" && (
-                              <button
-                                className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border border-border text-foreground bg-white/90 hover:bg-white dark:bg-black/50 dark:hover:bg-black/70"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteDbCase(c.id, c.title);
-                                }}
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
+                        (() => {
+                          const caseSubmissions = submissions.filter((s) => s.caseId === c.id);
+                          const gradedSubmissions = caseSubmissions.filter((s) => s.score != null);
+                          const avgScore = gradedSubmissions.length
+                            ? gradedSubmissions.reduce((sum, s) => sum + Number(s.score ?? 0), 0) / gradedSubmissions.length
+                            : null;
+                          const questionsCount = caseSubmissions.reduce((max, s) => {
+                            const count = Array.isArray(s.modelAnswers) ? s.modelAnswers.length : 0;
+                            return Math.max(max, count);
+                          }, 0);
+                          const allKnownStudents = new Set(submissions.map((s) => s.studentId));
+                          const submittersForCase = new Set(caseSubmissions.map((s) => s.studentId));
+                          const notStartedCount = Math.max(allKnownStudents.size - submittersForCase.size, 0);
 
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <h3 className="font-semibold truncate">{c.title}</h3>
-                              <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${getHomeworkTypeColor(c.homeworkType)}`}>
-                                {c.homeworkType || "Annotate"}
-                              </span>
-                            </div>
-                            <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{c.description}</p>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {c.caseType && (
-                                <span className={`text-xs px-2 py-1 rounded font-medium ${getCaseTypeColor(c.caseType)}`}>
-                                  {c.caseType}
-                                </span>
-                              )}
-                              {c.homeworkAudience === "All Students" && (
-                                <span className="text-xs px-2 py-1 rounded font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100">
-                                  All students
-                                </span>
-                              )}
-                              {(!c.classInfos || c.classInfos.length === 0) && c.classInfo && c.classInfo.name && (
-                                <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800">
-                                  {c.classInfo.year ? `${c.classInfo.name} (${c.classInfo.year})` : c.classInfo.name}
-                                </span>
-                              )}
-                              {(c.classInfos ?? [])
-                                .filter((ci) => !!ci?.name)
-                                .map((ci, idx) => (
-                                  <span
-                                    key={`${ci.name}-${ci.year ?? ""}-${idx}`}
-                                    className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800"
-                                  >
-                                    {ci.year ? `${ci.name} (${ci.year})` : ci.name}
-                                  </span>
-                                ))}
-                            </div>
-                          </CardContent>
-                        </Card>
+                          return (
+                            <Card
+                              key={`${c.source}-${c.id}`}
+                              className="group border border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer relative h-full min-h-[360px]"
+                              onClick={() => setLocation(`/annotation/${c.id}`)}
+                            >
+                              <div className="relative">
+                                {(c.homeworkType !== "Q&A") && (
+                                  <img
+                                    src={c.imageUrl}
+                                    alt={c.title}
+                                    className="w-full h-44 object-cover bg-muted"
+                                  />
+                                )}
+                              </div>
+
+                              <CardContent className={`p-4 ${c.homeworkType === "Q&A" ? "h-full flex flex-col justify-between gap-3" : ""}`}>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <h3 className="font-semibold truncate">{c.title}</h3>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {c.source === "db" && (
+                                      <button
+                                        className="text-xs px-2 py-1 rounded-md border border-border text-foreground bg-white/90 hover:bg-white dark:bg-black/50 dark:hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          deleteDbCase(c.id, c.title);
+                                        }}
+                                      >
+                                        Delete
+                                      </button>
+                                    )}
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                        c.homeworkType === "Q&A"
+                                          ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                                          : "bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200"
+                                      }`}
+                                    >
+                                      {c.homeworkType || "Annotate"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className={`text-sm text-muted-foreground ${c.homeworkType === "Q&A" ? "line-clamp-2" : "line-clamp-2 mb-3"}`}>
+                                  {c.description}
+                                </p>
+
+                                {c.homeworkType === "Q&A" && (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                                      <div className="text-2xl font-semibold leading-none">{caseSubmissions.length}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">Submissions</div>
+                                    </div>
+                                    <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                                      <div className="text-2xl font-semibold leading-none">{avgScore != null ? `${Math.round(avgScore)}%` : "--"}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">Avg score</div>
+                                    </div>
+                                    <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                                      <div className="text-2xl font-semibold leading-none">{notStartedCount}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">Not started</div>
+                                    </div>
+                                    <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                                      <div className="text-2xl font-semibold leading-none">{questionsCount}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">Questions</div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {c.caseType && (
+                                    <span className={`text-xs font-medium ${getCaseTypeColor(c.caseType)}`}>
+                                      {c.caseType}
+                                    </span>
+                                  )}
+                                  {c.visibility && (
+                                    <span
+                                      className={`text-xs px-2 py-1 rounded font-medium ${
+                                        c.visibility === "private"
+                                          ? "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100"
+                                      }`}
+                                    >
+                                      {c.visibility === "private" ? "Private" : "Public"}
+                                    </span>
+                                  )}
+                                  {c.homeworkAudience === "All Students" && (
+                                    <span className="text-xs px-2 py-1 rounded font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100">
+                                      All students
+                                    </span>
+                                  )}
+                                  {(!c.classInfos || c.classInfos.length === 0) && c.classInfo && c.classInfo.name && (
+                                    <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800">
+                                      {c.classInfo.year ? `${c.classInfo.name} (${c.classInfo.year})` : c.classInfo.name}
+                                    </span>
+                                  )}
+                                  {(c.classInfos ?? [])
+                                    .filter((ci) => !!ci?.name)
+                                    .map((ci, idx) => (
+                                      <span
+                                        key={`${ci.name}-${ci.year ?? ""}-${idx}`}
+                                        className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800"
+                                      >
+                                        {ci.year ? `${ci.name} (${ci.year})` : ci.name}
+                                      </span>
+                                    ))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })()
                       ))}
                     </div>
                   );
 
-                  const annotateCases = visibleCases.filter((c) => (c.homeworkType || "Annotate") === "Annotate");
-                  const qaCases = visibleCases.filter((c) => c.homeworkType === "Q&A");
-
-                  const renderSection = (
-                    title: "Annotate" | "Q&A",
-                    cases: CaseCard[],
-                    shellClassName: string,
-                    pillClassName: string,
-                  ) => (
-                    <div className={shellClassName}>
-                      <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
-                        <span className={pillClassName}>{title}</span>
-                      </h3>
-                      {renderCards(cases)}
-                    </div>
-                  );
-
-                  if (caseFilterHomeworkType === "Annotate") {
-                    return renderSection(
-                      "Annotate",
-                      annotateCases,
-                      "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
-                    );
-                  }
-
-                  if (caseFilterHomeworkType === "Q&A") {
-                    return renderSection(
-                      "Q&A",
-                      qaCases,
-                      "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-6">
-                      {annotateCases.length > 0 && renderSection(
-                        "Annotate",
-                        annotateCases,
-                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
-                      )}
-                      {qaCases.length > 0 && renderSection(
-                        "Q&A",
-                        qaCases,
-                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
-                      )}
-                    </div>
-                  );
+                  return renderCards(visibleCases);
                 })()
               )}
             </div>

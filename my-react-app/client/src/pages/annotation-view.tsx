@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,6 +91,7 @@ export default function AnnotationView() {
     classYear?: string;
     classIds?: string[];
     classLabels?: string[];
+    visibility?: "public" | "private";
     password?: string;
     instructions?: string;
     uploads?: any[];
@@ -196,6 +197,7 @@ export default function AnnotationView() {
                 points: Number(hwData.max_points) || (totalPoints > 0 ? totalPoints : 100),
                 homeworkType: (hwData.homework_type || found?.homework_type || "Annotate") as "Q&A" | "Annotate",
                 audience: hwData.audience || undefined,
+                visibility: String(hwData.visibility || "public").toLowerCase() === "private" ? "private" : "public",
                 className: hwData.class_name || undefined,
                 classYear: hwData.year || undefined,
                 classIds: Array.isArray(hwData.class_ids) ? hwData.class_ids.map((id: any) => String(id)) : [],
@@ -274,6 +276,8 @@ export default function AnnotationView() {
   const [editHwPoints, setEditHwPoints] = useState(hw?.points || 0);
   const [editHwDueDate, setEditHwDueDate] = useState(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
   const [editHwPassword, setEditHwPassword] = useState(hw?.password || "");
+  const [editVisibility, setEditVisibility] = useState<"public" | "private">("public");
+  const [editQnaQuestions, setEditQnaQuestions] = useState<any[]>([]);
   const [homeworkTags, setHomeworkTags] = useState<Array<{ label: string; highlighted: boolean }>>([
     { label: "Identify structures", highlighted: true },
     { label: "Note abnormalities", highlighted: true }
@@ -334,6 +338,23 @@ export default function AnnotationView() {
   const [showTabDropdown, setShowTabDropdown] = useState(false);
   const [qnaNotes, setQnaNotes] = useState("");
   const [qnaAnswers, setQnaAnswers] = useState<Array<{ index: number; value: any }>>([]);
+  const canvasScrollRef = useRef<HTMLDivElement | null>(null);
+  const savedCanvasScrollTopRef = useRef(0);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAnnotationCountRef = useRef(0);
+
+  const switchSidebarTab = (tab: "annotate" | "collaborate" | "ai-assistant" | "homework") => {
+    if (canvasScrollRef.current) {
+      savedCanvasScrollTopRef.current = canvasScrollRef.current.scrollTop;
+    }
+    setActiveSidebarTab(tab);
+    setShowTabDropdown(false);
+    requestAnimationFrame(() => {
+      if (canvasScrollRef.current) {
+        canvasScrollRef.current.scrollTop = savedCanvasScrollTopRef.current;
+      }
+    });
+  };
 
   // Assignment requirements screen - check if already accepted (per-user per-case)
   const [showRequirements, setShowRequirements] = useState(() => {
@@ -341,6 +362,14 @@ export default function AnnotationView() {
     const accepted = localStorage.getItem(`assignment_accepted_${caseId}_${user?.user_id}`);
     return !accepted;
   });
+
+  const handlePeerVisibilityToggle = (userId: string, visible: boolean) => {
+    console.log("Peer visibility toggle", userId, visible);
+  };
+
+  const handlePeerSelectForComparison = (userId: string) => {
+    console.log("Peer selected for comparison", userId);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -384,6 +413,50 @@ export default function AnnotationView() {
     setQnaNotes(submission?.notes || "");
     setQnaAnswers(submission?.answers || []);
   }, [isQnAStudentMode, submission?.notes, submission?.answers]);
+
+  useEffect(() => {
+    lastAnnotationCountRef.current = annotation.annotations.length;
+  }, [caseId]);
+
+  useEffect(() => {
+    if (user?.role !== "student") return;
+    if (isQnAStudentMode || showRequirements) return;
+
+    const currentCount = annotation.annotations.length;
+    if (currentCount <= lastAnnotationCountRef.current) {
+      lastAnnotationCountRef.current = currentCount;
+      return;
+    }
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    autosaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        annotation.saveAllAnnotationsSnapshot();
+        await create({
+          boxes: annotation.annotations,
+          notes: JSON.stringify({
+            autosaved: true,
+            timestamp: new Date().toISOString(),
+            tool: annotation.tool,
+            color: annotation.color,
+          }),
+        });
+      } catch (e) {
+        console.error("Autosave failed", e);
+      }
+    }, 600);
+
+    lastAnnotationCountRef.current = currentCount;
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [annotation.annotations.length, annotation.tool, annotation.color, annotation.annotations, create, isQnAStudentMode, showRequirements, user?.role]);
 
   useEffect(() => {
     if (showRequirements) return;
@@ -471,6 +544,8 @@ export default function AnnotationView() {
       setEditHwPoints(hw.points || 0);
       setEditHwDueDate(hw?.dueAt ? new Date(hw.dueAt).toISOString().split('T')[0] : "");
       setEditHwPassword(hw?.password || "");
+      setEditVisibility(hw?.visibility || "public");
+      setEditQnaQuestions(Array.isArray(hw?.questions) ? hw.questions : []);
       const tags: string[] = [];
       if (hw.audience === "All Students") {
         tags.push("All students");
@@ -489,8 +564,10 @@ export default function AnnotationView() {
       setEditCaseClasses([]);
       setEditCaseClassIds([]);
       setEditHwPassword("");
+      setEditVisibility("public");
+      setEditQnaQuestions([]);
     }
-  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear, hw?.classIds, hw?.classLabels, hw?.password]);
+  }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear, hw?.classIds, hw?.classLabels, hw?.password, hw?.visibility, hw?.questions]);
 
   if (!user || pageLoading) {
     return <div>Loading...</div>;
@@ -520,14 +597,16 @@ export default function AnnotationView() {
   const handleSaveVersion = async () => {
     try {
       annotation.saveAllAnnotationsSnapshot();
-      const mockData = {
-        annotations: annotation.annotations,
-        tool: annotation.tool,
-        color: annotation.color,
-        createdAt: new Date(),
+      const payload = {
+        boxes: annotation.annotations,
+        notes: JSON.stringify({
+          tool: annotation.tool,
+          color: annotation.color,
+          timestamp: new Date().toISOString(),
+        }),
       };
-      await create(mockData);
-      console.log("Saved version:", mockData);
+      await create(payload);
+      console.log("Saved version:", payload);
     } catch (e) {
       console.error("Save version failed", e);
     }
@@ -732,8 +811,16 @@ export default function AnnotationView() {
         {/* Canvas area */}
         <main className="flex-1 flex overflow-hidden">
           {/* Canvas */}
-          <div className="flex-1 p-0 overflow-auto">
-            {user?.role === "student" && isQnAHomework ? (
+          <div
+            ref={canvasScrollRef}
+            className="flex-1 p-0 overflow-auto"
+            onScroll={() => {
+              if (canvasScrollRef.current) {
+                savedCanvasScrollTopRef.current = canvasScrollRef.current.scrollTop;
+              }
+            }}
+          >
+            {isQnAHomework ? (
               <div className="p-6 space-y-6">
                 <Card>
                   <CardContent className="p-6 space-y-4">
@@ -777,6 +864,16 @@ export default function AnnotationView() {
                               <p className="text-xs text-muted-foreground whitespace-pre-wrap">{question.guidance}</p>
                             )}
 
+                            {(question.image_url || question.imageUrl) && (
+                              <div className="overflow-hidden rounded-md border bg-muted/30">
+                                <img
+                                  src={question.image_url || question.imageUrl}
+                                  alt={`Question ${index + 1}`}
+                                  className="max-h-64 w-full object-contain bg-background"
+                                />
+                              </div>
+                            )}
+
                             {question.type === "mcq" && Array.isArray(question.options) ? (
                               <div className="space-y-2">
                                 {question.options.map((option: string, optionIndex: number) => (
@@ -786,7 +883,7 @@ export default function AnnotationView() {
                                       name={`qna-question-${index}`}
                                       checked={String(getQnaAnswerValue(index)) === String(optionIndex)}
                                       onChange={() => setQnaAnswerValue(index, optionIndex)}
-                                      disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                                      disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded"}
                                     />
                                     <span>{option}</span>
                                   </label>
@@ -798,7 +895,7 @@ export default function AnnotationView() {
                                 onChange={(e) => setQnaAnswerValue(index, e.target.value)}
                                 placeholder="Type your answer here..."
                                 className="min-h-[120px]"
-                                disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                                disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded"}
                               />
                             )}
                           </div>
@@ -813,26 +910,18 @@ export default function AnnotationView() {
                         onChange={(e) => setQnaNotes(e.target.value)}
                         placeholder="Optional notes for your instructor..."
                         className="min-h-[100px]"
-                        disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                        disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded"}
                       />
                     </div>
 
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={submitQnAResponses}
-                        disabled={hw?.closed || subLoading || submission?.status === "graded"}
-                      >
-                        {subLoading ? "Submitting..." : "Submit Q&A Answers"}
-                      </Button>
-                    </div>
-
-                    {case_.imageUrl && (
-                      <div className="rounded-lg overflow-hidden border bg-muted">
-                        <img
-                          src={case_.imageUrl}
-                          alt={case_.title || "Case image"}
-                          className="w-full max-h-[520px] object-contain"
-                        />
+                    {user?.role === "student" && (
+                      <div className="flex justify-end">
+                        <Button
+                          onClick={submitQnAResponses}
+                          disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                        >
+                          {subLoading ? "Submitting..." : "Submit Q&A Answers"}
+                        </Button>
                       </div>
                     )}
 
@@ -856,6 +945,8 @@ export default function AnnotationView() {
               description={hw?.description || case_.description || "No homework assignment for this case yet."}
               dueDate={hw?.dueAt}
               points={hw?.points ?? 0}
+              submissionStatus={submission?.status || "none"}
+              score={submission?.score}
               closed={hw?.closed ?? false}
               hasHomework={Boolean(hw)}
               autoChecklist={[
@@ -869,9 +960,9 @@ export default function AnnotationView() {
 
           {user?.role === 'student' && showHistory && (
             <AnnotationHistory
-              versions={annotation.versions}
-              currentVersion={annotation.currentVersion}
-              onVersionSelect={annotation.previewVersion}
+              versions={(annotation.versions as any) || []}
+              currentVersion={undefined}
+              onVersionSelect={() => {}}
               onRestore={annotation.restoreVersion}
               onDelete={annotation.deleteVersion}
             />
@@ -1137,6 +1228,19 @@ export default function AnnotationView() {
                               />
                             </div>
                             <div>
+                              <label htmlFor="hw-visibility" className="block text-xs font-medium mb-1">Visibility</label>
+                              <select
+                                id="hw-visibility"
+                                value={editVisibility}
+                                onChange={(e) => setEditVisibility(e.target.value as "public" | "private")}
+                                title="Visibility"
+                                className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
+                              >
+                                <option value="public">Public</option>
+                                <option value="private">Private</option>
+                              </select>
+                            </div>
+                            <div>
                               <label htmlFor="hw-duedate" className="block text-xs font-medium mb-1">Due Date</label>
                               <input
                                 id="hw-duedate"
@@ -1160,6 +1264,98 @@ export default function AnnotationView() {
                               className="w-full px-3 py-1.5 text-xs border border-border rounded-md bg-background"
                             />
                           </div>
+
+                          {hw?.homeworkType === "Q&A" && (
+                            <div className="space-y-2">
+                              <h5 className="text-xs font-semibold text-muted-foreground">Q&A Questions (Student Layout)</h5>
+                              {editQnaQuestions.length === 0 ? (
+                                <div className="text-xs text-muted-foreground border border-dashed rounded-md p-3">
+                                  No Q&A questions configured.
+                                </div>
+                              ) : (
+                                <div className="space-y-3 max-h-72 overflow-auto pr-1">
+                                  {editQnaQuestions.map((question, index) => (
+                                    <div key={index} className="rounded-lg border p-3 bg-background space-y-2">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <p className="text-xs font-medium">Question {index + 1}</p>
+                                        <span className="text-[10px] px-2 py-0.5 rounded border">
+                                          {question.type === "mcq" ? "MCQ" : "Essay"}
+                                        </span>
+                                      </div>
+
+                                      <textarea
+                                        value={question.prompt || ""}
+                                        onChange={(e) => {
+                                          const next = [...editQnaQuestions];
+                                          next[index] = { ...next[index], prompt: e.target.value };
+                                          setEditQnaQuestions(next);
+                                        }}
+                                        rows={2}
+                                        className="w-full px-2 py-1.5 text-xs border border-border rounded-md bg-background"
+                                        placeholder="Question prompt"
+                                      />
+
+                                      {(question.image_url || question.imageUrl) && (
+                                        <div className="overflow-hidden rounded-md border bg-muted/30">
+                                          <img
+                                            src={question.image_url || question.imageUrl}
+                                            alt={`Question ${index + 1}`}
+                                            className="max-h-40 w-full object-contain"
+                                          />
+                                        </div>
+                                      )}
+
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                          type="number"
+                                          value={Number(question.points || 0)}
+                                          onChange={(e) => {
+                                            const next = [...editQnaQuestions];
+                                            next[index] = { ...next[index], points: Number(e.target.value) || 0 };
+                                            setEditQnaQuestions(next);
+                                          }}
+                                          className="w-full px-2 py-1.5 text-xs border border-border rounded-md bg-background"
+                                          title="Points"
+                                        />
+                                        <input
+                                          value={question.guidance || ""}
+                                          onChange={(e) => {
+                                            const next = [...editQnaQuestions];
+                                            next[index] = { ...next[index], guidance: e.target.value };
+                                            setEditQnaQuestions(next);
+                                          }}
+                                          className="w-full px-2 py-1.5 text-xs border border-border rounded-md bg-background"
+                                          placeholder="Guidance"
+                                          title="Guidance"
+                                        />
+                                      </div>
+
+                                      {question.type === "mcq" && Array.isArray(question.options) && (
+                                        <div className="space-y-1">
+                                          {question.options.map((option: string, optionIndex: number) => (
+                                            <div key={optionIndex} className="flex items-center gap-2">
+                                              <input
+                                                value={option}
+                                                onChange={(e) => {
+                                                  const next = [...editQnaQuestions];
+                                                  const options = [...(next[index].options || [])];
+                                                  options[optionIndex] = e.target.value;
+                                                  next[index] = { ...next[index], options };
+                                                  setEditQnaQuestions(next);
+                                                }}
+                                                className="w-full px-2 py-1 text-xs border border-border rounded-md bg-background"
+                                                placeholder={`Option ${optionIndex + 1}`}
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="bg-muted p-2 rounded-lg border border-border">
@@ -1270,8 +1466,12 @@ export default function AnnotationView() {
                                 body: JSON.stringify({
                                   instructions: editHwDescription,
                                   due_at: editHwDueDate ? new Date(`${editHwDueDate}T23:59:00`).toISOString() : undefined,
-                                  max_points: editHwPoints,
+                                  max_points: hw?.homeworkType === "Q&A"
+                                    ? editQnaQuestions.reduce((sum: number, q: any) => sum + Number(q.points || 0), 0)
+                                    : editHwPoints,
                                   password: editHwPassword.trim() || null,
+                                  visibility: editVisibility,
+                                  questions: hw?.homeworkType === "Q&A" ? editQnaQuestions : undefined,
                                   audience: useClassroomAudience ? "Classrooms" : "All Students",
                                   class_ids: editCaseClassIds,
                                   class_labels: classroomLabels,
@@ -1300,11 +1500,13 @@ export default function AnnotationView() {
                               return {
                                 ...prev,
                                 audience: editCaseClassIds.length > 0 || classroomLabels.length > 0 ? "Classrooms" : "All Students",
+                                visibility: editVisibility,
                                 classIds: editCaseClassIds,
                                 classLabels: classroomLabels,
                                 className: firstClass?.name || prev.className,
                                 classYear: firstClass?.year || prev.classYear,
                                 password: editHwPassword.trim() || undefined,
+                                questions: hw?.homeworkType === "Q&A" ? editQnaQuestions : prev.questions,
                               };
                             });
 
@@ -1502,8 +1704,8 @@ export default function AnnotationView() {
             <PeerComparison
               peerAnnotations={mockPeerAnnotations}
               currentUserId={user?.user_id || "current-user"}
-              onToggleUserAnnotations={annotation.togglePeerAnnotations}
-              onSelectForComparison={annotation.togglePeerAnnotations}
+              onToggleUserAnnotations={handlePeerVisibilityToggle}
+              onSelectForComparison={handlePeerSelectForComparison}
             />
           )}
 
@@ -1511,9 +1713,9 @@ export default function AnnotationView() {
             <AnnotationPropertiesPanel
               selectedAnnotations={annotation.annotations.filter((a) =>
                 annotation.selectedAnnotationIds.includes(a.id)
-              )}
+              ) as any}
               onClose={() => setShowProperties(false)}
-              onUpdateAnnotation={annotation.updateAnnotation}
+              onUpdateAnnotation={annotation.updateAnnotation as any}
               onDeleteAnnotations={annotation.deleteSelectedAnnotations}
               onLockAnnotations={annotation.lockAnnotations}
               onDuplicateAnnotations={annotation.duplicateAnnotations}
@@ -1531,7 +1733,7 @@ export default function AnnotationView() {
                   caseTitle: case_.title,
                   caseDescription: case_.description,
                   imageUrl: case_.imageUrl,
-                  annotations: annotation.annotations,
+                  annotations: annotation.annotations as any,
                   homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
                   userRole: user.role as "student" | "instructor",
                   userId: user.user_id || ""
@@ -1553,7 +1755,7 @@ export default function AnnotationView() {
                   caseTitle: case_.title,
                   caseDescription: case_.description,
                   imageUrl: case_.imageUrl,
-                  annotations: annotation.annotations,
+                  annotations: annotation.annotations as any,
                   homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
                   userRole: user.role as "student" | "instructor",
                   userId: user.user_id || ""
@@ -1568,7 +1770,41 @@ export default function AnnotationView() {
 
           {/* Default collaborative sidebar with dropdown tab selector */}
           {user?.role === 'student' && !showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && !showAssignmentDetails && (
-            <aside className="w-80 bg-card border-l border-border flex flex-col overflow-hidden">
+            <aside className="group/sidebar w-16 hover:w-80 bg-card border-l border-border flex flex-col overflow-hidden transition-all duration-300">
+              <div className="flex flex-col items-center gap-3 py-3 group-hover/sidebar:hidden">
+                {!isQnAStudentMode && (
+                  <button
+                    className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "annotate" ? "bg-primary/10 border-primary/40" : "border-border"}`}
+                    onClick={() => switchSidebarTab("annotate")}
+                    title="Annotate"
+                  >
+                    <span className="text-base">📝</span>
+                  </button>
+                )}
+                <button
+                  className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "collaborate" ? "bg-primary/10 border-primary/40" : "border-border"}`}
+                  onClick={() => switchSidebarTab("collaborate")}
+                  title="Collaborate"
+                >
+                  <span className="text-base">👥</span>
+                </button>
+                <button
+                  className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "ai-assistant" ? "bg-primary/10 border-primary/40" : "border-border"}`}
+                  onClick={() => switchSidebarTab("ai-assistant")}
+                  title="AI Assistant"
+                >
+                  <span className="text-base">🤖</span>
+                </button>
+                <button
+                  className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "homework" ? "bg-primary/10 border-primary/40" : "border-border"}`}
+                  onClick={() => switchSidebarTab("homework")}
+                  title="Homework"
+                >
+                  <span className="text-base">📋</span>
+                </button>
+              </div>
+
+              <div className="hidden group-hover/sidebar:flex flex-1 flex-col min-w-0">
               {/* Dropdown Tab Selector */}
               <div className="border-b border-border p-2">
                 <div className="relative">
@@ -1598,8 +1834,7 @@ export default function AnnotationView() {
                             activeSidebarTab === "annotate" ? "bg-primary/10" : ""
                           }`}
                           onClick={() => {
-                            setActiveSidebarTab("annotate");
-                            setShowTabDropdown(false);
+                            switchSidebarTab("annotate");
                           }}
                         >
                           <span className="text-base">📝</span>
@@ -1611,8 +1846,7 @@ export default function AnnotationView() {
                           activeSidebarTab === "collaborate" ? "bg-primary/10" : ""
                         }`}
                         onClick={() => {
-                          setActiveSidebarTab("collaborate");
-                          setShowTabDropdown(false);
+                          switchSidebarTab("collaborate");
                         }}
                       >
                         <span className="text-base">👥</span>
@@ -1623,8 +1857,7 @@ export default function AnnotationView() {
                           activeSidebarTab === "ai-assistant" ? "bg-primary/10" : ""
                         }`}
                         onClick={() => {
-                          setActiveSidebarTab("ai-assistant");
-                          setShowTabDropdown(false);
+                          switchSidebarTab("ai-assistant");
                         }}
                       >
                         <span className="text-base">🤖</span>
@@ -1635,8 +1868,7 @@ export default function AnnotationView() {
                           activeSidebarTab === "homework" ? "bg-primary/10" : ""
                         }`}
                         onClick={() => {
-                          setActiveSidebarTab("homework");
-                          setShowTabDropdown(false);
+                          switchSidebarTab("homework");
                         }}
                       >
                         <span className="text-base">📋</span>
@@ -1738,14 +1970,14 @@ export default function AnnotationView() {
                       caseTitle: case_.title,
                       caseDescription: case_.description,
                       imageUrl: case_.imageUrl,
-                      annotations: annotation.annotations,
+                      annotations: annotation.annotations as any,
                       homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
                       userRole: user.role as "student" | "instructor",
                       userId: user.user_id || ""
                     }}
                     isMinimized={false}
                     onMinimize={() => {}}
-                    onClose={() => setActiveSidebarTab("collaborate")}
+                    onClose={() => switchSidebarTab("collaborate")}
                     className="h-full"
                   />
                 </div>
@@ -1761,11 +1993,28 @@ export default function AnnotationView() {
                         <p className="text-xs text-muted-foreground mb-2">{hw.description}</p>
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-xs font-medium">Total Points</span>
-                          <Badge variant="outline" className="text-lg font-bold">{hw.points}</Badge>
+                          <Badge variant="outline" className="text-lg font-bold">
+                            {submission?.status === "graded" && submission?.score != null
+                              ? `${submission.score}/${hw.points}`
+                              : hw.points}
+                          </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground space-y-1">
                           <p><strong>Due:</strong> {new Date(hw.dueAt).toLocaleDateString()}</p>
-                          <p><strong>Status:</strong> {hw.closed ? <span className="text-red-600 font-semibold">Closed</span> : <span className="text-green-600 font-semibold">Open</span>}</p>
+                          <p>
+                            <strong>Status:</strong>{" "}
+                            {submission?.status === "graded" ? (
+                              <span className="text-emerald-600 font-semibold">Marked</span>
+                            ) : submission?.status === "grading" ? (
+                              <span className="text-amber-600 font-semibold">Under review</span>
+                            ) : submission?.status === "submitted" ? (
+                              <span className="text-blue-600 font-semibold">Submitted</span>
+                            ) : hw.closed ? (
+                              <span className="text-red-600 font-semibold">Closed</span>
+                            ) : (
+                              <span className="text-green-600 font-semibold">Open</span>
+                            )}
+                          </p>
                         </div>
                       </div>
 
@@ -1798,6 +2047,7 @@ export default function AnnotationView() {
                     status={submission?.status || "none"}
                     dueDate={hw?.dueAt}
                     score={submission?.score}
+                    maxPoints={hw?.points ?? 100}
                     notes={submission?.notes}
                     files={submission?.files}
                     questions={hw?.questions || []}
@@ -1867,6 +2117,7 @@ export default function AnnotationView() {
                   )}
                 </div>
               )}
+              </div>
             </aside>
           )}
 
@@ -1906,7 +2157,7 @@ export default function AnnotationView() {
                 caseTitle: case_.title,
                 caseDescription: case_.description,
                 imageUrl: case_.imageUrl,
-                annotations: annotation.annotations,
+                annotations: annotation.annotations as any,
                 homeworkInstructions: hw ? "Complete annotations and submit homework" : undefined,
                 userRole: user.role as "student" | "instructor",
                 userId: user.user_id || ""

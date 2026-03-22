@@ -29,8 +29,10 @@ type CaseFromApi = {
   title: string;
   description?: string | null;
   image_url?: string | null;
+  created_at?: string | null;
   case_type?: string | null;
   homework_type?: "Q&A" | "Annotate" | null;
+  visibility?: "public" | "private" | null;
 };
 
 type RemoteHomeworkMeta = {
@@ -38,6 +40,7 @@ type RemoteHomeworkMeta = {
   dueAt?: string;
   closed: boolean;
   homeworkType?: "Q&A" | "Annotate";
+  totalQuestions?: number;
 };
 
 const daysLeft = (iso?: string) => {
@@ -171,6 +174,9 @@ export default function StudentDashboard() {
                   dueAt: hw?.due_at,
                   closed: hw ? hw.status !== "active" : false,
                   homeworkType: hw?.homework_type,
+                  totalQuestions:
+                    Number(data?.qna?.total_questions) ||
+                    (Array.isArray(data?.qna?.questions) ? data.qna.questions.length : undefined),
                 } as RemoteHomeworkMeta,
               ] as const;
             } catch {
@@ -198,18 +204,28 @@ export default function StudentDashboard() {
     remoteHomeworkByCase[caseItem.id]?.homeworkType || caseItem.homeworkType || "Annotate";
 
   const caseLibraryCases = useMemo(() => {
-    const dbCases = casesFromApi.map((c) => ({
+    const dbCases = casesFromApi
+      .filter((c) => String(c.visibility || "public").toLowerCase() !== "private")
+      .map((c) => ({
       id: c.case_id,
       title: c.title,
       description: c.description || "No description",
       category: c.case_type || "General",
       imageUrl: c.image_url || "",
       createdBy: null,
-      createdAt: null,
+      createdAt: c.created_at || null,
       homeworkType: c.homework_type || undefined,
     }));
 
-    return [...dbCases, ...mockCases.filter((m) => !dbCases.some((d) => d.id === m.id))];
+    const placeholderCases = mockCases
+      .filter((m) => !dbCases.some((d) => d.id === m.id))
+      .map((m) => ({
+        ...m,
+        // Keep placeholders at the bottom when sorting by newest.
+        createdAt: "1970-01-01T00:00:00.000Z",
+      }));
+
+    return [...dbCases, ...placeholderCases];
   }, [casesFromApi]);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -236,6 +252,20 @@ export default function StudentDashboard() {
     }
     return map;
   }, [studentSubmissions]);
+
+  const getStudentQnAStats = (caseId: string) => {
+    const caseSubmissions = studentSubmissions.filter((s) => s.case_id === caseId);
+    const gradedScores = caseSubmissions
+      .filter((s) => s.status === "graded" && s.score != null)
+      .map((s) => Number(s.score));
+    const bestScore = gradedScores.length > 0 ? Math.max(...gradedScores) : null;
+
+    return {
+      attempts: caseSubmissions.length,
+      bestScorePct: bestScore,
+      questions: remoteHomeworkByCase[caseId]?.totalQuestions ?? 0,
+    };
+  };
 
   const upcomingHomework = useMemo(() => {
     return caseLibraryCases
@@ -395,6 +425,7 @@ export default function StudentDashboard() {
     const loadProgress = async () => {
       if (!user?.user_id) return;
       try {
+        setStatsError(null);
         const submissionsRes = await fetch(`${API_BASE}/api/instructor/submissions`);
         if (!submissionsRes.ok) throw new Error("Submissions load failed");
         const rawSubmissions: SubmissionRecord[] = await submissionsRes.json();
@@ -409,6 +440,7 @@ export default function StudentDashboard() {
         }
       } catch (e) {
         console.warn("Unable to load live student progress", e);
+        setStatsError("Unable to refresh live progress data right now. Showing the latest loaded values.");
       }
     };
     loadProgress();
@@ -493,6 +525,28 @@ export default function StudentDashboard() {
       });
   }, [studentSubmissions]);
 
+  const liveProgressSnapshot = useMemo(() => {
+    const totalSubmissions = studentSubmissions.length;
+    const gradedCount = studentSubmissions.filter((entry) => entry.status === "graded").length;
+    const pendingCount = studentSubmissions.filter((entry) => entry.status === "submitted" || entry.status === "grading").length;
+    const gradedWithScore = studentSubmissions.filter((entry) => entry.status === "graded" && entry.score != null);
+    const averageScore = gradedWithScore.length
+      ? Math.round((gradedWithScore.reduce((sum, entry) => sum + Number(entry.score ?? 0), 0) / gradedWithScore.length) * 10) / 10
+      : 0;
+    const lastUpdatedAt = studentSubmissions
+      .map((entry) => new Date(entry.updated_at ?? entry.created_at ?? 0).getTime())
+      .filter((ts) => Number.isFinite(ts) && ts > 0)
+      .sort((left, right) => right - left)[0];
+
+    return {
+      totalSubmissions,
+      gradedCount,
+      pendingCount,
+      averageScore,
+      lastUpdatedLabel: lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : "No submissions yet",
+    };
+  }, [studentSubmissions]);
+
   useEffect(() => {
     console.log("Current user in dashboard:", user);
     // guard: only redirect if we definitely know the user isn't a student
@@ -542,49 +596,6 @@ export default function StudentDashboard() {
 
     window.addEventListener('discussion-prefill', handler as EventListener);
     return () => window.removeEventListener('discussion-prefill', handler as EventListener);
-  }, []);
-
-  // Fetch from your API (fallback to mock if API missing/failed)
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setStatsError(null);
-        // Adjust the endpoint to your backend. Expect a shape compatible with StudentStats.
-        const res = await fetch("/api/student/overview", { credentials: "include" });
-        if (!res.ok) throw new Error(`Failed to load: ${res.status}`);
-        const data = await res.json();
-
-        // Defensive mapping to our local type (rename keys if your API differs)
-        const next: StudentStats = {
-          casesCompleted: Number(data?.casesCompleted ?? 0),
-          activeAnnotations: Number(data?.activeAnnotations ?? 0),
-          feedbackReceived: Number(data?.feedbackReceived ?? 0),
-          studyStreakDays: Number(data?.studyStreakDays ?? 0),
-          annotationAccuracyPct: Number(data?.annotationAccuracyPct ?? 0),
-          completionRatePct: Number(data?.completionRatePct ?? 0),
-          collaborationScorePct: Number(data?.collaborationScorePct ?? 0),
-        };
-        if (!cancelled) setStats(next);
-      } catch (e) {
-        // Fallback mock so the UI still works on dev
-        if (!cancelled) {
-          setStats({
-            casesCompleted: 12,
-            activeAnnotations: 8,
-            feedbackReceived: 5,
-            studyStreakDays: 21,
-            annotationAccuracyPct: 85,
-            completionRatePct: 92,
-            collaborationScorePct: 78,
-          });
-        }
-      }
-    }
-    load();
-
-    return () => { cancelled = true; };
   }, []);
 
   if (isLoading) return <div>Loading...</div>;
@@ -682,7 +693,6 @@ export default function StudentDashboard() {
                 }}
                 className="flex items-center space-x-2 focus:outline-none hover:opacity-80 transition"
                 aria-haspopup="menu"
-                aria-expanded={showProfileMenu}
               >
                 <Avatar size={32} className="border-2 border-primary" />
                 <span className="text-sm font-medium" data-testid="text-username">
@@ -959,7 +969,7 @@ export default function StudentDashboard() {
 
                   {(() => {
                     const renderGrid = (cases: typeof myHomeworkVisibleCases) => (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                         {cases.map((annot) => {
                           const hw = remoteHomeworkByCase[annot.id];
                           const submission = submissionByCase[annot.id];
@@ -967,28 +977,14 @@ export default function StudentDashboard() {
 
                           return (
                             <div key={annot.id} className="space-y-2">
-                              <div className="relative">
-                                <CaseCard
-                                  case={annot}
-                                  onClick={() => setLocation(`/annotation/${annot.id}`)}
-                                  homeworkType={getHomeworkType(annot as any)}
-                                />
-                                {submission?.status === "submitted" && (
-                                  <Badge className="absolute top-3 left-3 bg-blue-600 text-white hover:bg-blue-600">
-                                    Submitted
-                                  </Badge>
-                                )}
-                                {submission?.status === "grading" && (
-                                  <Badge className="absolute top-3 left-3 bg-amber-600 text-white hover:bg-amber-600">
-                                    Under review
-                                  </Badge>
-                                )}
-                                {submission?.status === "graded" && (
-                                  <Badge className="absolute top-3 left-3 bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-700 dark:text-emerald-50">
-                                    Marked: {submission.score ?? 0}%
-                                  </Badge>
-                                )}
-                              </div>
+                              <CaseCard
+                                case={annot}
+                                onClick={() => setLocation(`/annotation/${annot.id}`)}
+                                homework={hw?.dueAt ? { dueAt: hw.dueAt, closed: hw.closed } : undefined}
+                                daysLeft={dl ?? undefined}
+                                homeworkType={getHomeworkType(annot as any)}
+                                qnaStats={getHomeworkType(annot as any) === "Q&A" ? getStudentQnAStats(annot.id) : undefined}
+                              />
                               <div className="flex items-center px-1">
                                 <div className="flex items-center gap-2">
                                   <Badge>{t("homework")}</Badge>
@@ -1003,13 +999,12 @@ export default function StudentDashboard() {
                                       Published Grade: {submission.score ?? 0}/{submission.max_points ?? 100}
                                     </Badge>
                                   )}
-                                  {hw?.closed ? (
-                                    <Badge variant="destructive">{t("closed")}</Badge>
-                                  ) : (
-                                    dl !== null && (
-                                      <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl))}</Badge>
-                                    )
+                                  {submission?.status === "graded" && (
+                                    <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-700 dark:text-emerald-50">
+                                      Marked: {submission.score ?? 0}/{submission.max_points ?? 100}
+                                    </Badge>
                                   )}
+                                  {hw?.closed && <Badge variant="destructive">{t("closed")}</Badge>}
                                 </div>
                               </div>
                             </div>
@@ -1018,57 +1013,7 @@ export default function StudentDashboard() {
                       </div>
                     );
 
-                    const annotateCases = myHomeworkVisibleCases.filter((c) => getHomeworkType(c as any) === "Annotate");
-                    const qaCases = myHomeworkVisibleCases.filter((c) => getHomeworkType(c as any) === "Q&A");
-
-                    const renderSection = (
-                      title: "Annotate" | "Q&A",
-                      cases: typeof myHomeworkVisibleCases,
-                      shellClassName: string,
-                      pillClassName: string,
-                    ) => (
-                      <div className={shellClassName}>
-                        <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
-                          <span className={pillClassName}>{title}</span>
-                        </h3>
-                        {renderGrid(cases)}
-                      </div>
-                    );
-
-                    if (myHomeworkFilter === "Annotate") {
-                      return renderSection(
-                        "Annotate",
-                        annotateCases,
-                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
-                      );
-                    }
-
-                    if (myHomeworkFilter === "Q&A") {
-                      return renderSection(
-                        "Q&A",
-                        qaCases,
-                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
-                      );
-                    }
-
-                    return (
-                      <div className="space-y-6">
-                        {annotateCases.length > 0 && renderSection(
-                          "Annotate",
-                          annotateCases,
-                          "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
-                          "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
-                        )}
-                        {qaCases.length > 0 && renderSection(
-                          "Q&A",
-                          qaCases,
-                          "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
-                          "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
-                        )}
-                      </div>
-                    );
+                    return renderGrid(myHomeworkVisibleCases);
                   })()}
                 </>
               )}
@@ -1140,7 +1085,7 @@ export default function StudentDashboard() {
               ) : (
                 (() => {
                   const renderGrid = (cases: typeof caseLibraryVisibleCases) => (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                       {cases.map((case_) => {
                         const hw = remoteHomeworkByCase[case_.id];
                         const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
@@ -1150,18 +1095,26 @@ export default function StudentDashboard() {
                             <CaseCard
                               case={case_}
                               onClick={() => setLocation(`/annotation/${case_.id}`)}
+                              homework={hw?.dueAt ? { dueAt: hw.dueAt, closed: hw.closed } : undefined}
+                              daysLeft={dl ?? undefined}
                               homeworkType={hwType}
+                              qnaStats={hwType === "Q&A" ? getStudentQnAStats(case_.id) : undefined}
                             />
                             <div className="flex items-center px-1">
                               <div className="flex items-center gap-2">
                                 {hw?.assigned && <Badge>{t("homework")}</Badge>}
-                                {hw?.assigned ? (
-                                  hw.closed ? (
-                                    <Badge variant="destructive">{t("closed")}</Badge>
-                                  ) : (
-                                    <Badge variant="secondary">{t("dueInDays").replace("{{days}}", String(dl ?? 0))}</Badge>
-                                  )
-                                ) : null}
+                                {submissionByCase[case_.id]?.status === "submitted" && (
+                                  <Badge variant="secondary">Submitted</Badge>
+                                )}
+                                {submissionByCase[case_.id]?.status === "grading" && (
+                                  <Badge variant="outline">Under review</Badge>
+                                )}
+                                {submissionByCase[case_.id]?.status === "graded" && (
+                                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-700 dark:text-emerald-50">
+                                    Marked: {submissionByCase[case_.id]?.score ?? 0}/{submissionByCase[case_.id]?.max_points ?? 100}
+                                  </Badge>
+                                )}
+                                {hw?.assigned && hw?.closed && <Badge variant="destructive">{t("closed")}</Badge>}
                               </div>
                             </div>
                           </div>
@@ -1170,57 +1123,7 @@ export default function StudentDashboard() {
                     </div>
                   );
 
-                  const annotateCases = caseLibraryVisibleCases.filter((c) => getHomeworkType(c as any) === "Annotate");
-                  const qaCases = caseLibraryVisibleCases.filter((c) => getHomeworkType(c as any) === "Q&A");
-
-                  const renderSection = (
-                    title: "Annotate" | "Q&A",
-                    cases: typeof caseLibraryVisibleCases,
-                    shellClassName: string,
-                    pillClassName: string,
-                  ) => (
-                    <div className={shellClassName}>
-                      <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
-                        <span className={pillClassName}>{title}</span>
-                      </h3>
-                      {renderGrid(cases)}
-                    </div>
-                  );
-
-                  if (caseLibraryFilter === "Annotate") {
-                    return renderSection(
-                      "Annotate",
-                      annotateCases,
-                      "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
-                    );
-                  }
-
-                  if (caseLibraryFilter === "Q&A") {
-                    return renderSection(
-                      "Q&A",
-                      qaCases,
-                      "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
-                      "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-6">
-                      {annotateCases.length > 0 && renderSection(
-                        "Annotate",
-                        annotateCases,
-                        "rounded-2xl border border-fuchsia-200 bg-fuchsia-50 dark:border-purple-800/70 dark:bg-purple-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-800 dark:bg-purple-900 dark:text-purple-200 text-sm",
-                      )}
-                      {qaCases.length > 0 && renderSection(
-                        "Q&A",
-                        qaCases,
-                        "rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/25 p-5",
-                        "px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-sm",
-                      )}
-                    </div>
-                  );
+                  return renderGrid(caseLibraryVisibleCases);
                 })()
               )}
             </div>
@@ -1231,9 +1134,36 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h2 className="text-2xl font-bold">{t("learningProgress")}</h2>
-                  <p className="text-sm text-muted-foreground">Updated {new Date().toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">Live update: {liveProgressSnapshot.lastUpdatedLabel}</p>
                 </div>
                 <Button onClick={exportStudentProgressCSV}>{t("exportCSV")}</Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Live submissions</p>
+                    <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.totalSubmissions}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Graded</p>
+                    <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.gradedCount}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending review</p>
+                    <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.pendingCount}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Average grade</p>
+                    <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.averageScore}%</p>
+                  </CardContent>
+                </Card>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -1242,6 +1172,23 @@ export default function StudentDashboard() {
                 <StatCard label="Study Streak" value={`${stats.studyStreakDays} days`} icon={Calendar} testId="stat-study-streak" />
                 <StatCard label="Collaboration" value={`${stats.collaborationScorePct}%`} icon={Users} testId="stat-collaboration" />
               </div>
+
+              <Card className="mb-6">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Live grading trend</h3>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={performanceTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="point" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
 
               <Card className="mb-6">
                 <CardContent className="p-6">

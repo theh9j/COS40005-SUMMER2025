@@ -8,6 +8,8 @@ type AssignmentDetailsPanelProps = {
   description: string;
   dueDate?: string;
   points: number;
+  submissionStatus?: "none" | "submitted" | "grading" | "graded";
+  score?: number;
   closed: boolean;
   hasHomework?: boolean;
   autoChecklist?: string[];
@@ -19,6 +21,8 @@ export default function AssignmentDetailsPanel({
   description,
   dueDate,
   points,
+  submissionStatus = "none",
+  score,
   closed,
   hasHomework = true,
   autoChecklist,
@@ -98,7 +102,11 @@ export default function AssignmentDetailsPanel({
         <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
           <span className="text-sm font-medium">Total Points</span>
           <Badge variant="outline" className="text-base font-bold">
-            {hasHomework ? points : "N/A"}
+            {hasHomework
+              ? submissionStatus === "graded" && score != null
+                ? `${score}/${points}`
+                : points
+              : "N/A"}
           </Badge>
         </div>
 
