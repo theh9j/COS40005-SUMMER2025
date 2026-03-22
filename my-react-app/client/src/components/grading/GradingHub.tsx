@@ -192,6 +192,7 @@ export default function GradingHub({
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
             className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+            title="Filter grading cards by class"
           >
             <option value="">All classes</option>
             {classrooms.map((cls) => (
@@ -223,7 +224,7 @@ export default function GradingHub({
           return (
             <Card
               key={g.caseId}
-              className={isDone ? "border-green-300 bg-green-50/50" : "border"}
+              className={isDone ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/20" : "border"}
             >
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -235,7 +236,7 @@ export default function GradingHub({
                     {g.classroom && <div className="mt-1 text-xs text-muted-foreground">{g.classroom}</div>}
                   </div>
                   {isDone ? (
-                    <Badge className="shrink-0 gap-1 bg-green-600 hover:bg-green-600">
+                    <Badge className="shrink-0 gap-1 bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-700 dark:text-emerald-50 dark:hover:bg-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       Done
                     </Badge>
@@ -251,7 +252,7 @@ export default function GradingHub({
                     <span>Progress</span>
                     <span>{pct}%</span>
                   </div>
-                  <Progress value={pct} className={isDone ? "[&>div]:bg-green-600" : ""} />
+                  <Progress value={pct} className={isDone ? "[&>div]:bg-emerald-600 dark:[&>div]:bg-emerald-500" : ""} />
                 </div>
 
                 <div className="flex flex-wrap gap-2 text-xs">

@@ -22,11 +22,14 @@ import {
   MessageCircle,
   Users,
   UserPlus,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 import DiscussionThread from "@/components/discussion/DiscussionThread";
 
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import AnnotationCanvas from "@/components/annotation-canvas";
 import { useAnnotation } from "@/hooks/use-annotation";
 import RubricPanel, { buildDefaultCriteria } from "@/components/grading/RubricPanel";
@@ -54,6 +57,7 @@ type InstructorView =
   | "settings";
 
 const VIEW_STORAGE_KEY = "instructor.activeView";
+const INSTRUCTOR_NOTES_STORAGE_KEY = "instructor.overviewNotes";
 const VALID_TABS: InstructorView[] = [
   "overview",
   "students",
@@ -201,6 +205,38 @@ function getCaseTypeColor(caseType?: string) {
   }
 }
 
+function OverviewMetricCard({
+  title,
+  value,
+  detail,
+  detailClassName,
+  icon: Icon,
+}: {
+  title: string;
+  value: string | number;
+  detail: string;
+  detailClassName: string;
+  icon: any;
+}) {
+  return (
+    <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-lg font-medium text-slate-700 dark:text-slate-200">{title}</p>
+          </div>
+          <div className="rounded-full border border-slate-200 p-2 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            <Icon className="h-4 w-4" />
+          </div>
+        </div>
+
+        <div className="mt-8 text-4xl font-bold tracking-tight text-slate-950 dark:text-white">{value}</div>
+        <p className={`mt-3 text-sm ${detailClassName}`}>{detail}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function InstructorDashboard() {
   const [onlineCount, setOnlineCount] = useState<number>(0);
 
@@ -263,6 +299,16 @@ export default function InstructorDashboard() {
   const { toast } = useToast();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [instructorNotes, setInstructorNotes] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(INSTRUCTOR_NOTES_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [discussionPrefill, setDiscussionPrefill] = useState<null | { title?: string; message?: string; tags?: string[]; caseId?: string }>(null);
 
@@ -449,6 +495,11 @@ export default function InstructorDashboard() {
   };
 
   useEffect(() => {
+    if (activeView === "overview") {
+      loadClassrooms();
+      loadAvailableStudents();
+      loadCases();
+    }
     if (activeView === "cases") loadCases();
     if (activeView === "class") {
       loadClassrooms();
@@ -603,6 +654,70 @@ export default function InstructorDashboard() {
           (submissions.reduce((a, b) => a + (b.score ?? 0), 0) / submissions.length) * 10
         ) / 10;
 
+  const overviewMetrics = useMemo(() => {
+    const totalStudents =
+      availableStudents.length || classrooms.reduce((sum, classroom) => sum + (classroom.members_count || 0), 0);
+    const activeAssignments =
+      new Set(submissions.map((submission) => submission.caseId)).size || casesFromApi.length || mergedCases.length;
+    const pendingReviews = submissions.filter((submission) => submission.status !== "graded").length;
+    const gradingInProgress = submissions.filter((submission) => submission.status === "grading").length;
+    const gradedCount = submissions.filter((submission) => submission.status === "graded").length;
+    const completionRate = submissions.length === 0 ? 0 : Math.round((gradedCount / submissions.length) * 100);
+
+    return {
+      totalStudents,
+      activeAssignments,
+      pendingReviews,
+      gradingInProgress,
+      gradedCount,
+      completionRate,
+    };
+  }, [availableStudents.length, classrooms, submissions, casesFromApi.length, mergedCases.length]);
+
+  const reviewQueue = useMemo(
+    () => submissions.filter((submission) => submission.status !== "graded").slice(0, 5),
+    [submissions]
+  );
+
+  const classSnapshot = useMemo(
+    () => [...classrooms].sort((left, right) => right.members_count - left.members_count).slice(0, 4),
+    [classrooms]
+  );
+
+  const assignmentMix = useMemo(() => {
+    const annotateCount = mergedCases.filter((caseItem) => (caseItem.homeworkType || "Annotate") === "Annotate").length;
+    const qaCount = mergedCases.filter((caseItem) => caseItem.homeworkType === "Q&A").length;
+    const total = Math.max(overviewMetrics.activeAssignments || 1, 1);
+    return [
+      {
+        label: "Annotate cases",
+        value: annotateCount,
+        progressValue: Math.min(100, (annotateCount / total) * 100),
+      },
+      {
+        label: "Q&A cases",
+        value: qaCount,
+        progressValue: Math.min(100, (qaCount / total) * 100),
+      },
+      {
+        label: "Average score",
+        value: avgScore,
+        progressValue: Math.min(100, Number(avgScore)),
+      },
+    ];
+  }, [mergedCases, avgScore, overviewMetrics.activeAssignments]);
+
+  const addInstructorNote = () => {
+    const next = noteDraft.trim();
+    if (!next) return;
+    setInstructorNotes((prev) => [next, ...prev]);
+    setNoteDraft("");
+  };
+
+  const deleteInstructorNote = (index: number) => {
+    setInstructorNotes((prev) => prev.filter((_, noteIndex) => noteIndex !== index));
+  };
+
   const selectedCaseId = selected?.caseId ?? "case-1";
   const selectedStudentId = selected?.studentId ?? "unknown";
   const selectedCase =
@@ -626,6 +741,10 @@ export default function InstructorDashboard() {
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
+
+  useEffect(() => {
+    localStorage.setItem(INSTRUCTOR_NOTES_STORAGE_KEY, JSON.stringify(instructorNotes));
+  }, [instructorNotes]);
 
   useEffect(() => {
     const handleClick = () => setShowProfileMenu(false);
@@ -907,7 +1026,219 @@ export default function InstructorDashboard() {
                 <p className="text-muted-foreground">Monitor student progress and provide feedback</p>
               </div>
 
-              <Card className="mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                <OverviewMetricCard
+                  title="Total Students"
+                  value={overviewMetrics.totalStudents}
+                  detail={`${classrooms.length} classes currently active`}
+                  detailClassName="text-emerald-600 dark:text-emerald-400"
+                  icon={Users}
+                />
+                <OverviewMetricCard
+                  title="Active Assignments"
+                  value={overviewMetrics.activeAssignments}
+                  detail={`${overviewMetrics.pendingReviews} pending reviews in queue`}
+                  detailClassName="text-slate-500 dark:text-slate-400"
+                  icon={ClipboardCheck}
+                />
+                <OverviewMetricCard
+                  title="Pending Reviews"
+                  value={overviewMetrics.pendingReviews}
+                  detail={`${overviewMetrics.gradingInProgress} currently in grading`}
+                  detailClassName="text-orange-600 dark:text-orange-400"
+                  icon={MessageCircle}
+                />
+                <OverviewMetricCard
+                  title="Completion Rate"
+                  value={`${overviewMetrics.completionRate}%`}
+                  detail={`${overviewMetrics.gradedCount} graded submissions so far`}
+                  detailClassName="text-emerald-600 dark:text-emerald-400"
+                  icon={LineChart}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+                <Card className="xl:col-span-2 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Review Queue</h3>
+                      <Button variant="outline" size="sm" onClick={() => setActiveView("grading")}>
+                        Open Grading Hub
+                      </Button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {reviewQueue.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-muted-foreground dark:border-slate-700">
+                          No pending reviews right now.
+                        </div>
+                      ) : (
+                        reviewQueue.map((submission) => (
+                          <div
+                            key={submission.id}
+                            className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/60"
+                          >
+                            <div>
+                              <p className="font-medium text-slate-900 dark:text-slate-100">{submission.caseTitle}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Student {submission.studentId}
+                                {submission.classroom ? ` • ${submission.classroom}` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${submission.status === "grading" ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"}`}>
+                                {submission.status}
+                              </span>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setGradingCaseId(submission.caseId);
+                                  setActiveIds([submission.id]);
+                                  setMode("one");
+                                  setActiveView("grading");
+                                }}
+                              >
+                                Review
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Quick Actions</h3>
+                      <Sparkles className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <Button className="justify-start" onClick={() => setActiveView("cases")}>
+                        <FolderOpen className="h-4 w-4 mr-2" />
+                        Manage Cases
+                      </Button>
+                      <Button variant="outline" className="justify-start" onClick={() => setActiveView("class")}>
+                        <GraduationCap className="h-4 w-4 mr-2" />
+                        Manage Classes
+                      </Button>
+                      <Button variant="outline" className="justify-start" onClick={() => setActiveView("grading")}>
+                        <ClipboardCheck className="h-4 w-4 mr-2" />
+                        Review Submissions
+                      </Button>
+                      <Button variant="outline" className="justify-start" onClick={() => setActiveView("collaboration")}>
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Open Forums
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Class Snapshot</h3>
+                      <Users className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <div className="space-y-3">
+                      {classSnapshot.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No classes available yet.</div>
+                      ) : (
+                        classSnapshot.map((classroom) => (
+                          <div
+                            key={classroom.id}
+                            className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/50"
+                          >
+                            <div>
+                              <p className="font-medium">{classroom.display}</p>
+                              <p className="text-sm text-muted-foreground">{classroom.members_count} enrolled students</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => {
+                              setSelectedClassroomId(classroom.id);
+                              setActiveView("class");
+                            }}>
+                              Open
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Assignment Mix</h3>
+                      <Presentation className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <div className="space-y-4">
+                      {assignmentMix.map((item) => (
+                        <div key={item.label}>
+                          <div className="flex items-center justify-between text-sm mb-1">
+                            <span>{item.label}</span>
+                            <span className="font-medium">{item.value}</span>
+                          </div>
+                          <Progress value={item.progressValue} className="h-2" />
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Instructor Notes</h3>
+                      <UserPlus className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <div className="space-y-3 text-sm text-muted-foreground">
+                      <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/60">
+                        <div className="flex gap-2">
+                          <Textarea
+                            value={noteDraft}
+                            onChange={(e) => setNoteDraft(e.target.value)}
+                            placeholder="Add a short instructor note, reminder, or follow-up item..."
+                            className="min-h-[88px] resize-none"
+                          />
+                          <Button className="shrink-0 self-start" onClick={addInstructorNote} title="Add instructor note">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add
+                          </Button>
+                        </div>
+                      </div>
+                      {instructorNotes.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-muted-foreground dark:border-slate-700">
+                          No notes yet. Add reminders for grading, student follow-ups, or teaching adjustments here.
+                        </div>
+                      ) : (
+                        instructorNotes.map((note, index) => (
+                          <div
+                            key={`${note}-${index}`}
+                            className="flex items-start justify-between gap-3 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/60"
+                          >
+                            <p className="flex-1 text-sm text-slate-700 dark:text-slate-200">{note}</p>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0"
+                              onClick={() => deleteInstructorNote(index)}
+                              title="Delete note"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="mb-8 rounded-3xl border border-slate-200/80 dark:border-slate-800">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold flex items-center">
@@ -923,7 +1254,7 @@ export default function InstructorDashboard() {
                     {mockAtRiskStudents.map((student) => (
                       <div
                         key={student.id}
-                        className="p-4 border border-red-500/30 rounded-lg hover:bg-muted transition"
+                        className="p-4 border border-red-500/30 rounded-2xl hover:bg-muted transition"
                       >
                         <div className="flex items-start space-x-4">
                           <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full" />
