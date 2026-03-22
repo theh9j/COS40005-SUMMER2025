@@ -96,7 +96,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen medical-gradient flex flex-col">
+    <div className="min-h-screen silver-ambient flex flex-col">
       {/* Navbar */}
       <header className="bg-card border-b border-border h-16 px-6 flex items-center">
         <button
