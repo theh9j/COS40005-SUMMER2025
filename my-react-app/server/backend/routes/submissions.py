@@ -289,6 +289,7 @@ async def instructor_submissions():
             "case_id": case_id,
             "case_title": (case_doc or {}).get("title") or f"Case {case_id[:8]}",
             "case_image_url": (case_doc or {}).get("image_url", ""),
+            "homework_type": (homework_doc or {}).get("homework_type", "Annotate"),
             "student_id": user_id,
             "status": sub.get("status", "submitted"),
             "score": sub.get("score"),

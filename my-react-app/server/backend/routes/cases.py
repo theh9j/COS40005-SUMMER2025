@@ -95,6 +95,7 @@ async def list_cases(limit: int = 50):
         # Look up homework for this case to get the correct homework_type and class info
         homework = await homeworks_collection.find_one({"case_id": case_id})
         homework_type = homework.get("homework_type") if homework else c.get("homework_type", "Annotate")
+        visibility = homework.get("visibility") if homework else c.get("visibility", "public")
         
         # Get class information if assigned to a class
         class_info = None
@@ -126,6 +127,7 @@ async def list_cases(limit: int = 50):
             "image_url": image_url,
             "case_type": c.get("case_type"),
             "homework_type": homework_type,
+            "visibility": visibility,
             "homework_audience": homework.get("audience") if homework else None,
             "class_info": class_info,
             "class_infos": class_infos,

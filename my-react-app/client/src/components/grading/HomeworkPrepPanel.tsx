@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,14 +11,14 @@ type SuggestStats = {
   skillGaps: string[];
 };
 
-type Upload = { name: string; url: string; type: string; size: number; file?: File };
-
 type EssayQuestion = {
   type: "essay";
   prompt: string;
   points: number;
   guidance?: string;
-  imageIndex?: number;
+  imagePreviewUrl?: string;
+  imageFile?: File | null;
+  imageUrl?: string;
 };
 
 type McqQuestion = {
@@ -28,7 +28,9 @@ type McqQuestion = {
   guidance?: string;
   options: string[];
   correctIndex: number | null;
-  imageIndex?: number;
+  imagePreviewUrl?: string;
+  imageFile?: File | null;
+  imageUrl?: string;
 };
 
 type HomeworkQuestion = EssayQuestion | McqQuestion;
@@ -43,11 +45,11 @@ type PublishPayload = {
   };
   dueAtISO: string;
   audience: "all" | "classroom";
+  visibility: "public" | "private";
   instructions?: string;
   autoChecklist?: string[];
   suggestedFocusTags?: { label: string; highlighted: boolean }[];
   homeworkType?: "Q&A" | "Annotate";
-  referenceUploads: Upload[];
   questions: HomeworkQuestion[];
   password: string;
   classIds: string[];
@@ -82,17 +84,13 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
   const [caseImagePreview, setCaseImagePreview] = useState("");
 
   const [password, setPassword] = useState("");
-  const [selectedClassroomId, setSelectedClassroomId] = useState("");
-  const [className, setClassName] = useState("");
+  const [selectedClassroomIds, setSelectedClassroomIds] = useState<string[]>([]);
   const [annotateMaxPoints, setAnnotateMaxPoints] = useState(100);
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
 
   const [due, setDue] = useState("");
   const [audience, setAudience] = useState<"all" | "classroom">("all");
   const [instructions, setInstructions] = useState("");
-
-  const [referenceUploads, setReferenceUploads] = useState<Upload[]>([]);
-  const refFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [dragOver, setDragOver] = useState(false);
 
   const [questions, setQuestions] = useState<HomeworkQuestion[]>([]);
   const [homeworkTags, setHomeworkTags] = useState<{ label: string; highlighted: boolean }[]>([]);
@@ -139,10 +137,10 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     });
   };
 
-  const onSelectClassroom = (classroomId: string) => {
-    setSelectedClassroomId(classroomId);
-    const selected = classroomOptions.find((c) => c.id === classroomId);
-    setClassName(selected?.name || "");
+  const toggleClassroom = (classroomId: string) => {
+    setSelectedClassroomIds((prev) =>
+      prev.includes(classroomId) ? prev.filter((id) => id !== classroomId) : [...prev, classroomId]
+    );
   };
 
   const validate = () => {
@@ -154,7 +152,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
       next.maxPoints = "Maximum points must be at least 1.";
     }
     if (audience === "classroom") {
-      if (!className.trim()) next.className = "Class is required.";
+      if (selectedClassroomIds.length === 0) next.className = "Select at least one class.";
     }
     if (builderTab === "Q&A" && questions.length === 0) next.questions = "Add at least one Q&A question.";
     setErrors(next);
@@ -166,7 +164,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     Boolean(due) &&
     (builderTab === "Q&A" ? qnaMaxPoints > 0 : annotateMaxPoints > 0) &&
     (builderTab === "Q&A" ? questions.length > 0 : Boolean(caseImageFile)) &&
-    (audience === "all" || (className.trim() && selectedClassroomId));
+    (audience === "all" || selectedClassroomIds.length > 0);
 
   const toISO = (d: string) => (d ? new Date(`${d}T23:59:00`).toISOString() : "");
 
@@ -181,27 +179,25 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
     setCaseImagePreview("");
   };
 
-  const pushRefFiles = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const list: Upload[] = Array.from(files).map((f) => ({
-      name: f.name,
-      url: URL.createObjectURL(f),
-      type: f.type || "application/octet-stream",
-      size: f.size,
-      file: f,
-    }));
-    setReferenceUploads((prev) => [...prev, ...list]);
+  const onPickQuestionImage = (questionIndex: number, file: File | null) => {
+    if (!file) return;
+    const preview = URL.createObjectURL(file);
+    setQuestions((prev) =>
+      prev.map((question, idx) =>
+        idx === questionIndex
+          ? { ...question, imageFile: file, imagePreviewUrl: preview, imageUrl: undefined }
+          : question
+      )
+    );
   };
 
-  const removeRefUpload = (idx: number) => {
-    setReferenceUploads((prev) => prev.filter((_, i) => i !== idx));
+  const clearQuestionImage = (questionIndex: number) => {
     setQuestions((prev) =>
-      prev.map((q) => {
-        if (q.imageIndex == null) return q;
-        if (q.imageIndex === idx) return { ...q, imageIndex: undefined };
-        if (q.imageIndex > idx) return { ...q, imageIndex: q.imageIndex - 1 };
-        return q;
-      })
+      prev.map((question, idx) =>
+        idx === questionIndex
+          ? { ...question, imageFile: null, imagePreviewUrl: undefined, imageUrl: undefined }
+          : question
+      )
     );
   };
 
@@ -391,6 +387,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                   <label className="text-sm font-medium">Case type</label>
                   <select
                     className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                    aria-label="Case type"
                     value={caseType}
                     onChange={(e) => setCaseType(e.target.value)}
                   >
@@ -410,7 +407,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                   {errors.due && <p className="text-xs text-red-600">{errors.due}</p>}
                 </div>
 
-                {builderTab === "Q&A" ? (
+                {builderTab === "Q&A" && (
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-medium">Maximum points</label>
                     <div className="h-10 rounded-md border border-border bg-muted/30 px-3 text-sm flex items-center">
@@ -418,7 +415,9 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                     </div>
                     <p className="text-xs text-muted-foreground">Calculated automatically from question points.</p>
                   </div>
-                ) : (
+                )}
+
+                {builderTab === "Annotate" && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Maximum points</label>
                     <Input
@@ -442,11 +441,25 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                   <label className="text-sm font-medium">Audience</label>
                   <select
                     className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                    aria-label="Audience"
                     value={audience}
                     onChange={(e) => setAudience(e.target.value as "all" | "classroom")}
                   >
                     <option value="all">All students</option>
                     <option value="classroom">Classrooms</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Visibility</label>
+                  <select
+                    className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                    aria-label="Visibility"
+                    value={visibility}
+                    onChange={(e) => setVisibility(e.target.value as "public" | "private")}
+                  >
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
                   </select>
                 </div>
 
@@ -459,17 +472,23 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Class</label>
-                      <select
-                        className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
-                        value={selectedClassroomId}
-                        onChange={(e) => onSelectClassroom(e.target.value)}
-                      >
-                        <option value="">Select class</option>
-                        {classroomOptions.map((c) => (
-                          <option key={c.id} value={c.id}>{c.display}</option>
-                        ))}
-                      </select>
+                      <label className="text-sm font-medium">Classes</label>
+                      <div className="max-h-40 overflow-auto rounded-md border border-border p-2 space-y-2">
+                        {classroomOptions.map((c) => {
+                          const checked = selectedClassroomIds.includes(c.id);
+                          return (
+                            <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleClassroom(c.id)}
+                                className="h-4 w-4"
+                              />
+                              <span>{c.display}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
                       {errors.className && <p className="text-xs text-red-600">{errors.className}</p>}
                     </div>
 
@@ -573,6 +592,7 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                                   checked={q.correctIndex === optionIndex}
                                   onChange={() => updateQuestion(qi, { correctIndex: optionIndex })}
                                   className="h-4 w-4"
+                                  aria-label={`Mark option ${optionIndex + 1} as correct for question ${qi + 1}`}
                                 />
                                 <Input
                                   value={option}
@@ -600,6 +620,38 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                         onChange={(e) => updateQuestion(qi, { guidance: e.target.value })}
                         placeholder={q.type === "mcq" ? "Optional explanation or marking notes..." : "Optional marking guidance or expected answer..."}
                       />
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Optional question image</label>
+                        <label className="block">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => onPickQuestionImage(qi, e.target.files?.[0] ?? null)}
+                          />
+                          <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground cursor-pointer hover:bg-muted/30">
+                            {q.imagePreviewUrl || q.imageUrl ? "Change question image" : "Add question image"}
+                          </div>
+                        </label>
+                        {(q.imagePreviewUrl || q.imageUrl) && (
+                          <div className="relative rounded-lg border overflow-hidden">
+                            <img
+                              src={q.imagePreviewUrl || q.imageUrl}
+                              alt={`Question ${qi + 1}`}
+                              className="max-h-56 w-full object-contain bg-muted/30"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => clearQuestionImage(qi)}
+                              className="absolute top-2 right-2 bg-black/60 rounded-full p-1"
+                              title="Remove question image"
+                            >
+                              <X className="h-4 w-4 text-white" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -654,66 +706,6 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
         </div>
 
         <div className="space-y-5">
-          {builderTab === "Annotate" && (
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">Reference uploads</div>
-                    <div className="text-xs text-muted-foreground">Optional files for supporting annotation tasks.</div>
-                  </div>
-                  <Button type="button" variant="outline" onClick={() => refFileInputRef.current?.click()}>
-                    Add files
-                  </Button>
-                  <input
-                    ref={refFileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => pushRefFiles(e.target.files)}
-                  />
-                </div>
-
-                <div
-                  className={[
-                    "rounded-xl border-2 border-dashed p-4 text-sm text-muted-foreground transition",
-                    dragOver ? "border-primary bg-primary/5" : "border-border",
-                  ].join(" ")}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOver(true);
-                  }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDragOver(false);
-                    pushRefFiles(e.dataTransfer.files);
-                  }}
-                >
-                  Drag and drop files here, or click Add files.
-                </div>
-
-                <div className="space-y-2">
-                  {referenceUploads.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">No reference files uploaded.</div>
-                  ) : (
-                    referenceUploads.map((file, idx) => (
-                      <div key={`${file.name}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{file.name}</div>
-                          <div className="text-xs text-muted-foreground">{Math.ceil(file.size / 1024)} KB</div>
-                        </div>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => removeRefUpload(idx)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           <Card>
             <CardContent className="p-4 space-y-3">
               <div className="text-sm font-semibold">Publish homework</div>
@@ -732,22 +724,21 @@ export default function HomeworkPrepPanel({ stats, onPublish, classrooms = [] }:
                       description: caseDesc || undefined,
                       type: caseType || undefined,
                       imageFile: builderTab === "Annotate" ? caseImageFile : null,
-                      imagePreviewUrl:
-                        builderTab === "Annotate"
-                          ? caseImagePreview
-                          : "/images/default-qna-homework.svg",
+                      imagePreviewUrl: builderTab === "Annotate" ? caseImagePreview : undefined,
                     },
                     dueAtISO: toISO(due),
                     audience,
+                    visibility,
                     instructions: instructions || undefined,
                     autoChecklist,
                     suggestedFocusTags: homeworkTags,
                     homeworkType: builderTab,
-                    referenceUploads,
                     questions: builderTab === "Q&A" ? questions : [],
                     password,
-                    classIds: selectedClassroomId ? [selectedClassroomId] : [],
-                    classLabels: selectedClassroomId ? [classroomOptions.find((c) => c.id === selectedClassroomId)?.display || ""] : [],
+                    classIds: selectedClassroomIds,
+                    classLabels: classroomOptions
+                      .filter((c) => selectedClassroomIds.includes(c.id))
+                      .map((c) => c.display || `${c.name} (${c.year})`),
                     maxPoints: builderTab === "Q&A" ? qnaMaxPoints : annotateMaxPoints,
                   });
                 }}
