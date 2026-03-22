@@ -629,7 +629,7 @@ export default function AnnotationView() {
   };
 
   return (
-    <div className="h-screen bg-background flex flex-col" data-testid="annotation-view">
+    <div className="h-screen silver-ambient flex flex-col" data-testid="annotation-view">
       {/* Case Locked Notification (students only) */}
       {caseLocked && user?.role === 'student' && (
         <div className="bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 px-6 py-3">
