@@ -83,6 +83,87 @@ input[type="number"]::-webkit-inner-spin-button {
   background: linear-gradient(135deg, hsl(221.2, 83.2%, 53.3%) 0%, hsl(188.7, 85%, 39.4%) 100%);
 }
 
+.silver-ambient {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 700px at 12% -10%, hsla(210, 10%, 100%, 0.9) 0%, hsla(210, 12%, 90%, 0.35) 45%, transparent 72%),
+    radial-gradient(900px 640px at 100% 20%, hsla(208, 18%, 88%, 0.42) 0%, transparent 68%),
+    linear-gradient(165deg, hsl(210, 16%, 93%) 0%, hsl(210, 14%, 88%) 42%, hsl(210, 12%, 84%) 100%);
+}
+
+.silver-ambient::before,
+.silver-ambient::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.silver-ambient::before {
+  background:
+    radial-gradient(circle at 24% 30%, hsla(0, 0%, 100%, 0.46) 0%, transparent 28%),
+    radial-gradient(circle at 78% 64%, hsla(212, 17%, 82%, 0.36) 0%, transparent 31%),
+    radial-gradient(circle at 50% 88%, hsla(210, 20%, 76%, 0.3) 0%, transparent 24%);
+  filter: blur(28px);
+  animation: silverFloat 22s ease-in-out infinite alternate;
+}
+
+.silver-ambient::after {
+  background: repeating-linear-gradient(
+    115deg,
+    hsla(0, 0%, 100%, 0.16) 0px,
+    hsla(0, 0%, 100%, 0.16) 1px,
+    transparent 1px,
+    transparent 12px
+  );
+  opacity: 0.28;
+  mix-blend-mode: soft-light;
+  animation: silverShimmer 18s linear infinite;
+}
+
+.dark .silver-ambient {
+  background:
+    radial-gradient(1200px 760px at 10% -12%, hsla(210, 8%, 42%, 0.28) 0%, transparent 72%),
+    radial-gradient(900px 620px at 100% 14%, hsla(214, 9%, 34%, 0.33) 0%, transparent 66%),
+    linear-gradient(165deg, hsl(216, 12%, 19%) 0%, hsl(216, 11%, 16%) 46%, hsl(216, 10%, 13%) 100%);
+}
+
+.dark .silver-ambient::before {
+  background:
+    radial-gradient(circle at 20% 28%, hsla(210, 16%, 60%, 0.18) 0%, transparent 30%),
+    radial-gradient(circle at 82% 64%, hsla(208, 12%, 52%, 0.18) 0%, transparent 30%),
+    radial-gradient(circle at 48% 90%, hsla(212, 10%, 62%, 0.12) 0%, transparent 26%);
+  filter: blur(34px);
+}
+
+.dark .silver-ambient::after {
+  opacity: 0.2;
+}
+
+@keyframes silverFloat {
+  0% {
+    transform: translate3d(-1.5%, -1.8%, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(2.2%, 1.5%, 0) scale(1.045);
+  }
+}
+
+@keyframes silverShimmer {
+  0% {
+    transform: translateX(-2.5%) translateY(0);
+  }
+  50% {
+    transform: translateX(2.5%) translateY(-1.5%);
+  }
+  100% {
+    transform: translateX(-2.5%) translateY(0);
+  }
+}
+
 .annotation-tool:hover {
   transform: translateY(-1px);
   transition: transform 0.2s ease;

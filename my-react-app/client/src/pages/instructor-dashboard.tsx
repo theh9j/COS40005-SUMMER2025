@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
 import { useI18n } from "@/i18n";
 import { useToast } from "@/hooks/use-toast";
-import { mockAtRiskStudents, mockCases } from "@/lib/mock-data";
+import { mockCases } from "@/lib/mock-data";
 import {
   Presentation,
   Gauge,
@@ -140,6 +140,17 @@ type StudentLite = {
   lastName?: string;
   email?: string | null;
   classroom?: string | null;
+};
+
+type AtRiskStudent = {
+  studentId: string;
+  studentName: string;
+  email?: string | null;
+  issue: string;
+  score: number;
+  trend: "declining" | "stable";
+  lastActive: string;
+  riskWeight: number;
 };
 
 function getInitials(name: string) {
@@ -726,6 +737,102 @@ export default function InstructorDashboard() {
     ];
   }, [mergedCases, avgScore, overviewMetrics.activeAssignments]);
 
+  const atRiskStudents = useMemo<AtRiskStudent[]>(() => {
+    if (submissions.length === 0) return [];
+
+    const byStudent = new Map<string, Submission[]>();
+    for (const submission of submissions) {
+      const list = byStudent.get(submission.studentId) ?? [];
+      list.push(submission);
+      byStudent.set(submission.studentId, list);
+    }
+
+    const now = Date.now();
+    const dayMs = 1000 * 60 * 60 * 24;
+    const lookbackMs = 21 * dayMs;
+
+    const parseTs = (iso?: string) => {
+      if (!iso) return 0;
+      const ts = Date.parse(iso);
+      return Number.isFinite(ts) ? ts : 0;
+    };
+
+    const humanizeLastActive = (ts: number) => {
+      if (!ts) return "No recent activity";
+      const days = Math.floor((now - ts) / dayMs);
+      if (days <= 0) return "today";
+      if (days === 1) return "1 day ago";
+      return `${days} days ago`;
+    };
+
+    const alerts: AtRiskStudent[] = [];
+
+    for (const [studentId, studentSubs] of byStudent.entries()) {
+      const withScore = studentSubs.filter((item) => item.score != null);
+      const avg = withScore.length
+        ? Math.round((withScore.reduce((sum, item) => sum + Number(item.score ?? 0), 0) / withScore.length) * 10) / 10
+        : 0;
+
+      const pendingCount = studentSubs.filter((item) => item.status === "submitted" || item.status === "grading").length;
+      const lastSubmissionTs = studentSubs.reduce((maxTs, item) => Math.max(maxTs, parseTs(item.updatedAt)), 0);
+      const inactivityDays = lastSubmissionTs ? Math.floor((now - lastSubmissionTs) / dayMs) : 999;
+
+      const recentScored = withScore
+        .filter((item) => {
+          const ts = parseTs(item.updatedAt);
+          return ts && now - ts <= lookbackMs;
+        })
+        .sort((left, right) => parseTs(left.updatedAt) - parseTs(right.updatedAt));
+
+      let trend: "declining" | "stable" = "stable";
+      if (recentScored.length >= 2) {
+        const first = Number(recentScored[0].score ?? avg);
+        const last = Number(recentScored[recentScored.length - 1].score ?? avg);
+        if (first - last >= 8) trend = "declining";
+      }
+
+      const issues: string[] = [];
+      let riskWeight = 0;
+
+      if (withScore.length > 0 && avg < 70) {
+        issues.push(`Average score is low (${avg}%)`);
+        riskWeight += 2;
+      }
+      if (trend === "declining") {
+        issues.push("Recent performance trend is declining");
+        riskWeight += 2;
+      }
+      if (pendingCount >= 3) {
+        issues.push(`${pendingCount} submissions are still pending review`);
+        riskWeight += 1;
+      }
+      if (inactivityDays >= 5) {
+        issues.push(`No activity for ${inactivityDays} days`);
+        riskWeight += 1;
+      }
+
+      if (issues.length === 0) continue;
+
+      alerts.push({
+        studentId,
+        studentName: getStudentDisplayName(studentId),
+        email: getStudentEmail(studentId),
+        issue: issues[0],
+        score: avg,
+        trend,
+        lastActive: humanizeLastActive(lastSubmissionTs),
+        riskWeight,
+      });
+    }
+
+    return alerts
+      .sort((left, right) => {
+        if (right.riskWeight !== left.riskWeight) return right.riskWeight - left.riskWeight;
+        return left.score - right.score;
+      })
+      .slice(0, 6);
+  }, [submissions, studentNameMap, availableStudents, classroomStudents]);
+
   const addInstructorNote = () => {
     const next = noteDraft.trim();
     if (!next) return;
@@ -769,6 +876,14 @@ export default function InstructorDashboard() {
 
     const fromSubmission = submissions.find((submission) => submission.studentId === studentId)?.studentName;
     return fromSubmission || studentId;
+  }
+
+  function getStudentEmail(studentId: string) {
+    if (!studentId) return null;
+    const fromAvailable = availableStudents.find((student) => student.id === studentId)?.email;
+    if (fromAvailable) return fromAvailable;
+    const fromClassroom = classroomStudents.find((student) => student.id === studentId)?.email;
+    return fromClassroom ?? null;
   }
 
 
@@ -1288,21 +1403,28 @@ export default function InstructorDashboard() {
                       At-Risk Student Alerts
                     </h3>
                     <span className="text-sm text-muted-foreground">
-                      {mockAtRiskStudents.length} students need attention
+                      {atRiskStudents.length} students need attention
                     </span>
                   </div>
 
                   <div className="space-y-4">
-                    {mockAtRiskStudents.map((student) => (
+                    {atRiskStudents.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-muted-foreground dark:border-slate-700">
+                        No high-risk students detected from current live submission data.
+                      </div>
+                    )}
+                    {atRiskStudents.map((student) => (
                       <div
-                        key={student.id}
+                        key={student.studentId}
                         className="p-4 border border-red-500/30 rounded-2xl hover:bg-muted transition"
                       >
                         <div className="flex items-start space-x-4">
-                          <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full" />
+                          <div className="h-12 w-12 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 flex items-center justify-center text-sm font-semibold">
+                            {getInitials(student.studentName)}
+                          </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-2">
-                              <p className="font-medium">{student.name}</p>
+                              <p className="font-medium">{student.studentName}</p>
                               <div className="flex items-center space-x-2">
                                 {student.trend === "declining" && (
                                   <span className="flex items-center text-xs text-red-500">
@@ -1321,11 +1443,30 @@ export default function InstructorDashboard() {
                                 Last active: {student.lastActive}
                               </span>
                               <div className="flex space-x-2">
-                                <Button size="sm" variant="outline" className="h-7 text-xs">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  disabled={!student.email}
+                                  onClick={() => {
+                                    if (!student.email) return;
+                                    window.location.href = `mailto:${student.email}`;
+                                  }}
+                                >
                                   <Mail className="h-3 w-3 mr-1" />
                                   Contact
                                 </Button>
-                                <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700">
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                                  onClick={() => {
+                                    setGradingCaseId(null);
+                                    setMode("one");
+                                    setActiveIds([]);
+                                    setQuery(student.studentName);
+                                    setActiveView("grading");
+                                  }}
+                                >
                                   View Details
                                 </Button>
                               </div>
