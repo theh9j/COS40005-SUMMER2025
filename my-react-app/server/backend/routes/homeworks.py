@@ -82,6 +82,8 @@ async def create_homework(payload: dict):
 
     audience = "Classrooms" if audience_raw in ("classroom", "classrooms") else "All Students"
 
+    print(f"DEBUG CREATE: audience_raw={audience_raw}, audience={audience}, class_ids={class_ids}")
+
     # Create case when payload uses `newCase`, otherwise attach homework to provided case_id.
     if not case_id:
         case_doc = {
@@ -203,12 +205,16 @@ async def homework_by_case(
     except Exception:
         pass
 
+    print(f"DEBUG: userId={userId}, is_instructor_like={is_instructor_like}")
+
     if is_instructor_like:
         assigned = True
 
     audience = (hw.get("audience") or "All Students")
     audience_norm = str(audience).strip().lower()
     visibility_norm = str(hw.get("visibility") or "public").strip().lower()
+
+    print(f"DEBUG: audience={audience}, audience_norm={audience_norm}, visibility_norm={visibility_norm}")
 
     if not is_instructor_like and visibility_norm == "private":
         return {
@@ -221,9 +227,12 @@ async def homework_by_case(
 
     if not assigned and audience_norm in ("all students", "all"):
         assigned = True
+        print("DEBUG: assigned=True for all students")
     elif not assigned and audience_norm in ("classrooms", "classroom"):
+        print("DEBUG: checking classrooms")
         # Check if user is in any selected classroom.
         class_ids = [str(x) for x in hw.get("class_ids", []) if x]
+        print(f"DEBUG: class_ids={class_ids}")
         if class_ids:
             valid_ids = []
             for class_id in class_ids:
@@ -232,22 +241,31 @@ async def homework_by_case(
                 except Exception:
                     continue
 
+            print(f"DEBUG: valid_ids={valid_ids}")
             if valid_ids:
                 cursor = classrooms_collection.find({"_id": {"$in": valid_ids}})
                 async for classroom in cursor:
                     member_ids = [str(x) for x in classroom.get("members", [])]
+                    print(f"DEBUG: classroom {classroom.get('_id')}, members={member_ids}")
                     if userId in member_ids:
                         assigned = True
+                        print("DEBUG: user in classroom, assigned=True")
                         break
 
         if not assigned:
+            print("DEBUG: checking fallback class_name")
             classroom = await classrooms_collection.find_one({
                 "name": hw.get("class_name"),
                 "year": hw.get("year")
             })
             if classroom:
                 member_ids = [str(x) for x in classroom.get("members", [])]
+                print(f"DEBUG: fallback classroom members={member_ids}")
                 assigned = userId in member_ids
+                if assigned:
+                    print("DEBUG: assigned via fallback")
+
+    print(f"DEBUG: final assigned={assigned}")
 
     hw["_id"] = str(hw["_id"])
     hw.pop("created_at", None)
