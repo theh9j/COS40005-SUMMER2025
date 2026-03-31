@@ -169,6 +169,30 @@ input[type="number"]::-webkit-inner-spin-button {
   transition: transform 0.2s ease;
 }
 
+.subtle-scrollbar {
+}
+
+.subtle-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+  background-clip: content-box;
+}
+
 @layer base {
   * {
     @apply border-border;

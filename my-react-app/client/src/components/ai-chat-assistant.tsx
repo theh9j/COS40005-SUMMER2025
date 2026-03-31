@@ -35,13 +35,15 @@ export default function AIChatAssistant({
   const [isStreaming, setIsStreaming] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll the chat viewport only (avoid scrolling the whole page)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const viewport = scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+    if (!viewport) return;
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [messages.length, isStreaming]);
 
   // Generate initial suggestions based on context
   useEffect(() => {
@@ -147,7 +149,7 @@ export default function AIChatAssistant({
 
   const handleSuggestionClick = (suggestion: string) => {
     setInput(suggestion);
-    textareaRef.current?.focus();
+    textareaRef.current?.focus({ preventScroll: true });
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -177,6 +179,7 @@ export default function AIChatAssistant({
               <Button
                 variant="ghost"
                 size="sm"
+                type="button"
                 onClick={onMinimize}
                 className="h-6 w-6 p-0"
               >
@@ -186,6 +189,7 @@ export default function AIChatAssistant({
                 <Button
                   variant="ghost"
                   size="sm"
+                  type="button"
                   onClick={onClose}
                   className="h-6 w-6 p-0"
                 >
@@ -220,6 +224,7 @@ export default function AIChatAssistant({
             <Button
               variant="ghost"
               size="sm"
+              type="button"
               onClick={clearChat}
               className="h-7 w-7 p-0"
             >
@@ -229,6 +234,7 @@ export default function AIChatAssistant({
               <Button
                 variant="ghost"
                 size="sm"
+                type="button"
                 onClick={onMinimize}
                 className="h-7 w-7 p-0"
               >
@@ -239,6 +245,7 @@ export default function AIChatAssistant({
               <Button
                 variant="ghost"
                 size="sm"
+                type="button"
                 onClick={onClose}
                 className="h-7 w-7 p-0"
               >
@@ -267,7 +274,7 @@ export default function AIChatAssistant({
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0 overflow-hidden">
         {/* Messages */}
-        <ScrollArea className="flex-1 p-4 overflow-hidden">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 overflow-hidden subtle-scrollbar">
           {messages.length === 0 ? (
             <div className="text-center py-8">
               <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -284,6 +291,7 @@ export default function AIChatAssistant({
                       key={index}
                       variant="outline"
                       size="sm"
+                      type="button"
                       className="text-xs h-auto py-2 px-3 whitespace-normal text-left w-full justify-start"
                       onClick={() => handleSuggestionClick(suggestion)}
                     >
@@ -339,7 +347,6 @@ export default function AIChatAssistant({
               ))}
             </div>
           )}
-          <div ref={messagesEndRef} />
         </ScrollArea>
 
         <Separator className="shrink-0" />
@@ -357,6 +364,7 @@ export default function AIChatAssistant({
               disabled={isLoading}
             />
             <Button
+              type="button"
               onClick={() => sendMessage(input)}
               disabled={isLoading || !input.trim()}
               size="sm"
