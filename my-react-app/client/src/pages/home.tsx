@@ -3,8 +3,9 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { Stethoscope, FolderOpen, Gauge, LogIn, LogOut, Sparkles, GraduationCap, ClipboardCheck } from "lucide-react";
+import { FolderOpen, Sparkles, GraduationCap, ClipboardCheck } from "lucide-react";
 import { useI18n } from "@/i18n";
+import GlobalHeader from "@/components/global-header";
 
 export default function Home() {
   const { user, logout, isLoading } = useAuth();
@@ -25,42 +26,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen silver-ambient">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-              <Stethoscope className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div className="font-semibold">{t("appName")}</div>
-              <div className="text-xs text-muted-foreground">Medical imaging learning workspace</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {user ? (
-              <>
-                <Button variant="outline" onClick={goDashboard}>
-                  <Gauge className="mr-2 h-4 w-4" />
-                  Dashboard
-                </Button>
-                <Button variant="ghost" onClick={logout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  {t("logout")}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => setLocation("/login")}>
-                  <LogIn className="mr-2 h-4 w-4" />
-                  {t("login")}
-                </Button>
-                <Button onClick={() => setLocation("/signup")}>{t("createAccount")}</Button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <GlobalHeader />
 
       <main className="mx-auto max-w-7xl px-6 py-10">
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
