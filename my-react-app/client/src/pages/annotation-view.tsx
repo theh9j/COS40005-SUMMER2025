@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,14 +21,12 @@ import AIChatAssistant from "@/components/ai-chat-assistant";
 import AIAnnotationSuggestions from "@/components/ai-annotation-suggestions";
 import SubmissionPanel from "@/components/submission-panel";
 import AssignmentRequirements from "@/components/assignment-requirements";
-import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, Info, Lock, LockOpen, Edit2, X, Plus } from "lucide-react";
+import { ArrowLeft, Save, Bot, Eye, Clock, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Info, Lock, LockOpen, Edit2, X, Plus } from "lucide-react";
 
 // Collaborative imports
 import { useVersions } from "@/hooks/use-versions";
-import { usePresence } from "@/hooks/use-presence";
 import VersionList from "@/components/versions/VersionList";
 import CompareToggle from "@/components/compare/CompareToggle";
-import PresenceBar from "@/components/presence/PresenceBar";
 
 // + add
 import { useParams } from "wouter";
@@ -180,7 +178,7 @@ export default function AnnotationView() {
             const hwData = homeworkData?.homework ?? homeworkData;
             const qnaData = homeworkData?.qna;
 
-            const hwId = hwData?._id || hwData?.homework_id || "";
+            const hwId = hwData?._id || hwData?.homework_id || hwData?.homeworkId || hwData?.id || "";
 
             if (assigned && hwData && hwId) {
               const questionList = qnaData?.questions || hwData?.questions || [];
@@ -233,9 +231,8 @@ export default function AnnotationView() {
   }, [caseId, user?.user_id]);
 
 
-  // Heartbeat and presence
+  // Heartbeat
   useHeartbeat(user?.user_id);
-  const presence = usePresence(caseId, user?.user_id ?? "unknown");
 
   // Versions
   const { mine, peers, create } = useVersions(caseId);
@@ -336,8 +333,12 @@ export default function AnnotationView() {
   // Sidebar tab state: "annotate" | "collaborate" | "ai-assistant" | "homework"
   const [activeSidebarTab, setActiveSidebarTab] = useState<"annotate" | "collaborate" | "ai-assistant" | "homework">("collaborate");
   const [showTabDropdown, setShowTabDropdown] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [qnaNotes, setQnaNotes] = useState("");
   const [qnaAnswers, setQnaAnswers] = useState<Array<{ index: number; value: any }>>([]);
+  const [qnaFiles, setQnaFiles] = useState<SubmissionFile[]>([]);
+  const [qnaUploadingFiles, setQnaUploadingFiles] = useState(false);
+  const qnaFileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const savedCanvasScrollTopRef = useRef(0);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -412,7 +413,8 @@ export default function AnnotationView() {
     if (!isQnAStudentMode) return;
     setQnaNotes(submission?.notes || "");
     setQnaAnswers(submission?.answers || []);
-  }, [isQnAStudentMode, submission?.notes, submission?.answers]);
+    setQnaFiles(submission?.files || []);
+  }, [isQnAStudentMode, submission?.notes, submission?.answers, submission?.files]);
 
   useEffect(() => {
     lastAnnotationCountRef.current = annotation.annotations.length;
@@ -569,6 +571,15 @@ export default function AnnotationView() {
     }
   }, [hw?.id, hw?.description, hw?.points, hw?.dueAt, hw?.audience, hw?.className, hw?.classYear, hw?.classIds, hw?.classLabels, hw?.password, hw?.visibility, hw?.questions]);
 
+  const handlePanelWheel = useCallback((e: React.WheelEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight <= el.clientHeight) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    el.scrollTop += e.deltaY;
+  }, []);
+
   if (!user || pageLoading) {
     return <div>Loading...</div>;
   }
@@ -657,12 +668,25 @@ export default function AnnotationView() {
   ];
 
   const qnaQuestions = Array.isArray(hw?.questions) ? hw.questions : [];
-  const qnaStatusLabel = submission?.status === "graded"
-    ? "Graded"
+  const isMarkedSubmission = submission?.score != null || submission?.status === "graded";
+  const qnaStatusLabel = isMarkedSubmission
+    ? "Marked"
     : submission?.status === "grading"
     ? "Under review"
     : submission?.status === "submitted"
     ? "Submitted"
+    : hw?.closed
+    ? "Closed"
+    : "Not submitted";
+
+  const homeworkSidebarStatus = isMarkedSubmission
+    ? "Marked"
+    : submission?.status === "grading"
+    ? "Under review"
+    : submission?.status === "submitted"
+    ? "Submitted"
+    : hw?.closed
+    ? "Closed"
     : "Not submitted";
 
   const getQnaAnswerValue = (index: number) =>
@@ -679,6 +703,46 @@ export default function AnnotationView() {
       }
       return next;
     });
+  };
+
+  const handleQnAFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
+
+    if (!hw) {
+      toast({
+        title: "No homework assigned",
+        description: "Attach files is only available when a homework is assigned.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (hw.closed || isMarkedSubmission) {
+      toast({
+        title: "Submission locked",
+        description: "This assignment can no longer accept file attachments.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setQnaUploadingFiles(true);
+    try {
+      for (const file of selectedFiles) {
+        const uploaded = await uploadFile(file);
+        if (uploaded) {
+          setQnaFiles((prev) => [...prev, uploaded]);
+        }
+      }
+    } finally {
+      setQnaUploadingFiles(false);
+      if (qnaFileInputRef.current) qnaFileInputRef.current.value = "";
+    }
+  };
+
+  const removeQnAFile = (index: number) => {
+    setQnaFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const submitQnAResponses = async () => {
@@ -700,15 +764,24 @@ export default function AnnotationView() {
       return;
     }
 
+    if (isMarkedSubmission) {
+      toast({
+        title: "Already marked",
+        description: "This assignment is marked and can no longer be submitted.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     await submitHomework({
       notes: qnaNotes,
-      files: submission?.files || [],
+      files: qnaFiles,
       answers: qnaAnswers,
     });
   };
 
   return (
-    <div className="h-screen silver-ambient flex flex-col" data-testid="annotation-view">
+    <div className="h-screen overflow-hidden silver-ambient flex flex-col" data-testid="annotation-view">
       {/* Case Locked Notification (students only) */}
       {caseLocked && user?.role === 'student' && (
         <div className="bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 px-6 py-3">
@@ -773,14 +846,6 @@ export default function AnnotationView() {
                 )}
               </>
             )}
-            <div className="flex items-center space-x-2 pl-3 border-l border-border">
-              <div className="w-2 h-2 bg-green-500/80 dark:bg-green-400/80 rounded-full pulse-dot" />
-              <span className="text-sm text-muted-foreground">
-                {presence?.users?.length
-                  ? `${presence.users.map((u) => u.name).join(", ")}`
-                  : "You"}
-              </span>
-            </div>
             {user?.role === 'student' && !isQnAStudentMode && (
               <Button
                 className="bg-primary text-primary-foreground hover:opacity-90"
@@ -914,6 +979,50 @@ export default function AnnotationView() {
                       />
                     </div>
 
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Attached Files</label>
+                      <input
+                        ref={qnaFileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        aria-label="Attach files"
+                        title="Attach files"
+                        onChange={handleQnAFileSelect}
+                        disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded" || qnaUploadingFiles}
+                      />
+
+                      {qnaFiles.length > 0 && (
+                        <div className="space-y-1">
+                          {qnaFiles.map((file, idx) => (
+                            <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-md border bg-muted/20 px-2 py-1.5 text-xs">
+                              <span className="truncate">{file.name}</span>
+                              {user?.role === "student" && !hw?.closed && submission?.status !== "graded" && (
+                                <button
+                                  className="text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeQnAFile(idx)}
+                                  aria-label={`Remove ${file.name}`}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {user?.role === "student" && !hw?.closed && submission?.status !== "graded" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => qnaFileInputRef.current?.click()}
+                          disabled={subLoading || qnaUploadingFiles}
+                        >
+                          {qnaUploadingFiles ? "Uploading..." : "Add Files"}
+                        </Button>
+                      )}
+                    </div>
+
                     {user?.role === "student" && (
                       <div className="flex justify-end">
                         <Button
@@ -945,7 +1054,7 @@ export default function AnnotationView() {
               description={hw?.description || case_.description || "No homework assignment for this case yet."}
               dueDate={hw?.dueAt}
               points={hw?.points ?? 0}
-              submissionStatus={submission?.status || "none"}
+              submissionStatus={isMarkedSubmission ? "graded" : (submission?.status || "none")}
               score={submission?.score}
               closed={hw?.closed ?? false}
               hasHomework={Boolean(hw)}
@@ -1725,7 +1834,7 @@ export default function AnnotationView() {
 
           {/* AI Vision Assistant Panel */}
           {user?.role === 'student' && !isQnAStudentMode && showAIVision && (
-            <aside className="w-80 bg-card border-l border-border overflow-y-auto">
+            <aside className="w-80 bg-card border-l border-border overflow-y-auto subtle-scrollbar" onWheel={handlePanelWheel}>
               <AIAnnotationSuggestions
                 imageUrl={case_.imageUrl}
                 context={{
@@ -1748,7 +1857,7 @@ export default function AnnotationView() {
 
           {/* AI Chat Assistant Panel */}
           {user?.role === 'student' && showAIChat && (
-            <aside className="w-80 bg-card border-l border-border overflow-y-auto">
+            <aside className="w-80 bg-card border-l border-border overflow-y-auto subtle-scrollbar" onWheel={handlePanelWheel}>
               <AIChatAssistant
                 context={{
                   caseId: caseId,
@@ -1770,41 +1879,63 @@ export default function AnnotationView() {
 
           {/* Default collaborative sidebar with dropdown tab selector */}
           {user?.role === 'student' && !showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && !showAssignmentDetails && (
-            <aside className="group/sidebar w-16 hover:w-80 bg-card border-l border-border flex flex-col overflow-hidden transition-all duration-300">
-              <div className="flex flex-col items-center gap-3 py-3 group-hover/sidebar:hidden">
+            <div className="relative flex">
+              {/* Toggle button – lives outside the aside so overflow-hidden doesn't clip it */}
+              <button
+                type="button"
+                className="absolute left-0 top-1/2 z-20 h-12 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-card hover:bg-muted text-foreground shadow-md transition-colors"
+                onClick={() => {
+                  setSidebarExpanded((prev) => !prev);
+                  setShowTabDropdown(false);
+                }}
+                title={sidebarExpanded ? "Close sidebar" : "Open sidebar"}
+                aria-label={sidebarExpanded ? "Close sidebar" : "Open sidebar"}
+              >
+                <span className="sr-only">{sidebarExpanded ? "Close sidebar" : "Open sidebar"}</span>
+                {sidebarExpanded ? <ChevronRight className="mx-auto h-4 w-4" /> : <ChevronLeft className="mx-auto h-4 w-4" />}
+              </button>
+
+            <aside
+              className={`${sidebarExpanded ? "w-80" : "w-16"} bg-card border-l border-border flex flex-col overflow-hidden transition-all duration-300`}
+            >
+              <div className={`${sidebarExpanded ? "hidden" : "flex"} flex-col items-center gap-3 py-3`}>
                 {!isQnAStudentMode && (
                   <button
+                    type="button"
                     className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "annotate" ? "bg-primary/10 border-primary/40" : "border-border"}`}
-                    onClick={() => switchSidebarTab("annotate")}
+                    onClick={() => { setSidebarExpanded(true); switchSidebarTab("annotate"); }}
                     title="Annotate"
                   >
                     <span className="text-base">📝</span>
                   </button>
                 )}
                 <button
+                  type="button"
                   className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "collaborate" ? "bg-primary/10 border-primary/40" : "border-border"}`}
-                  onClick={() => switchSidebarTab("collaborate")}
+                  onClick={() => { setSidebarExpanded(true); switchSidebarTab("collaborate"); }}
                   title="Collaborate"
                 >
                   <span className="text-base">👥</span>
                 </button>
                 <button
+                  type="button"
                   className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "ai-assistant" ? "bg-primary/10 border-primary/40" : "border-border"}`}
-                  onClick={() => switchSidebarTab("ai-assistant")}
+                  onClick={() => { setSidebarExpanded(true); switchSidebarTab("ai-assistant"); }}
                   title="AI Assistant"
                 >
                   <span className="text-base">🤖</span>
                 </button>
                 <button
+                  type="button"
                   className={`h-10 w-10 rounded-md border flex items-center justify-center ${activeSidebarTab === "homework" ? "bg-primary/10 border-primary/40" : "border-border"}`}
-                  onClick={() => switchSidebarTab("homework")}
+                  onClick={() => { setSidebarExpanded(true); switchSidebarTab("homework"); }}
                   title="Homework"
                 >
                   <span className="text-base">📋</span>
                 </button>
               </div>
 
-              <div className="hidden group-hover/sidebar:flex flex-1 flex-col min-w-0">
+              <div className={`${sidebarExpanded ? "flex" : "hidden"} flex-1 flex-col min-w-0 min-h-0`}>
               {/* Dropdown Tab Selector */}
               <div className="border-b border-border p-2">
                 <div className="relative">
@@ -1830,6 +1961,7 @@ export default function AnnotationView() {
                     <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
                       {!isQnAStudentMode && (
                         <button
+                          type="button"
                           className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                             activeSidebarTab === "annotate" ? "bg-primary/10" : ""
                           }`}
@@ -1842,6 +1974,7 @@ export default function AnnotationView() {
                         </button>
                       )}
                       <button
+                        type="button"
                         className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "collaborate" ? "bg-primary/10" : ""
                         }`}
@@ -1853,6 +1986,7 @@ export default function AnnotationView() {
                         <span>Collaborate</span>
                       </button>
                       <button
+                        type="button"
                         className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "ai-assistant" ? "bg-primary/10" : ""
                         }`}
@@ -1864,6 +1998,7 @@ export default function AnnotationView() {
                         <span>AI Assistant</span>
                       </button>
                       <button
+                        type="button"
                         className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted transition-colors ${
                           activeSidebarTab === "homework" ? "bg-primary/10" : ""
                         }`}
@@ -1881,7 +2016,7 @@ export default function AnnotationView() {
 
               {/* Tab Content - Annotate */}
               {!isQnAStudentMode && activeSidebarTab === "annotate" && (
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="flex-1 overflow-y-auto subtle-scrollbar p-2 space-y-2" onWheel={handlePanelWheel}>
                   <div className="border rounded-lg p-2 bg-muted/50">
                     <h4 className="font-semibold text-xs mb-1">Current Annotations</h4>
                     <p className="text-xs text-muted-foreground">
@@ -1907,7 +2042,7 @@ export default function AnnotationView() {
 
               {/* Tab Content - Collaborate */}
               {activeSidebarTab === "collaborate" && (
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="flex-1 overflow-y-auto subtle-scrollbar p-2 space-y-2" onWheel={handlePanelWheel}>
                   <VersionList
                     title="My versions"
                     items={mine}
@@ -1963,7 +2098,7 @@ export default function AnnotationView() {
 
               {/* Tab Content - AI Assistant */}
               {activeSidebarTab === "ai-assistant" && (
-                <div className="flex-1 overflow-y-auto flex flex-col">
+                <div className="flex-1 overflow-y-auto subtle-scrollbar flex flex-col min-h-0" onWheel={handlePanelWheel}>
                   <AIChatAssistant
                     context={{
                       caseId: caseId,
@@ -1985,7 +2120,7 @@ export default function AnnotationView() {
 
               {/* Tab Content - Assignment Requirements */}
               {activeSidebarTab === "homework" && (
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="flex-1 overflow-y-auto subtle-scrollbar p-2 space-y-2" onWheel={handlePanelWheel}>
                   {hw && (
                     <div className="border rounded-lg p-2 bg-card space-y-2">
                       <div>
@@ -1994,25 +2129,31 @@ export default function AnnotationView() {
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-xs font-medium">Total Points</span>
                           <Badge variant="outline" className="text-lg font-bold">
-                            {submission?.status === "graded" && submission?.score != null
+                            {isMarkedSubmission && submission?.score != null
                               ? `${submission.score}/${hw.points}`
                               : hw.points}
                           </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground space-y-1">
                           <p><strong>Due:</strong> {new Date(hw.dueAt).toLocaleDateString()}</p>
+                          {isMarkedSubmission && (
+                            <p>
+                              <strong>Marked:</strong>{" "}
+                              <span className="text-emerald-600 font-semibold">{submission?.score ?? 0}/{hw?.points ?? 100}</span>
+                            </p>
+                          )}
                           <p>
                             <strong>Status:</strong>{" "}
-                            {submission?.status === "graded" ? (
+                            {homeworkSidebarStatus === "Marked" ? (
                               <span className="text-emerald-600 font-semibold">Marked</span>
-                            ) : submission?.status === "grading" ? (
+                            ) : homeworkSidebarStatus === "Under review" ? (
                               <span className="text-amber-600 font-semibold">Under review</span>
-                            ) : submission?.status === "submitted" ? (
+                            ) : homeworkSidebarStatus === "Submitted" ? (
                               <span className="text-blue-600 font-semibold">Submitted</span>
-                            ) : hw.closed ? (
+                            ) : homeworkSidebarStatus === "Closed" ? (
                               <span className="text-red-600 font-semibold">Closed</span>
                             ) : (
-                              <span className="text-green-600 font-semibold">Open</span>
+                              <span className="text-muted-foreground font-semibold">Not submitted</span>
                             )}
                           </p>
                         </div>
@@ -2076,6 +2217,15 @@ export default function AnnotationView() {
                         return;
                       }
 
+                      if (isMarkedSubmission) {
+                        toast({
+                          title: "Already marked",
+                          description: "This assignment is marked and can no longer be submitted.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
                       await submitHomework({
                         notes,
                         files,
@@ -2083,7 +2233,7 @@ export default function AnnotationView() {
                       });
                     }}
                     onUploadFile={async (file) => {
-                      if (!hw?.id) {
+                      if (!hw) {
                         toast({
                           title: "No homework assigned",
                           description: "Attach files is only available when a homework is assigned.",
@@ -2092,10 +2242,10 @@ export default function AnnotationView() {
                         return null;
                       }
 
-                      if (hw.closed) {
+                      if (hw.closed || isMarkedSubmission) {
                         toast({
-                          title: "Assignment closed",
-                          description: "This assignment is closed and cannot accept files.",
+                          title: "Submission locked",
+                          description: "This assignment can no longer accept files.",
                           variant: "destructive",
                         });
                         return null;
@@ -2119,6 +2269,7 @@ export default function AnnotationView() {
               )}
               </div>
             </aside>
+            </div>
           )}
 
           {/* Closed Case Notification Modal (students only) */}

@@ -44,9 +44,9 @@ export default function SubmissionPanel({
   score,
   maxPoints = 100,
   notes: initialNotes = "",
-  files: initialFiles = [],
+  files: initialFiles,
   questions = [],
-  answers: initialAnswers = [],
+  answers: initialAnswers,
   uploads = [],
   homeworkType = "Annotate",
   onSubmit,
@@ -56,8 +56,8 @@ export default function SubmissionPanel({
   closed = false,
 }: SubmissionPanelProps) {
   const [notes, setNotes] = useState(initialNotes);
-  const [files, setFiles] = useState<SubmissionFile[]>(initialFiles);
-  const [answers, setAnswers] = useState<{ index: number; value: any }[]>(initialAnswers);
+  const [files, setFiles] = useState<SubmissionFile[]>(initialFiles ?? []);
+  const [answers, setAnswers] = useState<{ index: number; value: any }[]>(initialAnswers ?? []);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(status !== "none");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,11 +67,15 @@ export default function SubmissionPanel({
   }, [initialNotes]);
 
   useEffect(() => {
-    setFiles(initialFiles);
+    if (initialFiles) {
+      setFiles(initialFiles);
+    }
   }, [initialFiles]);
 
   useEffect(() => {
-    setAnswers(initialAnswers);
+    if (initialAnswers) {
+      setAnswers(initialAnswers);
+    }
   }, [initialAnswers]);
 
   useEffect(() => {
@@ -79,7 +83,7 @@ export default function SubmissionPanel({
   }, [status]);
 
   const effectiveStatus: "none" | "submitted" | "grading" | "graded" =
-    status === "none" && submitted ? "submitted" : status;
+    score != null ? "graded" : status === "none" && submitted ? "submitted" : status;
 
   const getAnswerValue = (index: number) => {
     return answers.find((a) => a.index === index)?.value ?? "";
@@ -154,7 +158,7 @@ export default function SubmissionPanel({
   const getStatusLabel = () => {
     switch (effectiveStatus) {
       case "graded":
-        return "Graded";
+        return "Marked";
       case "grading":
         return "Grading in Progress";
       case "submitted":
@@ -164,7 +168,7 @@ export default function SubmissionPanel({
     }
   };
 
-  if (closed && effectiveStatus === "graded") {
+  if (effectiveStatus === "graded") {
     return (
       <div className="border rounded-lg p-3 bg-card">
         <div className="flex items-center justify-between mb-3">
@@ -198,16 +202,10 @@ export default function SubmissionPanel({
     <div className="border rounded-lg p-3 bg-card space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="font-semibold text-sm">Homework Submission</h4>
-        <Badge variant={effectiveStatus === "grading" ? "secondary" : effectiveStatus === "graded" ? "default" : "outline"}>
+        <Badge variant={effectiveStatus === "grading" ? "secondary" : "outline"}>
           {getStatusLabel()}
         </Badge>
       </div>
-
-      {effectiveStatus === "graded" && (
-        <div className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-          Marked: {score ?? 0}/{maxPoints}
-        </div>
-      )}
 
       {/* Due date info */}
       {dueDate && (
@@ -272,7 +270,7 @@ export default function SubmissionPanel({
                         name={`question-${idx}`}
                         checked={String(getAnswerValue(idx)) === String(optionIndex)}
                         onChange={() => setAnswerValue(idx, optionIndex)}
-                        disabled={closed || effectiveStatus === "graded" || loading}
+                        disabled={closed || loading}
                       />
                       <span>{opt}</span>
                     </label>
@@ -283,7 +281,7 @@ export default function SubmissionPanel({
                   placeholder="Type your answer here..."
                   value={getAnswerValue(idx)}
                   onChange={(e) => setAnswerValue(idx, e.target.value)}
-                  disabled={closed || effectiveStatus === "graded" || loading}
+                  disabled={closed || loading}
                   className="min-h-[120px]"
                 />
               )}
@@ -305,7 +303,7 @@ export default function SubmissionPanel({
           }
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          disabled={closed || effectiveStatus === "graded" || loading}
+          disabled={closed || loading}
           className="min-h-[100px]"
         />
       </div>
@@ -314,17 +312,28 @@ export default function SubmissionPanel({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
             <label htmlFor="file-input" className="text-sm font-medium">Attached Files</label>
+            {files.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {files.length} file{files.length === 1 ? "" : "s"} attached
+              </span>
+            )}
             <input
               id="file-input"
               ref={fileInputRef}
               type="file"
               multiple
               onChange={handleFileSelect}
-              disabled={closed || effectiveStatus === "graded" || uploading}
+              disabled={closed || uploading}
               className="hidden"
               aria-label="Select files to upload"
             />
         </div>
+
+          {files.length === 0 && (
+            <div className="rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+              No files attached yet.
+            </div>
+          )}
 
           {/* File list */}
           {files.length > 0 && (
@@ -339,7 +348,7 @@ export default function SubmissionPanel({
                     <span className="text-xs text-muted-foreground">
                       {(file.size / 1024).toFixed(1)} KB
                     </span>
-                    {!closed && effectiveStatus !== "graded" && (
+                    {!closed && (
                       <button
                         onClick={() => removeFile(idx)}
                         disabled={loading}
@@ -356,7 +365,7 @@ export default function SubmissionPanel({
             </div>
           )}
 
-          {!closed && effectiveStatus !== "graded" && (
+          {!closed && (
             <Button
               variant="outline"
               size="sm"
@@ -380,7 +389,7 @@ export default function SubmissionPanel({
         </div>
 
         {/* Submit button */}
-        {!closed && effectiveStatus !== "graded" && (
+        {!closed && (
           <Button
             onClick={handleSubmit}
             disabled={loading || uploading}
@@ -406,7 +415,7 @@ export default function SubmissionPanel({
         )}
 
         {/* Submitted state info */}
-        {submitted && effectiveStatus !== "graded" && (
+        {submitted && (
           <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-700 rounded text-sm text-blue-700 dark:text-blue-300">
             ✓ Your submission has been saved. {effectiveStatus === "grading" && "It's currently being graded."}
           </div>

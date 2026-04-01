@@ -30,6 +30,7 @@ export default function AssignmentDetailsPanel({
 }: AssignmentDetailsPanelProps) {
   const dueDateTime = dueDate ? new Date(dueDate) : null;
   const now = new Date();
+  const isMarkedSubmission = score != null || submissionStatus === "graded";
   const isOverdue = Boolean(dueDateTime && dueDateTime < now && !closed);
   const daysUntilDue = dueDateTime
     ? Math.ceil((dueDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -103,7 +104,7 @@ export default function AssignmentDetailsPanel({
           <span className="text-sm font-medium">Total Points</span>
           <Badge variant="outline" className="text-base font-bold">
             {hasHomework
-              ? submissionStatus === "graded" && score != null
+              ? isMarkedSubmission && score != null
                 ? `${score}/${points}`
                 : points
               : "N/A"}

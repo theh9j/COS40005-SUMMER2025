@@ -76,6 +76,9 @@ export function useSubmission(homeworkId: string, caseId: string, userId: string
   // Upload submission file
   const uploadFile = useCallback(
     async (file: File): Promise<SubmissionFile | null> => {
+      if (!homeworkId || !userId) {
+        return null;
+      }
       try {
         const formData = new FormData();
         formData.append("file", file);
@@ -112,7 +115,7 @@ export function useSubmission(homeworkId: string, caseId: string, userId: string
         };
       }
     },
-    [caseId, userId]
+    [homeworkId, userId]
   );
 
   // Create or update submission
