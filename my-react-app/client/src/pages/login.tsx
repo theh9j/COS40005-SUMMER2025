@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { UserRound } from "lucide-react";
+import { UserRound, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/i18n";
 
@@ -27,6 +27,7 @@ export default function Login() {
     password: "",
     rememberMe: false,
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const rememberedEmail = localStorage.getItem("rememberedEmail");
@@ -140,14 +141,29 @@ export default function Login() {
 
               <div>
                 <Label>{t("password")}</Label>
-                <Input
-                  type="password"
-                  placeholder={t("password")}
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, password: e.target.value }))
-                  }
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder={t("password")}
+                    value={formData.password}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, password: e.target.value }))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
                 {errors.password && (
                   <p className="mt-1 text-xs text-red-600">{errors.password}</p>
                 )}

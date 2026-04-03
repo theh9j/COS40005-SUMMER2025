@@ -2042,11 +2042,6 @@ export default function InstructorDashboard() {
             <div className="p-6 space-y-6" data-testid="view-cases">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Case Management</h2>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={loadCases}>
-                    Refresh
-                  </Button>
-                </div>
               </div>
 
               <Card>
