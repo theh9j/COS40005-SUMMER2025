@@ -50,12 +50,14 @@ export default function QnARubricPanel({
   disabled,
   initialRubric,
   lastSavedAt,
+  homeworkMaxPoints,
 }: {
   questions: QuestionMeta[];
   onSubmit: (total: number, rubric: QnARubricItem[]) => void;
   disabled?: boolean;
   initialRubric?: any[];
   lastSavedAt?: string;
+  homeworkMaxPoints?: number;
 }) {
   const [items, setItems] = useState<QnARubricItem[]>(() =>
     questions.map((q, i) => ({
@@ -103,6 +105,12 @@ export default function QnARubricPanel({
   const maxTotal = useMemo(() => items.reduce((acc, it) => acc + it.max, 0), [items]);
   const pct = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
 
+  // Scale score to homework max_points if provided
+  const scaledTotal = useMemo(() => {
+    if (!homeworkMaxPoints || homeworkMaxPoints <= 0 || maxTotal <= 0) return total;
+    return Math.round((total / maxTotal) * homeworkMaxPoints * 100) / 100;
+  }, [total, maxTotal, homeworkMaxPoints]);
+
   const currentSnapshot = JSON.stringify(items.map((it) => ({ id: it.id, points: it.points, comment: it.comment ?? "" })));
   const isDirty = currentSnapshot !== lastSavedSnapshot.current;
 
@@ -123,7 +131,8 @@ export default function QnARubricPanel({
 
   function handleSubmit() {
     lastSavedSnapshot.current = currentSnapshot;
-    onSubmit(total, rubricPayload);
+    // Submit scaled score if homework max_points is provided, otherwise raw total
+    onSubmit(scaledTotal, rubricPayload);
   }
 
   if (questions.length === 0) {
@@ -174,9 +183,16 @@ export default function QnARubricPanel({
                 "text-red-600 dark:text-red-400"
               )}
             >
-              {total} / {maxTotal}
+              {homeworkMaxPoints && maxTotal > 0 && scaledTotal !== total ? 
+                `${scaledTotal} / ${homeworkMaxPoints}` : 
+                `${total} / ${maxTotal}`}
             </span>
           </div>
+          {homeworkMaxPoints && maxTotal > 0 && scaledTotal !== total && (
+            <div className="text-xs text-muted-foreground">
+              <span>Raw: {total}/{maxTotal} → Scaled to {homeworkMaxPoints}</span>
+            </div>
+          )}
           <Progress
             value={pct}
             className={cn(
