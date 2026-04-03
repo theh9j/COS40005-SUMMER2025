@@ -244,6 +244,7 @@ export default function AnnotationView() {
   const [showAIChat, setShowAIChat] = useState(false);
   const [showAIVision, setShowAIVision] = useState(false);
   const [showAssignmentDetails, setShowAssignmentDetails] = useState(false);
+  const [currentVersionNumber, setCurrentVersionNumber] = useState<number | undefined>(undefined);
   const [showCaseEditor, setShowCaseEditor] = useState(false);
   const [caseLocked, setCaseLocked] = useState(false);
   const [aiChatMinimized, setAIChatMinimized] = useState(false);
@@ -341,7 +342,6 @@ export default function AnnotationView() {
   const qnaFileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const savedCanvasScrollTopRef = useRef(0);
-  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAnnotationCountRef = useRef(0);
 
   const switchSidebarTab = (tab: "annotate" | "collaborate" | "ai-assistant" | "homework") => {
@@ -371,6 +371,24 @@ export default function AnnotationView() {
   const handlePeerSelectForComparison = (userId: string) => {
     console.log("Peer selected for comparison", userId);
   };
+
+  const studentSidebarVisible =
+    user?.role === "student" &&
+    !showHistory &&
+    !showComparison &&
+    !showProperties &&
+    !showAIChat &&
+    !showAIVision &&
+    !showAssignmentDetails;
+
+  const studentControlsDock: "none" | "collapsed" | "expanded" =
+    user?.role === "student"
+      ? showAssignmentDetails || showHistory || showComparison || showProperties || showAIChat || showAIVision
+        ? "expanded"
+        : studentSidebarVisible
+          ? (sidebarExpanded ? "expanded" : "collapsed")
+          : "none"
+      : "none";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -419,46 +437,6 @@ export default function AnnotationView() {
   useEffect(() => {
     lastAnnotationCountRef.current = annotation.annotations.length;
   }, [caseId]);
-
-  useEffect(() => {
-    if (user?.role !== "student") return;
-    if (isQnAStudentMode || showRequirements) return;
-
-    const currentCount = annotation.annotations.length;
-    if (currentCount <= lastAnnotationCountRef.current) {
-      lastAnnotationCountRef.current = currentCount;
-      return;
-    }
-
-    if (autosaveTimeoutRef.current) {
-      clearTimeout(autosaveTimeoutRef.current);
-    }
-
-    autosaveTimeoutRef.current = setTimeout(async () => {
-      try {
-        annotation.saveAllAnnotationsSnapshot();
-        await create({
-          boxes: annotation.annotations,
-          notes: JSON.stringify({
-            autosaved: true,
-            timestamp: new Date().toISOString(),
-            tool: annotation.tool,
-            color: annotation.color,
-          }),
-        });
-      } catch (e) {
-        console.error("Autosave failed", e);
-      }
-    }, 600);
-
-    lastAnnotationCountRef.current = currentCount;
-
-    return () => {
-      if (autosaveTimeoutRef.current) {
-        clearTimeout(autosaveTimeoutRef.current);
-      }
-    };
-  }, [annotation.annotations.length, annotation.tool, annotation.color, annotation.annotations, create, isQnAStudentMode, showRequirements, user?.role]);
 
   useEffect(() => {
     if (showRequirements) return;
@@ -514,7 +492,7 @@ export default function AnnotationView() {
     return () => window.removeEventListener("keydown", handleKeyboard);
   }, [annotation, isQnAStudentMode]);
 
-  // Fix 3: Auto-show/hide properties when selecting/deselecting
+  // Auto-open properties on selection, but do not force-close on deselection.
   useEffect(() => {
     if (isQnAStudentMode) {
       setShowProperties(false);
@@ -522,8 +500,6 @@ export default function AnnotationView() {
     }
     if (annotation.selectedAnnotationIds.length > 0) {
       setShowProperties(true);
-    } else {
-      setShowProperties(false); // This hides the panel when deselecting
     }
   }, [annotation.selectedAnnotationIds, isQnAStudentMode]);
 
@@ -580,6 +556,24 @@ export default function AnnotationView() {
     el.scrollTop += e.deltaY;
   }, []);
 
+  useEffect(() => {
+    const versions = annotation.versions || [];
+    if (versions.length === 0) {
+      setCurrentVersionNumber(undefined);
+      return;
+    }
+
+    const knownVersions = new Set(
+      versions
+        .map((v: any) => v?.version)
+        .filter((v: any) => typeof v === "number"),
+    );
+
+    if (currentVersionNumber == null || !knownVersions.has(currentVersionNumber)) {
+      setCurrentVersionNumber(versions[0]?.version);
+    }
+  }, [annotation.versions, currentVersionNumber]);
+
   if (!user || pageLoading) {
     return <div>Loading...</div>;
   }
@@ -607,7 +601,7 @@ export default function AnnotationView() {
   // Save a version (both local + collaborative)
   const handleSaveVersion = async () => {
     try {
-      annotation.saveAllAnnotationsSnapshot();
+      await annotation.saveAllAnnotationsSnapshot();
       const payload = {
         boxes: annotation.annotations,
         notes: JSON.stringify({
@@ -621,6 +615,38 @@ export default function AnnotationView() {
     } catch (e) {
       console.error("Save version failed", e);
     }
+  };
+
+  const myAnnotationVersions = annotation.versions.map((v: any) => ({
+    id: v.id || v._id || `version-${v.version}`,
+    caseId,
+    authorId: v.userId || user?.user_id || "current-user",
+    authorName:
+      user?.firstName && user?.lastName
+        ? `${user.firstName} ${user.lastName}`
+        : user?.email || "Me",
+    createdAt: v.createdAt || new Date().toISOString(),
+    data: {
+      boxes: Array.isArray(v.annotations) ? v.annotations : [],
+      notes: `Version ${v.version ?? "-"}`,
+    },
+  }));
+
+  const handleRestoreVersion = async (version: any) => {
+    await annotation.restoreVersion(version);
+    setCurrentVersionNumber(version?.version);
+    toast({
+      title: "Version restored",
+      description: `Restored version v${version?.version ?? "-"}`,
+    });
+  };
+
+  const handleDeleteVersion = async (versionId: string) => {
+    await annotation.deleteVersion(versionId);
+    toast({
+      title: "Version deleted",
+      description: "Version history refreshed.",
+    });
   };
 
   // Compare toggle
@@ -874,7 +900,7 @@ export default function AnnotationView() {
       {/* Main layout */}
       <div className="flex flex-1 min-h-0">
         {/* Canvas area */}
-        <main className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex overflow-hidden relative">
           {/* Canvas */}
           <div
             ref={canvasScrollRef}
@@ -1043,39 +1069,10 @@ export default function AnnotationView() {
                 annotation={annotation}
                 peerAnnotations={annotation.peerAnnotations}
                 peerOpacity={compare.alpha || 0.5}
+                controlsDock={studentControlsDock}
               />
             )}
           </div>
-
-          {/* Conditional right panels */}
-          {user?.role === 'student' && showAssignmentDetails && (
-            <AssignmentDetailsPanel
-              title={case_.title}
-              description={hw?.description || case_.description || "No homework assignment for this case yet."}
-              dueDate={hw?.dueAt}
-              points={hw?.points ?? 0}
-              submissionStatus={isMarkedSubmission ? "graded" : (submission?.status || "none")}
-              score={submission?.score}
-              closed={hw?.closed ?? false}
-              hasHomework={Boolean(hw)}
-              autoChecklist={[
-                "Review all annotated structures",
-                "Check annotation completeness",
-                "Verify label accuracy",
-              ]}
-              onClose={() => setShowAssignmentDetails(false)}
-            />
-          )}
-
-          {user?.role === 'student' && showHistory && (
-            <AnnotationHistory
-              versions={(annotation.versions as any) || []}
-              currentVersion={undefined}
-              onVersionSelect={() => {}}
-              onRestore={annotation.restoreVersion}
-              onDelete={annotation.deleteVersion}
-            />
-          )}
 
           {user?.role === 'instructor' && (
             <aside className="w-72 bg-card border-l border-border overflow-y-auto flex flex-col">
@@ -1809,32 +1806,53 @@ export default function AnnotationView() {
             </aside>
           )}
 
-          {user?.role === 'student' && !isQnAStudentMode && showComparison && (
-            <PeerComparison
-              peerAnnotations={mockPeerAnnotations}
-              currentUserId={user?.user_id || "current-user"}
-              onToggleUserAnnotations={handlePeerVisibilityToggle}
-              onSelectForComparison={handlePeerSelectForComparison}
-            />
+          <div className="absolute inset-y-0 right-0 z-20 flex pointer-events-none">
+          {user?.role === 'student' && !isQnAStudentMode && showHistory && (
+            <div className="pointer-events-auto">
+              <AnnotationHistory
+                versions={annotation.versions as any}
+                currentVersion={currentVersionNumber}
+                onRestore={handleRestoreVersion as any}
+                onDelete={handleDeleteVersion}
+              />
+            </div>
           )}
 
-          {user?.role === 'student' && !isQnAStudentMode && showProperties && annotation.selectedAnnotationIds.length > 0 && (
-            <AnnotationPropertiesPanel
-              selectedAnnotations={annotation.annotations.filter((a) =>
-                annotation.selectedAnnotationIds.includes(a.id)
-              ) as any}
-              onClose={() => setShowProperties(false)}
-              onUpdateAnnotation={annotation.updateAnnotation as any}
-              onDeleteAnnotations={annotation.deleteSelectedAnnotations}
-              onLockAnnotations={annotation.lockAnnotations}
-              onDuplicateAnnotations={annotation.duplicateAnnotations}
-              onToggleVisibility={annotation.toggleAnnotationsVisibility}
-            />
+          {user?.role === 'student' && !isQnAStudentMode && showComparison && (
+            <div className="pointer-events-auto">
+              <PeerComparison
+                peerAnnotations={mockPeerAnnotations}
+                currentUserId={user?.user_id || "current-user"}
+                onToggleUserAnnotations={handlePeerVisibilityToggle}
+                onSelectForComparison={handlePeerSelectForComparison}
+              />
+            </div>
+          )}
+
+          {user?.role === 'student' && !isQnAStudentMode && (
+            <div
+              className={`pointer-events-auto border-l border-border bg-card overflow-hidden ${showProperties ? "w-80 opacity-100" : "w-0 opacity-0 pointer-events-none"}`}
+            >
+              <AnnotationPropertiesPanel
+                className="h-full"
+                allAnnotations={annotation.annotations as any}
+                selectedAnnotations={annotation.annotations.filter((a) =>
+                  annotation.selectedAnnotationIds.includes(a.id)
+                ) as any}
+                onSelectAnnotation={(id) => annotation.setSelectedAnnotations?.([id])}
+                onClose={() => setShowProperties(false)}
+                onUpdateAnnotation={annotation.updateAnnotation as any}
+                onDeleteAnnotations={annotation.deleteSelectedAnnotations}
+                onLockAnnotations={annotation.lockAnnotations}
+                onDuplicateAnnotations={annotation.duplicateAnnotations}
+                onToggleVisibility={annotation.toggleAnnotationsVisibility}
+              />
+            </div>
           )}
 
           {/* AI Vision Assistant Panel */}
           {user?.role === 'student' && !isQnAStudentMode && showAIVision && (
-            <aside className="w-80 bg-card border-l border-border overflow-y-auto subtle-scrollbar" onWheel={handlePanelWheel}>
+            <aside className="w-80 bg-card border-l border-border overflow-y-auto subtle-scrollbar pointer-events-auto" onWheel={handlePanelWheel}>
               <AIAnnotationSuggestions
                 imageUrl={case_.imageUrl}
                 context={{
@@ -1857,7 +1875,7 @@ export default function AnnotationView() {
 
           {/* AI Chat Assistant Panel */}
           {user?.role === 'student' && showAIChat && (
-            <aside className="w-80 bg-card border-l border-border overflow-y-auto subtle-scrollbar" onWheel={handlePanelWheel}>
+            <aside className="w-80 bg-card border-l border-border overflow-y-auto subtle-scrollbar pointer-events-auto" onWheel={handlePanelWheel}>
               <AIChatAssistant
                 context={{
                   caseId: caseId,
@@ -1879,7 +1897,7 @@ export default function AnnotationView() {
 
           {/* Default collaborative sidebar with dropdown tab selector */}
           {user?.role === 'student' && !showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && !showAssignmentDetails && (
-            <div className="relative flex">
+            <div className="relative flex pointer-events-auto">
               {/* Toggle button – lives outside the aside so overflow-hidden doesn't clip it */}
               <button
                 type="button"
@@ -1896,7 +1914,7 @@ export default function AnnotationView() {
               </button>
 
             <aside
-              className={`${sidebarExpanded ? "w-80" : "w-16"} bg-card border-l border-border flex flex-col overflow-hidden transition-all duration-300`}
+              className={`${sidebarExpanded ? "w-80" : "w-16"} bg-card border-l border-border flex flex-col overflow-hidden`}
             >
               <div className={`${sidebarExpanded ? "hidden" : "flex"} flex-col items-center gap-3 py-3`}>
                 {!isQnAStudentMode && (
@@ -2045,10 +2063,21 @@ export default function AnnotationView() {
                 <div className="flex-1 overflow-y-auto subtle-scrollbar p-2 space-y-2" onWheel={handlePanelWheel}>
                   <VersionList
                     title="My versions"
-                    items={mine}
-                    onSelect={(v) =>
-                      console.log("Load my version:", v.data || v)
-                    }
+                    items={myAnnotationVersions as any}
+                    onSelect={(v) => {
+                      const version = annotation.versions.find(
+                        (item: any) => item.id === v.id || item._id === v.id,
+                      );
+                      if (!version) {
+                        toast({
+                          title: "Version not found",
+                          description: "The selected version could not be restored.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      handleRestoreVersion(version);
+                    }}
                   />
                   <VersionList
                     title="Peers' versions"
@@ -2271,6 +2300,7 @@ export default function AnnotationView() {
             </aside>
             </div>
           )}
+          </div>
 
           {/* Closed Case Notification Modal (students only) */}
           {user?.role === 'student' && showClosedCaseNotification && hw?.closed && (
@@ -2323,5 +2353,6 @@ export default function AnnotationView() {
     </div>
   );
 }
+
 
 

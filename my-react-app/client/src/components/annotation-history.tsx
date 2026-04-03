@@ -53,7 +53,7 @@ export default function AnnotationHistory({
 
       {/* List */}
       <ScrollArea className="flex-1 p-4">
-        <div className="space-y-3">
+        <div className="space-y-3 pb-24">
           {versions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -100,15 +100,6 @@ export default function AnnotationHistory({
                 )}
 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {version.color && (
-                    <div
-                      className="w-4 h-4 rounded-full border-2"
-                      style={{
-                        backgroundColor: version.color,
-                        borderColor: version.color,
-                      }}
-                    />
-                  )}
                   {version.type && <span className="capitalize">{version.type}</span>}
                   {version.label && <span>• {version.label}</span>}
                 </div>
@@ -117,20 +108,18 @@ export default function AnnotationHistory({
                 <div className="flex gap-2 mt-3">
                   
 
-                  {version.version !== currentVersion && (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="flex-1 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRestore(version);
-                      }}
-                    >
-                      <RotateCcw className="h-3 w-3 mr-1" />
-                      Restore
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="flex-1 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRestore(version);
+                    }}
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Restore
+                  </Button>
 
                   <Button
                     size="sm"
