@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth, useHeartbeat } from "@/hooks/use-auth";
-import { FolderOpen, Sparkles, GraduationCap, ClipboardCheck } from "lucide-react";
+import { FolderOpen, Sparkles, GraduationCap, ClipboardCheck, Gauge } from "lucide-react";
 import { useI18n } from "@/i18n";
 import GlobalHeader from "@/components/global-header";
 
