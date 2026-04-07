@@ -45,7 +45,7 @@ export default function GlobalHeader() {
             <>
               <Button variant="outline" onClick={() => setLocation("/login")}>
                 <LogIn className="mr-2 h-4 w-4" />
-                {t("login")}
+                {t("signIn")}
               </Button>
               <Button onClick={() => setLocation("/signup")}>{t("createAccount")}</Button>
             </>

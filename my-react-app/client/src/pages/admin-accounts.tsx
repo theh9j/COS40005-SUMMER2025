@@ -185,19 +185,16 @@ export default function AdminAccounts() {
             className="flex items-center space-x-3 hover:opacity-80 transition focus:outline-none"
           >
             <UserCog className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold">Admin · Account Management</h1>
-              <h1 className="text-xl font-semibold">{t("adminAccountManagement")}</h1>
+            <h1 className="text-xl font-semibold">{t("adminAccountManagement")}</h1>
           </button>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={logout} title="Log out">
               <LogOut className="h-4 w-4 mr-1" />
-              Logout
-                {t("logout")}
+              {t("logout")}
             </Button>
             <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing} title="Refresh list">
               <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-                {t("refresh")}
+              {t("refresh")}
             </Button>
           </div>
         </div>
@@ -209,24 +206,18 @@ export default function AdminAccounts() {
             <div className="grid gap-3 md:grid-cols-3">
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search name or email…" value={query} onChange={(e) => setQuery(e.target.value)} />
-                  <Input placeholder={t("searchNameOrEmail")} value={query} onChange={(e) => setQuery(e.target.value)} />
+                <Input placeholder={t("searchNameOrEmail")} value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               <div>
                 <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Role filter" />
-                  </SelectTrigger>
                     <SelectValue placeholder={t("roleFilter")} />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All roles</SelectItem>
-                    <SelectItem value="student">Student</SelectItem>
-                    <SelectItem value="instructor">Instructor</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="all">{t("allRoles")}</SelectItem>
-                      <SelectItem value="student">{t("student")}</SelectItem>
-                      <SelectItem value="instructor">{t("instructor")}</SelectItem>
-                      <SelectItem value="admin">{t("admin")}</SelectItem>
+                    <SelectItem value="all">{t("allRoles")}</SelectItem>
+                    <SelectItem value="student">{t("student")}</SelectItem>
+                    <SelectItem value="instructor">{t("instructor")}</SelectItem>
+                    <SelectItem value="admin">{t("admin")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -238,11 +229,8 @@ export default function AdminAccounts() {
                   onChange={(e) => setOnlyPendingInstructor(e.target.checked)}
                 />
                 <label htmlFor="onlyPending" className="text-sm">
-                  Show only unverified instructors
+                  {t("showOnlyUnverifiedInstructors")}
                 </label>
-                  <label htmlFor="onlyPending" className="text-sm">
-                    {t("showOnlyUnverifiedInstructors")}
-                  </label>
               </div>
             </div>
           </CardContent>
@@ -254,17 +242,11 @@ export default function AdminAccounts() {
               <thead className="bg-secondary/40">
                 <tr className="text-left">
                   <th className="py-3 px-4">User</th>
-                  <th className="py-3 px-4">ID</th>
-                  <th className="py-3 px-4">Role</th>
-                  <th className="py-3 px-4">Instructor Verified</th>
-                  <th className="py-3 px-4">Active</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                    <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">{t("userId")}</th>
-                    <th className="py-3 px-4">{t("role")}</th>
-                    <th className="py-3 px-4">{t("instructorVerified")}</th>
-                    <th className="py-3 px-4">{t("active")}</th>
-                    <th className="py-3 px-4 text-right">{t("actions")}</th>
+                  <th className="py-3 px-4">{t("userId")}</th>
+                  <th className="py-3 px-4">{t("role")}</th>
+                  <th className="py-3 px-4">{t("instructorVerified")}</th>
+                  <th className="py-3 px-4">{t("active")}</th>
+                  <th className="py-3 px-4 text-right">{t("actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -373,11 +355,8 @@ export default function AdminAccounts() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-6 px-4 text-center text-muted-foreground">
-                      No users match your filters.
+                      {t("noUsersMatch")}
                     </td>
-                      <td colSpan={6} className="py-6 px-4 text-center text-muted-foreground">
-                        {t("noUsersMatch")}
-                      </td>
                   </tr>
                 )}
               </tbody>
