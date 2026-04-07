@@ -452,3 +452,35 @@ async def upload_homework_file(
         "size": file_path.stat().st_size,
         "filename": filename
     }
+
+
+# ====================================================
+# Student: Validate Homework Password
+# ====================================================
+
+@router.post("/validate-password", response_model=dict)
+async def validate_homework_password(payload: dict):
+    case_id = payload.get("case_id")
+    password = payload.get("password", "").strip()
+
+    if not case_id:
+        raise HTTPException(status_code=400, detail="Case ID is required")
+
+    # Get homework
+    hw = await homeworks_collection.find_one(
+        {"case_id": case_id},
+        sort=[("created_at", -1)]
+    )
+
+    if not hw:
+        raise HTTPException(status_code=404, detail="Homework not found")
+
+    stored_password = hw.get("password", "")
+    if not stored_password:
+        # No password required
+        return {"valid": True}
+
+    if password == stored_password:
+        return {"valid": True}
+    else:
+        return {"valid": False}
