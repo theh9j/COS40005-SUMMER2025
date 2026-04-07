@@ -32,6 +32,7 @@ type CaseFromApi = {
   created_at?: string | null;
   case_type?: string | null;
   homework_type?: "Q&A" | "Annotate" | null;
+  homework_audience?: string | null;
   visibility?: "public" | "private" | null;
 };
 
@@ -203,30 +204,39 @@ export default function StudentDashboard() {
   const getHomeworkType = (caseItem: { id: string; homeworkType?: "Q&A" | "Annotate" | null }) =>
     remoteHomeworkByCase[caseItem.id]?.homeworkType || caseItem.homeworkType || "Annotate";
 
-  const caseLibraryCases = useMemo(() => {
-    const dbCases = casesFromApi
+  const allCases = useMemo(() => {
+    return casesFromApi
       .filter((c) => String(c.visibility || "public").toLowerCase() !== "private")
       .map((c) => ({
-      id: c.case_id,
-      title: c.title,
-      description: c.description || "No description",
-      category: c.case_type || "General",
-      imageUrl: c.image_url || "",
-      createdBy: null,
-      createdAt: c.created_at || null,
-      homeworkType: c.homework_type || undefined,
-    }));
+        id: c.case_id,
+        title: c.title,
+        description: c.description || "No description",
+        category: c.case_type || "General",
+        imageUrl: c.image_url || "",
+        createdBy: null,
+        createdAt: c.created_at ? new Date(c.created_at) : null,
+        homeworkType: c.homework_type || undefined,
+        homeworkAudience: c.homework_audience || undefined,
+      }));
+  }, [casesFromApi]);
+
+  const caseLibraryCases = useMemo(() => {
+    const dbCases = allCases.filter((c) => c.homeworkAudience !== "Classrooms");
 
     const placeholderCases = mockCases
       .filter((m) => !dbCases.some((d) => d.id === m.id))
       .map((m) => ({
         ...m,
         // Keep placeholders at the bottom when sorting by newest.
-        createdAt: "1970-01-01T00:00:00.000Z",
+        createdAt: new Date("1970-01-01T00:00:00.000Z"),
       }));
 
     return [...dbCases, ...placeholderCases];
-  }, [casesFromApi]);
+  }, [allCases]);
+
+  const assignedCases = useMemo(() => {
+    return allCases.filter((c) => remoteHomeworkByCase[c.id]?.assigned);
+  }, [allCases, remoteHomeworkByCase]);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [caseLibraryFilter, setCaseLibraryFilter] = useState<"all" | "Annotate" | "Q&A">("all");
@@ -370,7 +380,7 @@ export default function StudentDashboard() {
 
   const myHomeworkVisibleCases = useMemo(() => {
     const q = myHomeworkSearch.trim().toLowerCase();
-    const assigned = caseLibraryCases.filter((c) => remoteHomeworkByCase[c.id]?.assigned);
+    const assigned = assignedCases;
 
     let list = assigned;
     if (myHomeworkFilter !== "all") {
