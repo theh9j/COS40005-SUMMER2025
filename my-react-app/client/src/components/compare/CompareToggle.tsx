@@ -4,8 +4,12 @@ import { Eye, ChevronDown, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function CompareToggle({
-  peers, onChange,
-}: { peers: Version[]; onChange: (peer?: Version, alpha?: number) => void }) {
+  peers, onChange, onModeChange,
+}: {
+  peers: Version[];
+  onChange: (peer?: Version, alpha?: number) => void;
+  onModeChange?: (mode: "overlay" | "side-by-side") => void;
+}) {
   const [showPeerAnnotations, setShowPeerAnnotations] = useState<boolean>(false);
   const [selectedPeerId, setSelectedPeerId] = useState<string>("");
   const [opacityPercent, setOpacityPercent] = useState<number>(50);
@@ -47,7 +51,10 @@ export default function CompareToggle({
           size="sm"
           variant={comparisonMode === "overlay" ? "default" : "outline"}
           className="flex-1 text-xs h-8"
-          onClick={() => setComparisonMode("overlay")}
+          onClick={() => {
+            setComparisonMode("overlay");
+            onModeChange?.("overlay");
+          }}
         >
           <Layers className="h-3 w-3 mr-1" />
           Overlay
@@ -56,7 +63,10 @@ export default function CompareToggle({
           size="sm"
           variant={comparisonMode === "side-by-side" ? "default" : "outline"}
           className="flex-1 text-xs h-8"
-          onClick={() => setComparisonMode("side-by-side")}
+          onClick={() => {
+            setComparisonMode("side-by-side");
+            onModeChange?.("side-by-side");
+          }}
         >
           <Layers className="h-3 w-3 mr-1" />
           Side-by-Side

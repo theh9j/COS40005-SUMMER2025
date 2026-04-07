@@ -37,6 +37,7 @@ type CaseFromApi = {
 };
 
 type RemoteHomeworkMeta = {
+  homeworkId?: string;
   assigned: boolean;
   dueAt?: string;
   closed: boolean;
@@ -171,6 +172,7 @@ export default function StudentDashboard() {
               return [
                 c.case_id,
                 {
+                  homeworkId: hw?._id || hw?.homework_id || hw?.homeworkId || hw?.id,
                   assigned: Boolean(data?.assigned),
                   dueAt: hw?.due_at,
                   closed: hw ? hw.status !== "active" : false,
@@ -263,8 +265,28 @@ export default function StudentDashboard() {
     return map;
   }, [studentSubmissions]);
 
+  const getCurrentSubmissionForCase = (caseId: string) => {
+    const currentHomeworkId = remoteHomeworkByCase[caseId]?.homeworkId;
+
+    const scoped = currentHomeworkId
+      ? studentSubmissions.filter((s) => s.case_id === caseId && s.homework_id === currentHomeworkId)
+      : studentSubmissions.filter((s) => s.case_id === caseId);
+
+    if (scoped.length === 0) return undefined;
+
+    return scoped.reduce((latest, next) => {
+      const latestTs = new Date(latest.updated_at ?? latest.created_at ?? 0).getTime();
+      const nextTs = new Date(next.updated_at ?? next.created_at ?? 0).getTime();
+      return nextTs >= latestTs ? next : latest;
+    });
+  };
+
   const getStudentQnAStats = (caseId: string) => {
-    const caseSubmissions = studentSubmissions.filter((s) => s.case_id === caseId);
+    const currentHomeworkId = remoteHomeworkByCase[caseId]?.homeworkId;
+    const caseSubmissions = currentHomeworkId
+      ? studentSubmissions.filter((s) => s.case_id === caseId && s.homework_id === currentHomeworkId)
+      : studentSubmissions.filter((s) => s.case_id === caseId);
+    const currentSubmission = getCurrentSubmissionForCase(caseId);
     const gradedScores = caseSubmissions
       .filter((s) => s.status === "graded" && s.score != null)
       .map((s) => Number(s.score));
@@ -273,6 +295,9 @@ export default function StudentDashboard() {
     return {
       attempts: caseSubmissions.length,
       bestScorePct: bestScore,
+      latestStatus: currentSubmission?.status ?? "none",
+      latestScore: currentSubmission?.score ?? null,
+      latestMaxPoints: currentSubmission?.max_points ?? null,
       questions: remoteHomeworkByCase[caseId]?.totalQuestions ?? 0,
     };
   };
@@ -985,13 +1010,13 @@ export default function StudentDashboard() {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                         {cases.map((annot) => {
                           const hw = remoteHomeworkByCase[annot.id];
-                          const submission = submissionByCase[annot.id];
+                          const submission = getCurrentSubmissionForCase(annot.id);
                           const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
 
                           return (
                             <div key={annot.id} className="space-y-2">
                               <CaseCard
-                                case={annot}
+                                case={annot as any}
                                 onClick={() => setLocation(`/annotation/${annot.id}`)}
                                 homework={hw?.dueAt ? { dueAt: hw.dueAt, closed: hw.closed } : undefined}
                                 daysLeft={dl ?? undefined}
@@ -1101,12 +1126,13 @@ export default function StudentDashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                       {cases.map((case_) => {
                         const hw = remoteHomeworkByCase[case_.id];
+                        const submission = getCurrentSubmissionForCase(case_.id);
                         const dl = hw?.dueAt ? Math.max(0, daysLeft(hw.dueAt) ?? 0) : null;
                         const hwType = getHomeworkType(case_ as any);
                         return (
                           <div key={case_.id} className="space-y-2">
                             <CaseCard
-                              case={case_}
+                              case={case_ as any}
                               onClick={() => setLocation(`/annotation/${case_.id}`)}
                               homework={hw?.dueAt ? { dueAt: hw.dueAt, closed: hw.closed } : undefined}
                               daysLeft={dl ?? undefined}
@@ -1116,15 +1142,15 @@ export default function StudentDashboard() {
                             <div className="flex items-center px-1">
                               <div className="flex items-center gap-2">
                                 {hw?.assigned && <Badge>{t("homework")}</Badge>}
-                                {submissionByCase[case_.id]?.status === "submitted" && (
+                                {submission?.status === "submitted" && (
                                   <Badge variant="secondary">Submitted</Badge>
                                 )}
-                                {submissionByCase[case_.id]?.status === "grading" && (
+                                {submission?.status === "grading" && (
                                   <Badge variant="outline">Under review</Badge>
                                 )}
-                                {submissionByCase[case_.id]?.status === "graded" && (
+                                {submission?.status === "graded" && (
                                   <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-700 dark:text-emerald-50">
-                                    Marked: {submissionByCase[case_.id]?.score ?? 0}/{submissionByCase[case_.id]?.max_points ?? 100}
+                                    Marked: {submission?.score ?? 0}/{submission?.max_points ?? 100}
                                   </Badge>
                                 )}
                                 {hw?.assigned && hw?.closed && <Badge variant="destructive">{t("closed")}</Badge>}

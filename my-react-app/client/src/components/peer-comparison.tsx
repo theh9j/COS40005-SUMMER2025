@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Annotation, User } from "@shared/schema";
+import { Annotation } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -8,9 +8,15 @@ import { Users, Eye, EyeOff, Layers } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 interface PeerAnnotation {
-  user: User;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    role: "student" | "instructor";
+  };
   annotations: Annotation[];
   color: string;
+  visible?: boolean;
 }
 
 interface PeerComparisonProps {
@@ -18,6 +24,7 @@ interface PeerComparisonProps {
   currentUserId: string;
   onToggleUserAnnotations: (userId: string, visible: boolean) => void;
   onSelectForComparison: (userId: string) => void;
+  onComparisonModeChange?: (mode: "overlay" | "side-by-side") => void;
 }
 
 export default function PeerComparison({
@@ -25,8 +32,14 @@ export default function PeerComparison({
   currentUserId,
   onToggleUserAnnotations,
   onSelectForComparison,
+  onComparisonModeChange,
 }: PeerComparisonProps) {
-  const [visibleUsers, setVisibleUsers] = useState<Set<string>>(new Set([currentUserId]));
+  const [visibleUsers, setVisibleUsers] = useState<Set<string>>(
+    new Set([
+      currentUserId,
+      ...peerAnnotations.filter((peer) => peer.visible).map((peer) => peer.user.id),
+    ])
+  );
   const [comparisonMode, setComparisonMode] = useState<"overlay" | "side-by-side">("overlay");
 
   const handleToggleUser = (userId: string) => {
@@ -62,6 +75,25 @@ export default function PeerComparison({
   const visibleCount = visibleUsers.size;
   const totalAnnotations = peerAnnotations.reduce((sum, pa) => sum + pa.annotations.length, 0);
 
+  const getPeerColorClass = (color: string) => {
+    switch (color) {
+      case "#3b82f6":
+        return "bg-blue-500 border-blue-500";
+      case "#10b981":
+        return "bg-emerald-500 border-emerald-500";
+      case "#f59e0b":
+        return "bg-amber-500 border-amber-500";
+      case "#ef4444":
+        return "bg-red-500 border-red-500";
+      case "#8b5cf6":
+        return "bg-violet-500 border-violet-500";
+      case "#06b6d4":
+        return "bg-cyan-500 border-cyan-500";
+      default:
+        return "bg-slate-500 border-slate-500";
+    }
+  };
+
   return (
     <div className="w-80 bg-card border-l border-border flex flex-col h-full">
       <div className="p-4 border-b border-border">
@@ -80,7 +112,10 @@ export default function PeerComparison({
             size="sm"
             variant={comparisonMode === "overlay" ? "default" : "outline"}
             className="flex-1 text-xs"
-            onClick={() => setComparisonMode("overlay")}
+            onClick={() => {
+              setComparisonMode("overlay");
+              onComparisonModeChange?.("overlay");
+            }}
           >
             <Layers className="h-3 w-3 mr-1" />
             Overlay
@@ -89,7 +124,10 @@ export default function PeerComparison({
             size="sm"
             variant={comparisonMode === "side-by-side" ? "default" : "outline"}
             className="flex-1 text-xs"
-            onClick={() => setComparisonMode("side-by-side")}
+            onClick={() => {
+              setComparisonMode("side-by-side");
+              onComparisonModeChange?.("side-by-side");
+            }}
           >
             <Layers className="h-3 w-3 mr-1" />
             Side-by-Side
@@ -144,11 +182,7 @@ export default function PeerComparison({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <div
-                          className="w-3 h-3 rounded-full border-2"
-                          style={{
-                            backgroundColor: peerAnnotation.color,
-                            borderColor: peerAnnotation.color,
-                          }}
+                          className={`w-3 h-3 rounded-full border-2 ${getPeerColorClass(peerAnnotation.color)}`}
                         />
                         <span className="font-medium truncate">
                           {peerAnnotation.user.firstName} {peerAnnotation.user.lastName}
@@ -177,10 +211,7 @@ export default function PeerComparison({
                             key={annotation.id}
                             className="text-xs text-muted-foreground flex items-center gap-1"
                           >
-                            <div
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: annotation.color }}
-                            />
+                            <div className="w-2 h-2 rounded-full bg-slate-500" />
                             <span className="capitalize">{annotation.type}</span>
                             {annotation.label && <span>• {annotation.label}</span>}
                           </div>

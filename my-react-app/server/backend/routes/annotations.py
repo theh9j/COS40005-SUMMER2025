@@ -60,6 +60,23 @@ async def get_annotation_versions(case_id: str, user_id: str):
     return versions
 
 
+@router.get("/version/case/{case_id}")
+async def get_case_annotation_versions(case_id: str):
+    versions = await versions_collection.find(
+        {"caseId": case_id}
+    ).sort("createdAt", -1).to_list(1000)
+
+    latest_by_user = {}
+    for version in versions:
+        user_id = str(version.get("userId", ""))
+        if not user_id or user_id in latest_by_user:
+            continue
+        version["_id"] = str(version["_id"])
+        latest_by_user[user_id] = version
+
+    return list(latest_by_user.values())
+
+
 @router.delete("/version/{version_id}")
 async def delete_annotation_version(version_id: str):
     doc = await versions_collection.find_one({"_id": ObjectId(version_id)})
