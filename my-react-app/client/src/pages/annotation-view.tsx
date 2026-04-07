@@ -426,15 +426,6 @@ export default function AnnotationView() {
     };
   }, [caseId, user?.user_id]);
 
-  // Check if password is required for homework access
-  useEffect(() => {
-    if (pageLoading || !hw || !user) return;
-
-    if (user.role === "student" && hw.password && !passwordValidated) {
-      setShowPasswordPrompt(true);
-    }
-  }, [pageLoading, hw, user, passwordValidated]);
-
   // Heartbeat
   useHeartbeat(user?.user_id);
 
@@ -502,6 +493,15 @@ export default function AnnotationView() {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordValidated, setPasswordValidated] = useState(false);
+
+  // Check if password is required for homework access
+  useEffect(() => {
+    if (pageLoading || !hw || !user) return;
+
+    if (user.role === "student" && hw.password && !passwordValidated) {
+      setShowPasswordPrompt(true);
+    }
+  }, [pageLoading, hw, user, passwordValidated]);
 
   // Load classrooms from API
   const loadClassrooms = async () => {
