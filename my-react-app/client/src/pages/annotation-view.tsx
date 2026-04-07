@@ -14,7 +14,6 @@ import AnnotationCanvas from "@/components/annotation-canvas";
 import AnnotationHistory from "@/components/annotation-history";
 import PeerComparison from "@/components/peer-comparison";
 import ChatPanel from "@/components/chat-panel";
-import FeedbackPanel from "@/components/feedback-panel";
 import InlineTextEditor from "@/components/inline-text-editor";
 import AnnotationPropertiesPanel from "@/components/annotation-properties-panel";
 import AIChatAssistant from "@/components/ai-chat-assistant";
@@ -44,6 +43,36 @@ type Classroom = {
   display: string;
   members_count: number;
 };
+
+type IndexedSubmission = {
+  id?: string;
+  status?: "none" | "submitted" | "grading" | "graded";
+  score?: number | null;
+  notes?: string;
+  files?: SubmissionFile[];
+  answers?: Array<{ index: number; value: any }>;
+  updated_at?: string;
+  created_at?: string;
+  feedback?: string;
+  student_id?: string;
+  homework_id?: string;
+  case_id?: string;
+};
+
+type PeerCompareEntry = {
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    role: "student" | "instructor";
+  };
+  annotations: any[];
+  color: string;
+  visible: boolean;
+  createdAt: string;
+};
+
+const PEER_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
 const normalizeClassTag = (value: string) => value.trim().toLowerCase();
 
@@ -117,6 +146,7 @@ export default function AnnotationView() {
     caseId,
     user?.user_id || "current-user"
   );
+  const [indexedSubmission, setIndexedSubmission] = useState<IndexedSubmission | null>(null);
 
   // Load submission on mount
   useEffect(() => {
@@ -124,6 +154,172 @@ export default function AnnotationView() {
       fetchSubmission();
     }
   }, [hw?.id, caseId, user?.user_id, fetchSubmission]);
+
+  useEffect(() => {
+    if (user?.role !== "student" || !user?.user_id || !hw?.id || !caseId) {
+      setIndexedSubmission(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadIndexedSubmission = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/instructor/submissions`);
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (!Array.isArray(rows)) return;
+
+        const matched = rows
+          .filter((row: any) => {
+            const sameStudent = String(row?.student_id || "") === String(user.user_id);
+            const sameHomework = String(row?.homework_id || "") === String(hw.id);
+            const sameCase = String(row?.case_id || "") === String(caseId);
+            return sameStudent && sameHomework && sameCase;
+          })
+          .sort((a: any, b: any) => {
+            const at = new Date(a?.updated_at ?? a?.created_at ?? 0).getTime();
+            const bt = new Date(b?.updated_at ?? b?.created_at ?? 0).getTime();
+            return bt - at;
+          });
+
+        if (!cancelled) {
+          setIndexedSubmission((matched[0] as IndexedSubmission) ?? null);
+        }
+      } catch {
+        if (!cancelled) {
+          setIndexedSubmission(null);
+        }
+      }
+    };
+
+    loadIndexedSubmission();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, user?.user_id, hw?.id, caseId, submission?.updated_at, submission?.status, submission?.score]);
+
+  useEffect(() => {
+    if (user?.role !== "student" || isQnAStudentMode || !user?.user_id || !hw?.id || !caseId) {
+      setPeerCompareEntries([]);
+      setSelectedPeerId("");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadPeerCompareEntries = async () => {
+      try {
+        const usersRes = await fetch(`${API_BASE}/api/admin/users`);
+        const usersList = usersRes.ok ? await usersRes.json() : [];
+        const userById = new Map<string, any>();
+        if (Array.isArray(usersList)) {
+          for (const u of usersList) {
+            const uid = String(u?.id || "");
+            if (uid) userById.set(uid, u);
+          }
+        }
+
+        const resolvePeerIdentity = (peerId: string) => {
+          const userInfo = userById.get(String(peerId));
+          return {
+            firstName: userInfo?.firstName || "Peer",
+            lastName: userInfo?.lastName || String(peerId).slice(-4),
+            role: (userInfo?.role || "student") as "student" | "instructor",
+          };
+        };
+
+        const res = await fetch(`${API_BASE}/api/instructor/submissions`);
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (!Array.isArray(rows)) return;
+
+        const latestByStudent = new Map<string, any>();
+        for (const row of rows) {
+          const sameHomework = String(row?.homework_id || "") === String(hw.id);
+          const sameCase = String(row?.case_id || "") === String(caseId);
+          const isOtherStudent = String(row?.student_id || "") !== String(user.user_id);
+          const hasAnnotations = Array.isArray(row?.annotations) && row.annotations.length > 0;
+          if (!sameHomework || !sameCase || !isOtherStudent || !hasAnnotations) continue;
+
+          const sid = String(row.student_id);
+          const current = latestByStudent.get(sid);
+          const currentTs = new Date(current?.updated_at ?? current?.created_at ?? 0).getTime();
+          const nextTs = new Date(row?.updated_at ?? row?.created_at ?? 0).getTime();
+          if (!current || nextTs >= currentTs) {
+            latestByStudent.set(sid, row);
+          }
+        }
+
+        let entries: PeerCompareEntry[] = Array.from(latestByStudent.values()).map((row, idx) => {
+          const studentId = String(row.student_id || "unknown");
+          const identity = resolvePeerIdentity(studentId);
+          return {
+            user: {
+              id: studentId,
+              firstName: identity.firstName,
+              lastName: identity.lastName,
+              role: identity.role,
+            },
+            annotations: Array.isArray(row.annotations) ? row.annotations : [],
+            color: PEER_COLORS[idx % PEER_COLORS.length],
+            visible: false,
+            createdAt: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+          };
+        });
+
+        if (entries.length === 0) {
+          const versionsRes = await fetch(`${API_BASE}/annotations/version/case/${encodeURIComponent(caseId)}`);
+          if (versionsRes.ok) {
+            const versionRows = await versionsRes.json();
+            if (Array.isArray(versionRows)) {
+              const peerVersionRows = versionRows.filter((row: any) => {
+                const uid = String(row?.userId || "");
+                return uid && uid !== String(user.user_id) && Array.isArray(row?.annotations) && row.annotations.length > 0;
+              });
+
+              entries = peerVersionRows.map((row: any, idx: number) => {
+                const studentId = String(row.userId || "unknown");
+                const identity = resolvePeerIdentity(studentId);
+                return {
+                  user: {
+                    id: studentId,
+                    firstName: identity.firstName,
+                    lastName: identity.lastName,
+                    role: identity.role,
+                  },
+                  annotations: Array.isArray(row.annotations) ? row.annotations : [],
+                  color: PEER_COLORS[idx % PEER_COLORS.length],
+                  visible: false,
+                  createdAt: row.createdAt ?? new Date().toISOString(),
+                };
+              });
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setPeerCompareEntries(entries);
+          setSelectedPeerId((prev) => {
+            if (prev && entries.some((entry) => entry.user.id === prev)) return prev;
+            return entries[0]?.user.id ?? "";
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setPeerCompareEntries([]);
+          setSelectedPeerId("");
+        }
+      }
+    };
+
+    loadPeerCompareEntries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, user?.user_id, isQnAStudentMode, hw?.id, caseId, annotation.annotations.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,7 +431,7 @@ export default function AnnotationView() {
   useHeartbeat(user?.user_id);
 
   // Versions
-  const { mine, peers, create } = useVersions(caseId);
+  const { mine, create } = useVersions(caseId);
 
   // UI state toggles
   const [showHistory, setShowHistory] = useState(false);
@@ -250,6 +446,9 @@ export default function AnnotationView() {
   const [aiChatMinimized, setAIChatMinimized] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [compare, setCompare] = useState<{ peer?: any; alpha?: number }>({});
+  const [peerComparisonMode, setPeerComparisonMode] = useState<"overlay" | "side-by-side">("overlay");
+  const [peerCompareEntries, setPeerCompareEntries] = useState<PeerCompareEntry[]>([]);
+  const [selectedPeerId, setSelectedPeerId] = useState<string>("");
   const [showClosedCaseNotification, setShowClosedCaseNotification] = useState(false);
 
   // Case editor state
@@ -338,6 +537,7 @@ export default function AnnotationView() {
   const [qnaNotes, setQnaNotes] = useState("");
   const [qnaAnswers, setQnaAnswers] = useState<Array<{ index: number; value: any }>>([]);
   const [qnaFiles, setQnaFiles] = useState<SubmissionFile[]>([]);
+  const [submissionStatusOverride, setSubmissionStatusOverride] = useState<"submitted" | "grading" | "graded" | null>(null);
   const [qnaUploadingFiles, setQnaUploadingFiles] = useState(false);
   const qnaFileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
@@ -365,11 +565,20 @@ export default function AnnotationView() {
   });
 
   const handlePeerVisibilityToggle = (userId: string, visible: boolean) => {
-    console.log("Peer visibility toggle", userId, visible);
+    setPeerCompareEntries((prev) =>
+      prev.map((peer) =>
+        peer.user.id === userId ? { ...peer, visible } : peer
+      )
+    );
   };
 
   const handlePeerSelectForComparison = (userId: string) => {
-    console.log("Peer selected for comparison", userId);
+    setSelectedPeerId(userId);
+    setPeerCompareEntries((prev) =>
+      prev.map((peer) =>
+        peer.user.id === userId ? { ...peer, visible: true } : peer
+      )
+    );
   };
 
   const studentSidebarVisible =
@@ -429,10 +638,40 @@ export default function AnnotationView() {
 
   useEffect(() => {
     if (!isQnAStudentMode) return;
-    setQnaNotes(submission?.notes || "");
-    setQnaAnswers(submission?.answers || []);
-    setQnaFiles(submission?.files || []);
-  }, [isQnAStudentMode, submission?.notes, submission?.answers, submission?.files]);
+    const sourceNotes = indexedSubmission?.notes ?? submission?.notes;
+    const sourceAnswers = indexedSubmission?.answers ?? submission?.answers;
+    const sourceFiles = indexedSubmission?.files ?? submission?.files;
+    const sourceStatus = indexedSubmission?.score != null
+      ? "graded"
+      : indexedSubmission?.status ?? submission?.status;
+
+    setQnaNotes(sourceNotes || "");
+    setQnaAnswers(sourceAnswers || []);
+    setQnaFiles(sourceFiles || []);
+    if (sourceStatus && sourceStatus !== "none") {
+      setSubmissionStatusOverride(null);
+    }
+  }, [
+    isQnAStudentMode,
+    submission?.notes,
+    submission?.answers,
+    submission?.files,
+    submission?.status,
+    indexedSubmission?.notes,
+    indexedSubmission?.answers,
+    indexedSubmission?.files,
+    indexedSubmission?.status,
+    indexedSubmission?.score,
+  ]);
+
+  useEffect(() => {
+    const sourceStatus = indexedSubmission?.score != null
+      ? "graded"
+      : indexedSubmission?.status ?? submission?.status;
+    if (sourceStatus && sourceStatus !== "none") {
+      setSubmissionStatusOverride(null);
+    }
+  }, [submission?.status, indexedSubmission?.status, indexedSubmission?.score]);
 
   useEffect(() => {
     lastAnnotationCountRef.current = annotation.annotations.length;
@@ -574,6 +813,117 @@ export default function AnnotationView() {
     }
   }, [annotation.versions, currentVersionNumber]);
 
+  const submissionStatusStorageKey =
+    typeof window !== "undefined" && user?.user_id && hw?.id
+      ? `submission_status_${caseId}_${user.user_id}_${hw.id}`
+      : "";
+
+  const isServerStatusKnown = Boolean(submission?.status && submission.status !== "none");
+  const qnaDraftStorageKey =
+    typeof window !== "undefined" && user?.user_id && hw?.id
+      ? `qna_draft_${caseId}_${user.user_id}_${hw.id}`
+      : "";
+
+  useEffect(() => {
+    if (!submissionStatusStorageKey || isServerStatusKnown) return;
+    const saved = localStorage.getItem(submissionStatusStorageKey);
+    if (saved === "submitted" || saved === "grading" || saved === "graded") {
+      setSubmissionStatusOverride(saved);
+    }
+  }, [submissionStatusStorageKey, isServerStatusKnown]);
+
+  useEffect(() => {
+    if (!submissionStatusStorageKey) return;
+
+    const statusToPersist =
+      submission?.score != null
+        ? "graded"
+        : submission?.status && submission.status !== "none"
+        ? submission.status
+        : submissionStatusOverride;
+
+    if (statusToPersist) {
+      localStorage.setItem(submissionStatusStorageKey, statusToPersist);
+    }
+  }, [submissionStatusStorageKey, submission?.status, submissionStatusOverride]);
+
+  useEffect(() => {
+    if (!isQnAStudentMode || !qnaDraftStorageKey) return;
+    const hasServerData = Boolean(
+      (submission?.status && submission.status !== "none") ||
+        (submission?.notes && submission.notes.trim().length > 0) ||
+        (submission?.answers && submission.answers.length > 0) ||
+        (submission?.files && submission.files.length > 0)
+    );
+    if (hasServerData) return;
+
+    const savedDraft = localStorage.getItem(qnaDraftStorageKey);
+    if (!savedDraft) return;
+
+    try {
+      const parsed = JSON.parse(savedDraft) as {
+        notes?: string;
+        answers?: Array<{ index: number; value: any }>;
+        files?: SubmissionFile[];
+      };
+
+      if (typeof parsed.notes === "string") {
+        setQnaNotes(parsed.notes);
+      }
+      if (Array.isArray(parsed.answers)) {
+        setQnaAnswers(parsed.answers);
+      }
+      if (Array.isArray(parsed.files)) {
+        setQnaFiles(parsed.files);
+      }
+    } catch {
+      // Ignore invalid draft payloads.
+    }
+  }, [
+    isQnAStudentMode,
+    qnaDraftStorageKey,
+    submission?.status,
+    submission?.notes,
+    submission?.answers,
+    submission?.files,
+  ]);
+
+  useEffect(() => {
+    if (!isQnAStudentMode || !qnaDraftStorageKey) return;
+
+    const statusForDraft =
+      submission?.score != null
+        ? "graded"
+        : submission?.status && submission.status !== "none"
+        ? submission.status
+        : submissionStatusOverride ?? "none";
+
+    const shouldPersistDraft =
+      statusForDraft === "none" || statusForDraft === "submitted";
+
+    if (!shouldPersistDraft) {
+      localStorage.removeItem(qnaDraftStorageKey);
+      return;
+    }
+
+    const payload = JSON.stringify({
+      notes: qnaNotes,
+      answers: qnaAnswers,
+      files: qnaFiles,
+    });
+
+    localStorage.setItem(qnaDraftStorageKey, payload);
+  }, [
+    isQnAStudentMode,
+    qnaDraftStorageKey,
+    qnaNotes,
+    qnaAnswers,
+    qnaFiles,
+    submission?.score,
+    submission?.status,
+    submissionStatusOverride,
+  ]);
+
   if (!user || pageLoading) {
     return <div>Loading...</div>;
   }
@@ -652,68 +1002,54 @@ export default function AnnotationView() {
   // Compare toggle
   const handleCompareChange = (peer?: any, alpha = 0.4) => {
     setCompare({ peer, alpha });
-    if (peer) {
-      // Get the peer's annotations from the mockPeerAnnotations
-      const peerData = mockPeerAnnotations.find((p: any) => p.user.id === peer.id);
-      if (peerData) {
-        // Update the annotation state with peer annotations
-        // This will be rendered on the canvas with the specified alpha (opacity)
-      }
+    if (peer?.id) {
+      setSelectedPeerId(peer.id);
+      setPeerCompareEntries((prev) =>
+        prev.map((entry) =>
+          entry.user.id === peer.id ? { ...entry, visible: true } : entry
+        )
+      );
     }
-    console.log("Compare with peer:", peer, "opacity:", alpha);
   };
 
-  // Mock peer annotations (for offline/demo mode)
-  const mockPeerAnnotations = [
-    {
-      user: {
-        id: "peer1",
-        email: "john@example.com",
-        password: "",
-        firstName: "John",
-        lastName: "Doe",
-        role: "student" as const,
-        createdAt: new Date(),
-      },
-      annotations: [],
-      color: "#3b82f6",
+  const visiblePeerAnnotations = peerCompareEntries.filter((entry) => entry.visible);
+  const selectedPeerAnnotations =
+    peerCompareEntries.find((entry) => entry.user.id === selectedPeerId)?.annotations || [];
+
+  const comparePeers = peerCompareEntries.map((entry) => ({
+    id: entry.user.id,
+    caseId,
+    authorId: entry.user.id,
+    authorName: `${entry.user.firstName} ${entry.user.lastName}`,
+    createdAt: entry.createdAt,
+    data: {
+      boxes: entry.annotations,
+      notes: `Peer ${entry.user.id}`,
     },
-    {
-      user: {
-        id: "peer2",
-        email: "jane@example.com",
-        password: "",
-        firstName: "Jane",
-        lastName: "Smith",
-        role: "student" as const,
-        createdAt: new Date(),
-      },
-      annotations: [],
-      color: "#10b981",
-    },
-  ];
+  }));
 
   const qnaQuestions = Array.isArray(hw?.questions) ? hw.questions : [];
-  const isMarkedSubmission = submission?.score != null || submission?.status === "graded";
-  const qnaStatusLabel = isMarkedSubmission
-    ? "Marked"
-    : submission?.status === "grading"
-    ? "Under review"
-    : submission?.status === "submitted"
-    ? "Submitted"
-    : hw?.closed
-    ? "Closed"
-    : "Not submitted";
 
-  const homeworkSidebarStatus = isMarkedSubmission
-    ? "Marked"
-    : submission?.status === "grading"
-    ? "Under review"
-    : submission?.status === "submitted"
-    ? "Submitted"
-    : hw?.closed
-    ? "Closed"
-    : "Not submitted";
+  const indexedStatus = indexedSubmission?.score != null
+    ? "graded"
+    : indexedSubmission?.status;
+
+  const effectiveSubmissionStatus =
+    indexedStatus && indexedStatus !== "none"
+      ? indexedStatus
+      : submission?.score != null
+      ? "graded"
+      : submission?.status && submission.status !== "none"
+      ? submission.status
+      : submissionStatusOverride ?? "none";
+
+  const effectiveSubmissionScore = indexedSubmission?.score ?? submission?.score;
+  const effectiveSubmissionNotes = indexedSubmission?.notes ?? submission?.notes;
+  const effectiveSubmissionFiles = indexedSubmission?.files ?? submission?.files;
+  const effectiveSubmissionAnswers = indexedSubmission?.answers ?? submission?.answers;
+  const effectiveTeacherFeedback = indexedSubmission?.feedback ?? null;
+
+  const isMarkedSubmission = effectiveSubmissionScore != null || effectiveSubmissionStatus === "graded";
 
   const getQnaAnswerValue = (index: number) =>
     qnaAnswers.find((answer) => answer.index === index)?.value ?? "";
@@ -799,11 +1135,26 @@ export default function AnnotationView() {
       return;
     }
 
-    await submitHomework({
+    if (effectiveSubmissionStatus === "submitted" || effectiveSubmissionStatus === "grading") {
+      const shouldResubmit = window.confirm(
+        "You have already submitted this homework. Do you want to submit again and replace your previous submission?"
+      );
+      if (!shouldResubmit) return;
+    }
+
+    const result = await submitHomework({
       notes: qnaNotes,
       files: qnaFiles,
       answers: qnaAnswers,
     });
+
+    if (result) {
+      setSubmissionStatusOverride(result.status && result.status !== "none" ? result.status : "submitted");
+      if (qnaDraftStorageKey) {
+        localStorage.removeItem(qnaDraftStorageKey);
+      }
+      fetchSubmission();
+    }
   };
 
   return (
@@ -891,7 +1242,13 @@ export default function AnnotationView() {
         <AnnotationToolbar
           annotation={annotation}
           onToggleHistory={() => setShowHistory(!showHistory)}
-          onToggleComparison={() => setShowComparison(!showComparison)}
+          onToggleComparison={() => {
+            const next = !showComparison;
+            setShowComparison(next);
+            if (next) {
+              switchSidebarTab("annotate");
+            }
+          }}
           showHistory={showHistory}
           showComparison={showComparison}
         />
@@ -922,7 +1279,6 @@ export default function AnnotationView() {
                           {case_.description || "Answer the questions below and submit your work."}
                         </p>
                       </div>
-                      <Badge variant="outline" className="whitespace-nowrap">{qnaStatusLabel}</Badge>
                     </div>
 
                     {hw?.instructions && (
@@ -974,7 +1330,7 @@ export default function AnnotationView() {
                                       name={`qna-question-${index}`}
                                       checked={String(getQnaAnswerValue(index)) === String(optionIndex)}
                                       onChange={() => setQnaAnswerValue(index, optionIndex)}
-                                      disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded"}
+                                      disabled={user?.role !== "student" || hw?.closed || subLoading || effectiveSubmissionStatus === "graded"}
                                     />
                                     <span>{option}</span>
                                   </label>
@@ -986,7 +1342,7 @@ export default function AnnotationView() {
                                 onChange={(e) => setQnaAnswerValue(index, e.target.value)}
                                 placeholder="Type your answer here..."
                                 className="min-h-[120px]"
-                                disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded"}
+                                disabled={user?.role !== "student" || hw?.closed || subLoading || effectiveSubmissionStatus === "graded"}
                               />
                             )}
                           </div>
@@ -1001,12 +1357,26 @@ export default function AnnotationView() {
                         onChange={(e) => setQnaNotes(e.target.value)}
                         placeholder="Optional notes for your instructor..."
                         className="min-h-[100px]"
-                        disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded"}
+                        disabled={user?.role !== "student" || hw?.closed || subLoading || effectiveSubmissionStatus === "graded"}
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Attached Files</label>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="text-sm font-medium">Attached Files</label>
+                        {user?.role === "student" && !hw?.closed && effectiveSubmissionStatus !== "graded" && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => qnaFileInputRef.current?.click()}
+                            disabled={subLoading || qnaUploadingFiles}
+                            className="shrink-0"
+                          >
+                            {qnaUploadingFiles ? "Uploading..." : "Add Files"}
+                          </Button>
+                        )}
+                      </div>
+
                       <input
                         ref={qnaFileInputRef}
                         type="file"
@@ -1015,15 +1385,15 @@ export default function AnnotationView() {
                         aria-label="Attach files"
                         title="Attach files"
                         onChange={handleQnAFileSelect}
-                        disabled={user?.role !== "student" || hw?.closed || subLoading || submission?.status === "graded" || qnaUploadingFiles}
+                        disabled={user?.role !== "student" || hw?.closed || subLoading || effectiveSubmissionStatus === "graded" || qnaUploadingFiles}
                       />
 
-                      {qnaFiles.length > 0 && (
-                        <div className="space-y-1">
+                      {qnaFiles.length > 0 ? (
+                        <div className="space-y-2">
                           {qnaFiles.map((file, idx) => (
-                            <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-md border bg-muted/20 px-2 py-1.5 text-xs">
+                            <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-xs">
                               <span className="truncate">{file.name}</span>
-                              {user?.role === "student" && !hw?.closed && submission?.status !== "graded" && (
+                              {user?.role === "student" && !hw?.closed && effectiveSubmissionStatus !== "graded" && (
                                 <button
                                   className="text-muted-foreground hover:text-destructive"
                                   onClick={() => removeQnAFile(idx)}
@@ -1035,17 +1405,8 @@ export default function AnnotationView() {
                             </div>
                           ))}
                         </div>
-                      )}
-
-                      {user?.role === "student" && !hw?.closed && submission?.status !== "graded" && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => qnaFileInputRef.current?.click()}
-                          disabled={subLoading || qnaUploadingFiles}
-                        >
-                          {qnaUploadingFiles ? "Uploading..." : "Add Files"}
-                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No files attached yet.</p>
                       )}
                     </div>
 
@@ -1053,10 +1414,16 @@ export default function AnnotationView() {
                       <div className="flex justify-end">
                         <Button
                           onClick={submitQnAResponses}
-                          disabled={hw?.closed || subLoading || submission?.status === "graded"}
+                          disabled={hw?.closed || subLoading || effectiveSubmissionStatus === "graded"}
                         >
                           {subLoading ? "Submitting..." : "Submit Q&A Answers"}
                         </Button>
+                      </div>
+                    )}
+
+                    {effectiveSubmissionStatus === "graded" && (
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        This homework is marked. Further submissions and file updates are locked.
                       </div>
                     )}
 
@@ -1067,7 +1434,9 @@ export default function AnnotationView() {
               <AnnotationCanvas
                 imageUrl={case_.imageUrl}
                 annotation={annotation}
-                peerAnnotations={annotation.peerAnnotations}
+                peerAnnotations={visiblePeerAnnotations}
+                compareMode={peerComparisonMode}
+                selectedPeerAnnotations={selectedPeerAnnotations as any}
                 peerOpacity={compare.alpha || 0.5}
                 controlsDock={studentControlsDock}
               />
@@ -1818,17 +2187,6 @@ export default function AnnotationView() {
             </div>
           )}
 
-          {user?.role === 'student' && !isQnAStudentMode && showComparison && (
-            <div className="pointer-events-auto">
-              <PeerComparison
-                peerAnnotations={mockPeerAnnotations}
-                currentUserId={user?.user_id || "current-user"}
-                onToggleUserAnnotations={handlePeerVisibilityToggle}
-                onSelectForComparison={handlePeerSelectForComparison}
-              />
-            </div>
-          )}
-
           {user?.role === 'student' && !isQnAStudentMode && (
             <div
               className={`pointer-events-auto border-l border-border bg-card overflow-hidden ${showProperties ? "w-80 opacity-100" : "w-0 opacity-0 pointer-events-none"}`}
@@ -1895,8 +2253,40 @@ export default function AnnotationView() {
             </aside>
           )}
 
+          {/* Assignment Details Panel */}
+          {user?.role === 'student' && showAssignmentDetails && (
+            <aside className="w-80 bg-card border-l border-border overflow-y-auto subtle-scrollbar pointer-events-auto" onWheel={handlePanelWheel}>
+              <AssignmentDetailsPanel
+                title={case_.title}
+                description={hw?.instructions || hw?.description || case_.description || "No assignment instructions yet."}
+                dueDate={hw?.dueAt}
+                points={hw?.points ?? 100}
+                submissionStatus={effectiveSubmissionStatus as "none" | "submitted" | "grading" | "graded"}
+                score={effectiveSubmissionScore ?? undefined}
+                closed={hw?.closed ?? false}
+                hasHomework={Boolean(hw?.id)}
+                autoChecklist={
+                  isQnAHomework
+                    ? [
+                        "Answer every question with clear reasoning",
+                        "Reference image findings where relevant",
+                        "Review spelling and medical terminology",
+                        "Submit before the deadline",
+                      ]
+                    : [
+                        "Identify key structures and abnormalities",
+                        "Use labels for all major findings",
+                        "Keep annotations precise and readable",
+                        "Save versions while you work",
+                      ]
+                }
+                onClose={() => setShowAssignmentDetails(false)}
+              />
+            </aside>
+          )}
+
           {/* Default collaborative sidebar with dropdown tab selector */}
-          {user?.role === 'student' && !showHistory && !showComparison && !showProperties && !showAIChat && !showAIVision && !showAssignmentDetails && (
+          {user?.role === 'student' && !isQnAStudentMode && !showHistory && !showProperties && !showAIChat && !showAIVision && !showAssignmentDetails && (
             <div className="relative flex pointer-events-auto">
               {/* Toggle button – lives outside the aside so overflow-hidden doesn't clip it */}
               <button
@@ -2050,11 +2440,22 @@ export default function AnnotationView() {
                     </div>
                   )}
                   <CompareToggle
-                    peers={peers}
+                    peers={comparePeers as any}
+                    onModeChange={setPeerComparisonMode}
                     onChange={(peer, alpha) =>
                       handleCompareChange(peer, alpha)
                     }
                   />
+
+                  {showComparison && (
+                    <PeerComparison
+                      peerAnnotations={peerCompareEntries as any}
+                      currentUserId={user?.user_id || "current-user"}
+                      onToggleUserAnnotations={handlePeerVisibilityToggle}
+                      onSelectForComparison={handlePeerSelectForComparison}
+                      onComparisonModeChange={setPeerComparisonMode}
+                    />
+                  )}
                 </div>
               )}
 
@@ -2081,10 +2482,14 @@ export default function AnnotationView() {
                   />
                   <VersionList
                     title="Peers' versions"
-                    items={peers}
-                    onSelect={(v) =>
-                      console.log("Load peer version:", v.data || v)
-                    }
+                    items={comparePeers as any}
+                    onSelect={(v) => {
+                      const peerVersion = comparePeers.find((item: any) => item.id === v.id);
+                      if (!peerVersion) return;
+                      setPeerComparisonMode("overlay");
+                      setShowComparison(true);
+                      handleCompareChange(peerVersion as any, compare.alpha || 0.5);
+                    }}
                   />
 
                   {/* Replace Collaboration Chat with Create Discussion button for this case */}
@@ -2150,139 +2555,83 @@ export default function AnnotationView() {
               {/* Tab Content - Assignment Requirements */}
               {activeSidebarTab === "homework" && (
                 <div className="flex-1 overflow-y-auto subtle-scrollbar p-2 space-y-2" onWheel={handlePanelWheel}>
-                  {hw && (
-                    <div className="border rounded-lg p-2 bg-card space-y-2">
-                      <div>
-                        <h3 className="font-semibold text-xs mb-1">Assignment Details</h3>
-                        <p className="text-xs text-muted-foreground mb-2">{hw.description}</p>
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-xs font-medium">Total Points</span>
-                          <Badge variant="outline" className="text-lg font-bold">
-                            {isMarkedSubmission && submission?.score != null
-                              ? `${submission.score}/${hw.points}`
-                              : hw.points}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <p><strong>Due:</strong> {new Date(hw.dueAt).toLocaleDateString()}</p>
-                          {isMarkedSubmission && (
-                            <p>
-                              <strong>Marked:</strong>{" "}
-                              <span className="text-emerald-600 font-semibold">{submission?.score ?? 0}/{hw?.points ?? 100}</span>
-                            </p>
-                          )}
-                          <p>
-                            <strong>Status:</strong>{" "}
-                            {homeworkSidebarStatus === "Marked" ? (
-                              <span className="text-emerald-600 font-semibold">Marked</span>
-                            ) : homeworkSidebarStatus === "Under review" ? (
-                              <span className="text-amber-600 font-semibold">Under review</span>
-                            ) : homeworkSidebarStatus === "Submitted" ? (
-                              <span className="text-blue-600 font-semibold">Submitted</span>
-                            ) : homeworkSidebarStatus === "Closed" ? (
-                              <span className="text-red-600 font-semibold">Closed</span>
-                            ) : (
-                              <span className="text-muted-foreground font-semibold">Not submitted</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      {hw.homeworkType === "Annotate" && Array.isArray(hw.referenceImages) && hw.referenceImages.length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="font-semibold text-xs">Reference Images</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {hw.referenceImages.map((imageUrl, idx) => (
-                              <a
-                                key={`${imageUrl}-${idx}`}
-                                href={imageUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="block overflow-hidden rounded-md border bg-muted/30"
-                              >
-                                <img
-                                  src={imageUrl}
-                                  alt={`Reference ${idx + 1}`}
-                                  className="h-24 w-full object-cover"
-                                />
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                   {!isQnAStudentMode && (
                     <SubmissionPanel
-                    status={submission?.status || "none"}
-                    dueDate={hw?.dueAt}
-                    score={submission?.score}
-                    maxPoints={hw?.points ?? 100}
-                    notes={submission?.notes}
-                    files={submission?.files}
-                    questions={hw?.questions || []}
-                    uploads={hw?.uploads || []}
-                    answers={submission?.answers || []}
-                    homeworkType={hw?.homeworkType || "Annotate"}
-                    closed={hw?.closed ?? false}
-                    loading={subLoading}
-                    error={subError}
-                    onSubmit={async (notes, files, answers) => {
-                      if (!hw?.id) {
-                        toast({
-                          title: "No homework assigned",
-                          description: "This case does not have an active homework yet.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
+                        status={effectiveSubmissionStatus as "none" | "submitted" | "grading" | "graded"}
+                        dueDate={hw?.dueAt}
+                        score={effectiveSubmissionScore ?? undefined}
+                        maxPoints={hw?.points ?? 100}
+                        notes={effectiveSubmissionNotes}
+                        files={effectiveSubmissionFiles}
+                        questions={hw?.questions || []}
+                        uploads={hw?.uploads || []}
+                        answers={effectiveSubmissionAnswers || []}
+                        homeworkType={hw?.homeworkType || "Annotate"}
+                        closed={hw?.closed ?? false}
+                        loading={subLoading}
+                        error={subError}
+                        teacherFeedback={effectiveTeacherFeedback}
+                        onSubmit={async (notes, files, answers) => {
+                          if (!hw?.id) {
+                            toast({
+                              title: "No homework assigned",
+                              description: "This case does not have an active homework yet.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
 
-                      if (hw.closed) {
-                        toast({
-                          title: "Assignment closed",
-                          description: "This assignment is closed and cannot accept submissions.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
+                          if (hw.closed) {
+                            toast({
+                              title: "Assignment closed",
+                              description: "This assignment is closed and cannot accept submissions.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
 
-                      if (isMarkedSubmission) {
-                        toast({
-                          title: "Already marked",
-                          description: "This assignment is marked and can no longer be submitted.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
+                          if (isMarkedSubmission) {
+                            toast({
+                              title: "Already marked",
+                              description: "This assignment is marked and can no longer be submitted.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
 
-                      await submitHomework({
-                        notes,
-                        files,
-                        answers,
-                      });
-                    }}
-                    onUploadFile={async (file) => {
-                      if (!hw) {
-                        toast({
-                          title: "No homework assigned",
-                          description: "Attach files is only available when a homework is assigned.",
-                          variant: "destructive",
-                        });
-                        return null;
-                      }
+                          const result = await submitHomework({
+                            notes,
+                            files,
+                            answers,
+                          });
 
-                      if (hw.closed || isMarkedSubmission) {
-                        toast({
-                          title: "Submission locked",
-                          description: "This assignment can no longer accept files.",
-                          variant: "destructive",
-                        });
-                        return null;
-                      }
+                          if (result) {
+                            setSubmissionStatusOverride(result.status && result.status !== "none" ? result.status : "submitted");
+                            fetchSubmission();
+                          }
+                        }}
+                        onUploadFile={async (file) => {
+                          if (!hw) {
+                            toast({
+                              title: "No homework assigned",
+                              description: "Attach files is only available when a homework is assigned.",
+                              variant: "destructive",
+                            });
+                            return null;
+                          }
 
-                      return uploadFile(file);
-                    }}
-                    />
+                          if (hw.closed || isMarkedSubmission) {
+                            toast({
+                              title: "Submission locked",
+                              description: "This assignment can no longer accept files.",
+                              variant: "destructive",
+                            });
+                            return null;
+                          }
+
+                          return uploadFile(file);
+                        }}
+                      />
                   )}
                   {!hw && (
                     <div className="text-center py-2">
@@ -2290,9 +2639,6 @@ export default function AnnotationView() {
                         No active homework is assigned to this case yet.
                       </p>
                     </div>
-                  )}
-                  {submission?.status === "graded" && (
-                    <FeedbackPanel />
                   )}
                 </div>
               )}

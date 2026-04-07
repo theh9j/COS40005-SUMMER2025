@@ -8,7 +8,7 @@ import { useLocation } from "wouter";
 import { MedicalCase } from "@shared/schema";
 
 interface CaseCardProps {
-  case: MedicalCase;
+  case: Omit<MedicalCase, "createdAt"> & { createdAt?: Date | string | null };
   onClick: () => void;
   homework?: { dueAt: string; closed: boolean };
   daysLeft?: number;
@@ -16,6 +16,9 @@ interface CaseCardProps {
   qnaStats?: {
     attempts?: number;
     bestScorePct?: number | null;
+    latestStatus?: "none" | "submitted" | "grading" | "graded";
+    latestScore?: number | null;
+    latestMaxPoints?: number | null;
     questions?: number;
   };
 }
@@ -55,8 +58,10 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
   const showCardImage = homeworkType !== "Q&A";
   const displayImage = medicalCase.imageUrl || fallbackImage;
   const attemptedCount = qnaStats?.attempts ?? 0;
-  const bestScorePct = qnaStats?.bestScorePct;
-  const hasGradedScore = bestScorePct != null;
+  const latestStatus = qnaStats?.latestStatus ?? "none";
+  const latestScore = qnaStats?.latestScore;
+  const latestMaxPoints = qnaStats?.latestMaxPoints;
+  const hasGradedScore = latestStatus === "graded" && latestScore != null;
   const dueDate = homework?.dueAt ? new Date(homework.dueAt) : null;
   const dueDateLabel = dueDate && !Number.isNaN(dueDate.getTime())
     ? dueDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
@@ -93,9 +98,21 @@ export default function CaseCard({ case: medicalCase, onClick, homework, daysLef
             <div className="space-y-1">
               <div className="flex items-end gap-3">
                 <div className="text-3xl leading-none font-semibold tracking-tight">
-                  {hasGradedScore ? `${Math.round(bestScorePct)}%` : "--"}
+                  {hasGradedScore
+                    ? latestMaxPoints != null
+                      ? `${Math.round(Number(latestScore))}/${latestMaxPoints}`
+                      : `${Math.round(Number(latestScore))}`
+                    : "--"}
                 </div>
-                <div className="text-xl leading-none text-muted-foreground">{hasGradedScore ? "best score" : "pending"}</div>
+                <div className="text-xl leading-none text-muted-foreground">
+                  {latestStatus === "graded"
+                    ? "marked"
+                    : latestStatus === "grading"
+                    ? "under review"
+                    : latestStatus === "submitted"
+                    ? "submitted"
+                    : "pending"}
+                </div>
               </div>
               <div className="text-xs text-muted-foreground">
                 {attemptedCount > 0

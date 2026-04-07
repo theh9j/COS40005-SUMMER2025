@@ -876,6 +876,115 @@ export default function InstructorDashboard() {
     return map;
   }, [selected?.answers]);
 
+  const selectedQnaQuestions = Array.isArray(selected?.modelAnswers) ? selected.modelAnswers : [];
+  const selectedQnaHasEssay =
+    selectedIsQnA && selectedQnaQuestions.some((question: any) => String(question?.type || "").toLowerCase() !== "mcq");
+  const selectedQnaAllMcq = selectedIsQnA && selectedQnaQuestions.length > 0 && !selectedQnaHasEssay;
+
+  const getMcqCorrectIndex = (question: any): number | null => {
+    const candidate =
+      question?.correctIndex ??
+      question?.correct_index ??
+      question?.correctOptionIndex ??
+      question?.correct_option_index ??
+      question?.answerIndex ??
+      question?.answer_index;
+
+    if (typeof candidate === "number" && Number.isFinite(candidate)) return candidate;
+
+    const direct = question?.correctAnswer ?? question?.correct_answer ?? question?.expectedAnswer ?? question?.expected_answer;
+    if (typeof direct === "number" && Number.isFinite(direct)) return direct;
+
+    if (typeof direct === "string" && Array.isArray(question?.options)) {
+      const byText = question.options.findIndex((option: any) => String(option).trim().toLowerCase() === direct.trim().toLowerCase());
+      if (byText >= 0) return byText;
+
+      const asIndex = Number(direct);
+      if (Number.isFinite(asIndex)) {
+        if (asIndex >= 1 && asIndex <= question.options.length) return asIndex - 1;
+        if (asIndex >= 0 && asIndex < question.options.length) return asIndex;
+      }
+    }
+
+    return null;
+  };
+
+  const qnaAutoGradeSummary = useMemo(() => {
+    if (!selectedQnaAllMcq) {
+      return {
+        totalPoints: 0,
+        earnedPoints: 0,
+        maxPoints: selected?.maxPoints || 100,
+        computedScore: selected?.score ?? 0,
+      };
+    }
+
+    const totalPoints = selectedQnaQuestions.reduce((sum: number, question: any) => sum + Number(question?.points || 0), 0);
+    let earnedPoints = 0;
+
+    selectedQnaQuestions.forEach((question: any, idx: number) => {
+      const answerValue = selectedAnswerMap.get(Number(question?.index ?? idx));
+      const selectedIndex = typeof answerValue === "string" ? Number(answerValue) : Number(answerValue);
+      const correctIndex = getMcqCorrectIndex(question);
+
+      if (Number.isFinite(selectedIndex) && correctIndex != null && selectedIndex === correctIndex) {
+        earnedPoints += Number(question?.points || 0);
+      }
+    });
+
+    const maxPoints = selected?.maxPoints || (totalPoints > 0 ? totalPoints : 100);
+    const computedScore = totalPoints > 0
+      ? Math.round(((earnedPoints / totalPoints) * maxPoints) * 10) / 10
+      : (selected?.score ?? 0);
+
+    return {
+      totalPoints,
+      earnedPoints,
+      maxPoints,
+      computedScore,
+    };
+  }, [selectedQnaAllMcq, selectedQnaQuestions, selectedAnswerMap, selected?.maxPoints, selected?.score]);
+
+  const qnaAutoGradeBreakdown = useMemo(() => {
+    if (!selectedQnaAllMcq) return [] as Array<{
+      index: number;
+      prompt: string;
+      selectedLabel: string;
+      correctLabel: string;
+      isCorrect: boolean;
+      points: number;
+    }>;
+
+    return selectedQnaQuestions.map((question: any, idx: number) => {
+      const questionIndex = Number(question?.index ?? idx);
+      const answerValue = selectedAnswerMap.get(questionIndex);
+      const selectedIndex = Number(answerValue);
+      const correctIndex = getMcqCorrectIndex(question);
+      const options = Array.isArray(question?.options) ? question.options : [];
+
+      const selectedLabel =
+        Number.isFinite(selectedIndex) && selectedIndex >= 0 && selectedIndex < options.length
+          ? String(options[selectedIndex])
+          : "No answer";
+
+      const correctLabel =
+        correctIndex != null && correctIndex >= 0 && correctIndex < options.length
+          ? String(options[correctIndex])
+          : "Not configured";
+
+      const isCorrect = Number.isFinite(selectedIndex) && correctIndex != null && selectedIndex === correctIndex;
+
+      return {
+        index: idx + 1,
+        prompt: String(question?.prompt || ""),
+        selectedLabel,
+        correctLabel,
+        isCorrect,
+        points: Number(question?.points || 0),
+      };
+    });
+  }, [selectedQnaAllMcq, selectedQnaQuestions, selectedAnswerMap]);
+
   const selectedSubmissionText = useMemo(() => {
     if (!selected) return "";
     if (!selectedIsQnA) return draftFeedback || selected.feedback || "";
@@ -1721,71 +1830,115 @@ export default function InstructorDashboard() {
                   )}
 
                   <div className="space-y-3">
-                    {/* ✅ RubricPanel now saves rubric + comment */}
-                    <RubricPanel
-                      disabled={isSaving}
-                      initialRubric={selected.rubric ?? []}
-                      maxPoints={selected.maxPoints || 100}
-                      lastSavedAt={selected.updatedAt}
-                      onSubmit={(score: number, rubric: any[]) => saveDraft(selected.id, score, rubric)}
-                      externalAiSuggestion={aiGrading.rubricSuggestion}
-                      externalAiLoading={aiGrading.isAnalyzing}
-                      applyAiTrigger={applyAiTrigger}
-                      onRequestExternalAi={() => {
-                        const rubricDef = buildDefaultCriteria(selected.maxPoints || 100).map((c) => ({
-                          id: c.id,
-                          title: c.title,
-                          max: c.max,
-                          levels: c.levels.map((l) => ({
-                            key: l.key,
-                            label: l.label,
-                            points: l.points,
-                            desc: l.desc,
-                          })),
-                        }));
-                        aiGrading.analyzeSubmission(
-                          selected.id,
-                          selectedAnn.annotations ?? [],
-                          selectedSubmissionText,
-                          rubricDef,
-                          selected.caseTitle
-                        );
-                      }}
-                    />
+                    {selectedQnaAllMcq && (
+                      <Card>
+                        <CardContent className="p-4 space-y-2">
+                          <h3 className="font-semibold">Q&A Auto Grading</h3>
+                          <p className="text-xs text-muted-foreground">
+                            This submission contains MCQ-only questions and is auto-graded. Manual rubric save is not required.
+                          </p>
+                          <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span>Correct points</span>
+                              <span className="font-medium">{qnaAutoGradeSummary.earnedPoints}/{qnaAutoGradeSummary.totalPoints || qnaAutoGradeSummary.maxPoints}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Computed score</span>
+                              <span className="font-semibold">{qnaAutoGradeSummary.computedScore}/{qnaAutoGradeSummary.maxPoints}</span>
+                            </div>
+                          </div>
 
-                    {/* ✅ AI Grading Panel */}
-                    <AIGradingPanel
-                      isAnalyzing={aiGrading.isAnalyzing}
-                      result={aiGrading.currentResult}
-                      error={aiGrading.error}
-                      disabled={isSaving}
-                      onAnalyze={() => {
-                        const rubricDef = buildDefaultCriteria().map((c) => ({
-                          id: c.id,
-                          title: c.title,
-                          max: c.max,
-                          levels: c.levels.map((l) => ({
-                            key: l.key,
-                            label: l.label,
-                            points: l.points,
-                            desc: l.desc,
-                          })),
-                        }));
-                        aiGrading.analyzeSubmission(
-                          selected.id,
-                          selectedAnn.annotations ?? [],
-                          selectedSubmissionText,
-                          rubricDef,
-                          selected.caseTitle
-                        );
-                      }}
-                      onApplyScores={() => {
-                        setApplyAiTrigger((n) => n + 1);
-                      }}
-                      onApplyFeedback={(feedback) => {
-                        setDraftFeedback(feedback);
-                      }}
-                    />
+                          <div className="space-y-2 pt-1">
+                            <p className="text-xs font-medium text-muted-foreground">Per-question result</p>
+                            <div className="space-y-2 max-h-64 overflow-auto pr-1">
+                              {qnaAutoGradeBreakdown.map((item) => (
+                                <div key={`auto-q-${item.index}`} className="rounded-md border bg-card p-2 text-xs space-y-1">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="font-medium">Q{item.index}. {item.prompt || "Question"}</p>
+                                    <span className={item.isCorrect ? "text-emerald-600 font-semibold" : "text-red-600 font-semibold"}>
+                                      {item.isCorrect ? "Correct" : "Incorrect"}
+                                    </span>
+                                  </div>
+                                  <p className="text-muted-foreground">Student: {item.selectedLabel}</p>
+                                  <p className="text-muted-foreground">Expected: {item.correctLabel}</p>
+                                  <p className="text-muted-foreground">Points: {item.isCorrect ? item.points : 0}/{item.points}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {!selectedQnaAllMcq && (
+                      <>
+                        {/* ✅ RubricPanel now saves rubric + comment */}
+                        <RubricPanel
+                          disabled={isSaving}
+                          initialRubric={selected.rubric ?? []}
+                          maxPoints={selected.maxPoints || 100}
+                          lastSavedAt={selected.updatedAt}
+                          onSubmit={(score: number, rubric: any[]) => saveDraft(selected.id, score, rubric)}
+                          externalAiSuggestion={aiGrading.rubricSuggestion}
+                          externalAiLoading={aiGrading.isAnalyzing}
+                          applyAiTrigger={applyAiTrigger}
+                          onRequestExternalAi={() => {
+                            const rubricDef = buildDefaultCriteria(selected.maxPoints || 100).map((c) => ({
+                              id: c.id,
+                              title: c.title,
+                              max: c.max,
+                              levels: c.levels.map((l) => ({
+                                key: l.key,
+                                label: l.label,
+                                points: l.points,
+                                desc: l.desc,
+                              })),
+                            }));
+                            aiGrading.analyzeSubmission(
+                              selected.id,
+                              selectedAnn.annotations ?? [],
+                              selectedSubmissionText,
+                              rubricDef,
+                              selected.caseTitle
+                            );
+                          }}
+                        />
+
+                        {/* ✅ AI Grading Panel */}
+                        <AIGradingPanel
+                          isAnalyzing={aiGrading.isAnalyzing}
+                          result={aiGrading.currentResult}
+                          error={aiGrading.error}
+                          disabled={isSaving}
+                          onAnalyze={() => {
+                            const rubricDef = buildDefaultCriteria().map((c) => ({
+                              id: c.id,
+                              title: c.title,
+                              max: c.max,
+                              levels: c.levels.map((l) => ({
+                                key: l.key,
+                                label: l.label,
+                                points: l.points,
+                                desc: l.desc,
+                              })),
+                            }));
+                            aiGrading.analyzeSubmission(
+                              selected.id,
+                              selectedAnn.annotations ?? [],
+                              selectedSubmissionText,
+                              rubricDef,
+                              selected.caseTitle
+                            );
+                          }}
+                          onApplyScores={() => {
+                            setApplyAiTrigger((n) => n + 1);
+                          }}
+                          onApplyFeedback={(feedback) => {
+                            setDraftFeedback(feedback);
+                          }}
+                        />
+                      </>
+                    )}
 
                     <Card>
                       <CardContent className="p-4 space-y-2">
@@ -1804,21 +1957,28 @@ export default function InstructorDashboard() {
                         />
 
                         <div className="flex gap-2">
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              const scoreToSave = selected.score ?? 0;
-                              // ✅ don't wipe rubric on save
-                              saveDraft(selected.id, scoreToSave, selected.rubric ?? []);
-                            }}
-                            disabled={isSaving}
-                          >
-                            {isSaving ? "Saving..." : "Save Draft"}
-                          </Button>
+                          {(!selectedIsQnA || selectedQnaHasEssay) && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                const scoreToSave = selected.score ?? 0;
+                                // ✅ don't wipe rubric on save
+                                saveDraft(selected.id, scoreToSave, selected.rubric ?? []);
+                              }}
+                              disabled={isSaving}
+                            >
+                              {isSaving ? "Saving..." : "Save Draft"}
+                            </Button>
+                          )}
 
                           <Button
-                            onClick={() => publish(selected.id)}
-                            disabled={isPublishing || selected.status !== "graded" || selected.published}
+                            onClick={async () => {
+                              if (selectedIsQnA && selectedQnaAllMcq && selected.status !== "graded") {
+                                await saveDraft(selected.id, qnaAutoGradeSummary.computedScore, selected.rubric ?? []);
+                              }
+                              await publish(selected.id);
+                            }}
+                            disabled={isPublishing || ((!selectedQnaAllMcq && selected.status !== "graded") || selected.published)}
                           >
                             {selected.published ? "Published" : isPublishing ? "Publishing..." : "Publish marks & answers"}
                           </Button>

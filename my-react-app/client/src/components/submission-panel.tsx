@@ -36,6 +36,7 @@ interface SubmissionPanelProps {
   loading?: boolean;
   error?: string | null;
   closed?: boolean;
+  teacherFeedback?: string | null;
 }
 
 export default function SubmissionPanel({
@@ -54,6 +55,7 @@ export default function SubmissionPanel({
   loading = false,
   error = null,
   closed = false,
+  teacherFeedback,
 }: SubmissionPanelProps) {
   const [notes, setNotes] = useState(initialNotes);
   const [files, setFiles] = useState<SubmissionFile[]>(initialFiles ?? []);
@@ -194,6 +196,15 @@ export default function SubmissionPanel({
             </div>
           )}
         </div>
+        <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+          This assignment has been marked. Submission updates and file uploads are locked.
+        </div>
+        {teacherFeedback && teacherFeedback.trim().length > 0 && (
+          <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50/80 p-3 dark:border-emerald-800 dark:bg-emerald-950/40">
+            <h5 className="text-sm font-semibold text-emerald-900 dark:text-emerald-300">Teacher Feedback</h5>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-emerald-800 dark:text-emerald-200">{teacherFeedback}</p>
+          </div>
+        )}
       </div>
     );
   }

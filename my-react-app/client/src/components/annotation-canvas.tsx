@@ -11,6 +11,8 @@ interface AnnotationCanvasProps {
   peerAnnotations?: any[] | Map<string, { annotations: SharedAnnotation[]; color: string; visible: boolean }>;
   versionOverlay?: any | null;
   peerOpacity?: number;
+  compareMode?: "overlay" | "side-by-side";
+  selectedPeerAnnotations?: SharedAnnotation[];
   controlsDock?: "none" | "collapsed" | "expanded";
 }
 
@@ -27,6 +29,8 @@ export default function AnnotationCanvas({
   peerAnnotations,
   versionOverlay,
   peerOpacity = 0.5,
+  compareMode = "overlay",
+  selectedPeerAnnotations = [],
   controlsDock = "none",
 }: AnnotationCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -436,7 +440,48 @@ export default function AnnotationCanvas({
       }
     }
 
-    if (peerAnnotations) {
+    const hasSideBySidePeer = compareMode === "side-by-side" && selectedPeerAnnotations.length > 0;
+
+    if (hasSideBySidePeer) {
+      const halfWidth = imageBounds.width / 2;
+
+      // Left side: current user's annotations
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(imageBounds.x, imageBounds.y, halfWidth, imageBounds.height);
+      ctx.clip();
+
+      annotations.forEach((ann) => {
+        const isSelected = annotation.selectedAnnotationIds?.includes(ann.id) || false;
+        drawAnnotation(ctx, ann as any, 0.5, isSelected);
+        if (isSelected && ann.visible !== false) {
+          drawSelectionIndicators(ctx, ann as any);
+        }
+      });
+
+      if (currentAnnotation) {
+        drawAnnotation(ctx, currentAnnotation as any, 0.5);
+      }
+      ctx.restore();
+
+      // Right side: selected peer annotations
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(imageBounds.x + halfWidth, imageBounds.y, halfWidth, imageBounds.height);
+      ctx.clip();
+      selectedPeerAnnotations.forEach((ann: any) => drawAnnotation(ctx, ann, 0.7));
+      ctx.restore();
+
+      // Divider between local and peer view
+      ctx.save();
+      ctx.strokeStyle = "rgba(59,130,246,0.8)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(imageBounds.x + halfWidth, imageBounds.y);
+      ctx.lineTo(imageBounds.x + halfWidth, imageBounds.y + imageBounds.height);
+      ctx.stroke();
+      ctx.restore();
+    } else if (peerAnnotations) {
       if (typeof (peerAnnotations as any).forEach === "function" && !(peerAnnotations instanceof Map)) {
         (peerAnnotations as any[]).forEach((peerData) => {
           if (peerData && peerData.visible && Array.isArray(peerData.annotations)) {
@@ -456,17 +501,19 @@ export default function AnnotationCanvas({
       }
     }
 
-    annotations.forEach((ann) => {
-      const isSelected = annotation.selectedAnnotationIds?.includes(ann.id) || false;
-      drawAnnotation(ctx, ann as any, 0.5, isSelected);
+    if (!hasSideBySidePeer) {
+      annotations.forEach((ann) => {
+        const isSelected = annotation.selectedAnnotationIds?.includes(ann.id) || false;
+        drawAnnotation(ctx, ann as any, 0.5, isSelected);
 
-      if (isSelected && ann.visible !== false) {
-        drawSelectionIndicators(ctx, ann as any);
+        if (isSelected && ann.visible !== false) {
+          drawSelectionIndicators(ctx, ann as any);
+        }
+      });
+
+      if (currentAnnotation) {
+        drawAnnotation(ctx, currentAnnotation as any, 0.5);
       }
-    });
-
-    if (currentAnnotation) {
-      drawAnnotation(ctx, currentAnnotation as any, 0.5);
     }
 
     ctx.restore();
@@ -475,6 +522,8 @@ export default function AnnotationCanvas({
     currentAnnotation,
     canvasRef,
     peerAnnotations,
+    compareMode,
+    selectedPeerAnnotations,
     versionOverlay,
     annotation.selectedAnnotationIds,
     imageBounds,

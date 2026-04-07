@@ -34,6 +34,69 @@ export function useSubmission(homeworkId: string, caseId: string, userId: string
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
+  const submissionCacheKey =
+    typeof window !== "undefined" && homeworkId && caseId && userId
+      ? `submission_cache_${caseId}_${userId}_${homeworkId}`
+      : "";
+
+  const readSubmissionCache = (): SubmissionResponse | null => {
+    if (!submissionCacheKey || typeof window === "undefined") return null;
+    const raw = localStorage.getItem(submissionCacheKey);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as SubmissionResponse;
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const writeSubmissionCache = (data: SubmissionResponse) => {
+    if (!submissionCacheKey || typeof window === "undefined") return;
+    localStorage.setItem(submissionCacheKey, JSON.stringify(data));
+  };
+
+  const getLatestSubmissionFromIndex = async (): Promise<SubmissionResponse | null> => {
+    if (!homeworkId || !userId) return null;
+    try {
+      const res = await fetch(`${API_BASE}/instructor/submissions`, {
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+
+      const rows = await res.json();
+      if (!Array.isArray(rows)) return null;
+
+      const matched = rows
+        .filter((row: any) => {
+          const sameStudent = String(row?.student_id || "") === userId;
+          const sameHomework = String(row?.homework_id || "") === homeworkId;
+          const sameCase = !caseId || String(row?.case_id || "") === caseId;
+          return sameStudent && sameHomework && sameCase;
+        })
+        .sort((a: any, b: any) => {
+          const at = new Date(a?.updated_at ?? a?.created_at ?? 0).getTime();
+          const bt = new Date(b?.updated_at ?? b?.created_at ?? 0).getTime();
+          return bt - at;
+        });
+
+      if (matched.length === 0) return null;
+
+      const top = matched[0];
+      return {
+        submission_id: String(top?.id || ""),
+        status: top?.score != null ? "graded" : (top?.status || "none"),
+        score: top?.score ?? undefined,
+        notes: top?.notes ?? undefined,
+        files: Array.isArray(top?.files) ? top.files : undefined,
+        answers: Array.isArray(top?.answers) ? top.answers : undefined,
+        updated_at: top?.updated_at ?? top?.created_at,
+      };
+    } catch {
+      return null;
+    }
+  };
 
   // Fetch current submission
   const fetchSubmission = useCallback(async () => {
@@ -63,11 +126,41 @@ export function useSubmission(homeworkId: string, caseId: string, userId: string
       
       const data = await res.json();
       console.log("Submission loaded:", data);
-      setSubmission(data);
+
+      const normalizedMine: SubmissionResponse = {
+        ...data,
+        status: data?.score != null ? "graded" : (data?.status || "none"),
+      };
+
+      // If the dedicated endpoint is stale, reconcile using the aggregated submissions index.
+      const shouldReconcile = normalizedMine.status === "none" || normalizedMine.status === "submitted";
+      if (shouldReconcile) {
+        const indexed = await getLatestSubmissionFromIndex();
+        if (indexed) {
+          const finalData = indexed;
+          setSubmission(finalData);
+          writeSubmissionCache(finalData);
+          return;
+        }
+      }
+
+      const hasServerSubmission = Boolean(normalizedMine.status && normalizedMine.status !== "none");
+      if (hasServerSubmission) {
+        setSubmission(normalizedMine);
+        writeSubmissionCache(normalizedMine);
+        return;
+      }
+
+      const cached = readSubmissionCache();
+      setSubmission(cached ?? data);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load submission";
       setError(message);
       console.error("Error fetching submission:", err);
+      const cached = readSubmissionCache();
+      if (cached) {
+        setSubmission(cached);
+      }
     } finally {
       setLoading(false);
     }
@@ -155,8 +248,13 @@ export function useSubmission(homeworkId: string, caseId: string, userId: string
 
         const result = await res.json();
         console.log("Submission result:", result);
-        setSubmission(result);
-        return result;
+        const normalized: SubmissionResponse = result?.score != null
+          ? { ...result, status: "graded" }
+          : result;
+
+        setSubmission(normalized);
+        writeSubmissionCache(normalized);
+        return normalized;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to submit homework";
         setError(message);
