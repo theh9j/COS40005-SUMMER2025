@@ -6,7 +6,13 @@ import { MedicalCase } from "@shared/schema";
 
 interface AssignmentRequirementsProps {
   case: MedicalCase;
-  homework?: { dueAt: string; closed: boolean; description: string; points: number };
+  homework?: {
+    dueAt: string;
+    closed: boolean;
+    description: string;
+    points: number;
+    homeworkType?: "Q&A" | "Annotate";
+  };
   onReturn: () => void;
   onAccept: () => void;
 }
@@ -17,6 +23,37 @@ export default function AssignmentRequirements({
   onReturn,
   onAccept,
 }: AssignmentRequirementsProps) {
+  const homeworkType = homework?.homeworkType ?? "Annotate";
+  const isQnAHomework = homeworkType === "Q&A";
+
+  const requirements = isQnAHomework
+    ? [
+        "Read each question carefully and answer all required items before submitting",
+        "Use evidence from the case description and image findings to support your answers",
+        "Structure answers clearly with concise medical terminology and complete reasoning",
+        "Review your responses for accuracy, completeness, and spelling before final submission",
+      ]
+    : [
+        "Carefully examine the medical image and identify key anatomical structures",
+        "Create detailed annotations labeling pathological findings and normal anatomy",
+        "Use appropriate shape tools (rectangles, circles, text labels) for clarity",
+        "Compare your annotations with peer submissions to learn different approaches",
+      ];
+
+  const tips = isQnAHomework
+    ? [
+        "Outline key findings first, then map them to each question to avoid missing points",
+        "Reference image regions explicitly when explaining diagnostic reasoning",
+        "Answer in complete, direct sentences and avoid one-word responses",
+        "Leave time for a final proofread and consistency check across all answers",
+      ]
+    : [
+        "Take your time to thoroughly analyze the image before annotating",
+        "Use the peer comparison feature to see how others approached the same case",
+        "Add descriptive text labels for all significant findings",
+        "Save your work frequently by creating versions",
+      ];
+
   const daysLeft = homework
     ? Math.ceil((new Date(homework.dueAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
@@ -92,30 +129,12 @@ export default function AssignmentRequirements({
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">Requirements</h3>
               <ul className="space-y-3">
-                <li className="flex gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">
-                    Carefully examine the medical image and identify key anatomical structures
-                  </span>
-                </li>
-                <li className="flex gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">
-                    Create detailed annotations labeling pathological findings and normal anatomy
-                  </span>
-                </li>
-                <li className="flex gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">
-                    Use appropriate shape tools (rectangles, circles, text labels) for clarity
-                  </span>
-                </li>
-                <li className="flex gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">
-                    Compare your annotations with peer submissions to learn different approaches
-                  </span>
-                </li>
+                {requirements.map((item) => (
+                  <li key={item} className="flex gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm">{item}</span>
+                  </li>
+                ))}
               </ul>
             </div>
 
@@ -126,34 +145,10 @@ export default function AssignmentRequirements({
                 <div className="text-sm">
                   <p className="font-medium text-blue-900 dark:text-blue-100 mb-1">Tips for Success</p>
                   <ul className="text-blue-800 dark:text-blue-200 space-y-1 text-xs">
-                    <li>• Take your time to thoroughly analyze the image before annotating</li>
-                    <li>• Use the peer comparison feature to see how others approached the same case</li>
-                    <li>• Add descriptive text labels for all significant findings</li>
-                    <li>• Save your work frequently by creating versions</li>
+                    {tips.map((item) => (
+                      <li key={item}>• {item}</li>
+                    ))}
                   </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Grading criteria */}
-            <div className="space-y-3">
-              <h4 className="font-medium">Grading Criteria</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center p-2 bg-muted rounded">
-                  <span>Accuracy of annotations</span>
-                  <span className="font-medium">40%</span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-muted rounded">
-                  <span>Completeness of findings</span>
-                  <span className="font-medium">30%</span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-muted rounded">
-                  <span>Clarity and organization</span>
-                  <span className="font-medium">20%</span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-muted rounded">
-                  <span>Use of tools effectively</span>
-                  <span className="font-medium">10%</span>
                 </div>
               </div>
             </div>

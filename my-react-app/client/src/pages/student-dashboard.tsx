@@ -640,6 +640,9 @@ export default function StudentDashboard() {
     URL.revokeObjectURL(url);
   };
 
+  const dashboardBoxClass = "rounded-3xl border border-slate-300/70 bg-slate-100/80 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70";
+  const instructorMetricBoxClass = "rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950";
+
   const StatCard = ({
     label,
     value,
@@ -649,7 +652,7 @@ export default function StudentDashboard() {
   }: {
     label: string; value: string | number; icon: any; valueClass?: string; testId: string;
   }) => (
-    <Card>
+    <Card className={dashboardBoxClass}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -759,7 +762,7 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <Card className={instructorMetricBoxClass}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Assigned Homework</p>
@@ -770,7 +773,7 @@ export default function StudentDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <Card className={instructorMetricBoxClass}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Pending Reviews</p>
@@ -781,7 +784,7 @@ export default function StudentDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <Card className={instructorMetricBoxClass}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Completion Rate</p>
@@ -792,7 +795,7 @@ export default function StudentDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <Card className={instructorMetricBoxClass}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Average Score</p>
@@ -805,7 +808,7 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-                <Card className="xl:col-span-2 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className={`xl:col-span-2 ${dashboardBoxClass}`}>
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Upcoming Homework</h3>
@@ -836,7 +839,7 @@ export default function StudentDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className={dashboardBoxClass}>
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Quick Actions</h3>
@@ -853,7 +856,7 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className={dashboardBoxClass}>
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold mb-4">Performance Trend</h3>
                     <ResponsiveContainer width="100%" height={220}>
@@ -868,7 +871,7 @@ export default function StudentDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className={dashboardBoxClass}>
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold mb-4">Recent Activity & Feedback</h3>
                     <div className="space-y-3">
@@ -1140,25 +1143,25 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-                <Card>
+                <Card className={dashboardBoxClass}>
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Live submissions</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.totalSubmissions}</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={dashboardBoxClass}>
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Graded</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.gradedCount}</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={dashboardBoxClass}>
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending review</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.pendingCount}</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={dashboardBoxClass}>
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Average grade</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.averageScore}%</p>
@@ -1173,7 +1176,7 @@ export default function StudentDashboard() {
                 <StatCard label="Collaboration" value={`${stats.collaborationScorePct}%`} icon={Users} testId="stat-collaboration" />
               </div>
 
-              <Card className="mb-6">
+              <Card className={`${dashboardBoxClass} mb-6`}>
                 <CardContent className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Live grading trend</h3>
                   <div className="h-64">
@@ -1190,7 +1193,7 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="mb-6">
+              <Card className={`${dashboardBoxClass} mb-6`}>
                 <CardContent className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Performance Progress</h3>
                   <div className="space-y-4">
@@ -1210,7 +1213,7 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="mb-6">
+              <Card className={`${dashboardBoxClass} mb-6`}>
                 <CardContent className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Recent activity</h3>
                   <ul className="space-y-3 text-sm text-muted-foreground">
@@ -1226,7 +1229,7 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className={dashboardBoxClass}>
                 <CardContent className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Milestones</h3>
                   <div className="space-y-4 text-sm text-muted-foreground">

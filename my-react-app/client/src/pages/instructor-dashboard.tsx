@@ -1258,7 +1258,7 @@ export default function InstructorDashboard() {
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-                <Card className="xl:col-span-2 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className="xl:col-span-2 rounded-3xl border border-slate-300/70 bg-slate-100/80 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Review Queue</h3>
@@ -1308,7 +1308,7 @@ export default function InstructorDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className="rounded-3xl border border-slate-300/70 bg-slate-100/80 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Quick Actions</h3>
@@ -1337,7 +1337,7 @@ export default function InstructorDashboard() {
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className="rounded-3xl border border-slate-300/70 bg-slate-100/80 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Class Snapshot</h3>
@@ -1369,7 +1369,7 @@ export default function InstructorDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className="rounded-3xl border border-slate-300/70 bg-slate-100/80 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Assignment Mix</h3>
@@ -1389,7 +1389,7 @@ export default function InstructorDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                <Card className="rounded-3xl border border-slate-300/70 bg-slate-100/80 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold">Instructor Notes</h3>
@@ -1438,7 +1438,7 @@ export default function InstructorDashboard() {
                 </Card>
               </div>
 
-              <Card className="mb-8 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+              <Card className="mb-8 rounded-3xl border border-slate-300/70 bg-slate-100/80 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold flex items-center">
