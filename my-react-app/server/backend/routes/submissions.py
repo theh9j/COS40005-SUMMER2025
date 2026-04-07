@@ -340,3 +340,50 @@ async def grade_submission(submission_id: str, payload: GradeRequest):
         "feedback": payload.feedback,
         "updated_at": graded_at.isoformat(),
     }
+
+
+@router.post("/submissions/{submission_id}/publish")
+async def publish_submission(submission_id: str):
+    published_at = now()
+    result = await submissions_collection.update_one(
+        {"_id": ObjectId(submission_id)},
+        {"$set": {
+            "published": True,
+            "published_at": published_at,
+            "status": "graded",
+            "updated_at": published_at,
+        }}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    return {
+        "published": True,
+        "published_at": published_at.isoformat(),
+    }
+
+
+@router.post("/submissions/{submission_id}/return")
+async def return_submission_to_student(submission_id: str, payload: dict = Body(...)):
+    feedback = payload.get("feedback") if isinstance(payload, dict) else None
+    updated_at = now()
+    update_fields = {
+        "status": "graded",
+        "updated_at": updated_at,
+    }
+    if feedback is not None:
+        update_fields["feedback"] = feedback
+
+    result = await submissions_collection.update_one(
+        {"_id": ObjectId(submission_id)},
+        {"$set": update_fields}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    return {
+        "returned": True,
+        "updated_at": updated_at.isoformat(),
+    }

@@ -1106,6 +1106,19 @@ export default function InstructorDashboard() {
         return;
       }
 
+      const data = await res.json();
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === subId
+            ? {
+                ...s,
+                feedback: draftFeedback ?? s.feedback,
+                updatedAt: data.updated_at ?? new Date().toISOString(),
+              }
+            : s
+        )
+      );
+
       alert("Returned to student successfully");
     } catch (err) {
       console.error("Error returning to student", err);
