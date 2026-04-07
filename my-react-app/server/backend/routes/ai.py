@@ -796,12 +796,12 @@ async def call_google_vision_api(
         "contents": contents,
         "generationConfig": {
             "temperature": 0.3,
-            "maxOutputTokens": 1000,
+            "maxOutputTokens": 8192,
             "topP": 0.8,
             "topK": 10
         }
     }
-    
+
     if system_instruction:
         payload["systemInstruction"] = {
             "parts": [{"text": system_instruction}]
@@ -816,6 +816,150 @@ async def call_google_vision_api(
             raise HTTPException(status_code=response.status_code, detail=f"Google Vision API error: {response.text}")
         
         return response.json()
+
+@router.post("/grade-with-vision")
+async def grade_with_vision(
+    payload: Dict[str, Any]
+):
+    """AI grading endpoint that uses Gemini Vision to analyze the medical image
+    alongside student annotations for disease-specific feedback."""
+    try:
+        model = payload.get("model", "gemini-2.5-flash")
+        image_url = payload.get("imageUrl")
+        case_title = payload.get("caseTitle", "Medical Case")
+        case_description = payload.get("caseDescription", "")
+        case_type = payload.get("caseType", "")
+        homework_instructions = payload.get("homeworkInstructions", "")
+        annotations_data = payload.get("annotations", [])
+        student_answer = payload.get("studentAnswer", "")
+        rubric_block = payload.get("rubricBlock", "")
+
+        # Build annotation summary
+        annotation_lines = []
+        for i, a in enumerate(annotations_data[:20]):
+            label = a.get("label", "(no label)")
+            atype = a.get("type", "unknown")
+            color = a.get("color", "")
+            annotation_lines.append(f"{i+1}. Type: {atype}, Label: \"{label}\", Color: {color}")
+        annotation_block = "\n".join(annotation_lines) if annotation_lines else "No annotations provided."
+        if len(annotations_data) > 20:
+            annotation_block += f"\n... and {len(annotations_data) - 20} more annotations"
+
+        system_prompt = f"""You are an expert medical pathology grading assistant with deep knowledge of diseases, anatomy, and clinical findings.
+
+YOUR TASK: Analyze the medical image provided, compare it with the student's annotations, and grade their work. You must identify the SPECIFIC disease/condition visible in the image and evaluate whether the student correctly identified it.
+
+MEDICAL CONTEXT:
+- Case Title: {case_title}
+- Case Description: {case_description}
+- Specialty/Type: {case_type}
+- Assignment Instructions: {homework_instructions}
+
+GRADING RUBRIC:
+{rubric_block}
+
+CRITICAL INSTRUCTIONS FOR DISEASE IDENTIFICATION:
+1. First, analyze the medical image carefully. Identify:
+   - The specific disease/condition/pathology visible
+   - Key pathological findings (e.g., lesions, masses, inflammation, fractures, abnormal structures)
+   - Anatomical location and affected structures
+   - Severity and stage if applicable
+
+2. Then, evaluate each student annotation against what you see in the image:
+   - Does the annotation correctly identify the pathological finding?
+   - Is the label medically accurate for what is shown?
+   - Did the student miss any important findings?
+   - Are there any incorrectly labeled structures?
+
+3. Provide disease-specific feedback:
+   - Name the exact disease/condition (e.g., "Pneumothorax", "Hepatocellular Carcinoma", "Osteoarthritis")
+   - Explain what visual features in the image indicate this disease
+   - Comment on whether each annotation correctly corresponds to a disease finding
+
+STRICT JSON FORMAT (no markdown, no extra text):
+{{
+  "diseaseIdentification": {{
+    "primaryDiagnosis": "<specific disease name>",
+    "confidence": <0-1>,
+    "keyFindings": ["<finding 1>", "<finding 2>"],
+    "affectedStructures": ["<structure 1>", "<structure 2>"],
+    "severity": "<mild|moderate|severe|N/A>",
+    "differentialDiagnoses": ["<alt diagnosis 1>", "<alt diagnosis 2>"]
+  }},
+  "rubricSuggestions": [
+    {{"criterionId": "<id>", "levelKey": "excellent|good|fair|poor", "score": <number>, "reasoning": "<1-2 sentences, reference specific disease findings>", "confidence": <0-1>}}
+  ],
+  "totalScore": <sum>,
+  "overallConfidence": <0-1>,
+  "strengths": ["<specific praise referencing disease knowledge>"],
+  "weaknesses": ["<specific gaps in disease identification>"],
+  "feedbackSuggestion": "<3-5 sentences. Reference the specific disease, what the student identified correctly, what they missed, and key learning points about this condition.>",
+  "annotationComments": [
+    {{"annotationId": "<id>", "annotationLabel": "<label>", "comment": "<1-2 sentences explaining if this annotation correctly identifies a disease finding and why>", "quality": "correct|partial|incorrect|missing-label", "diseaseRelevance": "<how this annotation relates to the identified disease>"}}
+  ],
+  "improvementSuggestions": ["<disease-specific learning tip>"],
+  "encouragement": "<1 sentence referencing their understanding of the condition>"
+}}"""
+
+        user_message = f"""Please analyze this medical image and grade the student's submission:
+
+STUDENT ANNOTATIONS ({len(annotations_data)} total):
+{annotation_block}
+
+STUDENT ANSWER:
+{student_answer or "No text answer provided."}
+
+Look at the image carefully, identify the specific disease/condition, then evaluate the student's annotations and answer against what you observe in the image. Return JSON."""
+
+        # Use vision API if image is available, otherwise fall back to text-only
+        if image_url:
+            try:
+                messages = [
+                    AIMessage("system", system_prompt),
+                    AIMessage("user", user_message)
+                ]
+                result = await call_google_vision_api(messages, model, image_url)
+                content = result["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as vision_err:
+                print(f"[DEBUG] Vision API failed, falling back to text-only: {vision_err}")
+                # Fallback to text-only with enhanced prompt
+                messages = [
+                    AIMessage("system", system_prompt),
+                    AIMessage("user", user_message)
+                ]
+                full_text = await call_google_api_with_fallback(messages, model, 0.2, 2000)
+                content = full_text
+        else:
+            messages = [
+                AIMessage("system", system_prompt),
+                AIMessage("user", user_message)
+            ]
+            full_text = await call_google_api_with_fallback(messages, model, 0.2, 2000)
+            content = full_text
+
+        # Parse JSON from response
+        try:
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                result_json = json.loads(json_match.group())
+                return {
+                    "content": json.dumps(result_json),
+                    "tokensUsed": 0,
+                    "latencyMs": 0
+                }
+        except json.JSONDecodeError:
+            pass
+
+        return {
+            "content": content,
+            "tokensUsed": 0,
+            "latencyMs": 0
+        }
+
+    except Exception as e:
+        print(f"[ERROR] grade-with-vision failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/providers")
 async def get_ai_providers():

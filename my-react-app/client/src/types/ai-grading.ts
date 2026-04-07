@@ -15,6 +15,17 @@ export interface AIAnnotationComment {
   annotationLabel: string;
   comment: string;
   quality: "correct" | "partial" | "incorrect" | "missing-label";
+  diseaseRelevance?: string;
+}
+
+// ── Disease identification from vision analysis ──
+export interface AIDiseaseIdentification {
+  primaryDiagnosis: string;
+  confidence: number;
+  keyFindings: string[];
+  affectedStructures: string[];
+  severity: "mild" | "moderate" | "severe" | "N/A";
+  differentialDiagnoses: string[];
 }
 
 // ── Full grading result for one submission ──
@@ -32,6 +43,9 @@ export interface AIGradingResult {
   annotationComments: AIAnnotationComment[];
   improvementSuggestions: string[];
   encouragement: string;
+
+  // Disease identification (from vision-based grading)
+  diseaseIdentification?: AIDiseaseIdentification;
 
   generatedAt: string; // ISO
   modelUsed: string;
@@ -56,6 +70,8 @@ export interface GradingSubmissionInput {
   caseTitle?: string;
   caseDescription?: string;
   homeworkInstructions?: string;
+  imageUrl?: string;
+  caseType?: string;
 }
 
 // ── Rubric definition (mirrors RubricPanel) ──

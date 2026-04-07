@@ -24,6 +24,8 @@ import {
   Copy,
   Loader2,
   MessageSquare,
+  Stethoscope,
+  Activity,
 } from "lucide-react";
 import type { AIGradingResult, AIAnnotationComment } from "@/types/ai-grading";
 
@@ -73,6 +75,7 @@ export default function AIGradingPanel({
   onApplyFeedback,
   disabled,
 }: AIGradingPanelProps) {
+  const [expandDisease, setExpandDisease] = useState(true);
   const [expandCriteria, setExpandCriteria] = useState(true);
   const [expandFeedback, setExpandFeedback] = useState(false);
   const [expandAnnotations, setExpandAnnotations] = useState(false);
@@ -207,6 +210,94 @@ export default function AIGradingPanel({
                   className="mt-2 h-1.5"
                 />
               </div>
+
+              {/* Disease Identification */}
+              {result.diseaseIdentification && (
+                <>
+                  <div>
+                    <button
+                      className="flex items-center gap-1 text-sm font-medium w-full text-left"
+                      onClick={() => setExpandDisease(!expandDisease)}
+                    >
+                      <Stethoscope className="h-4 w-4 text-purple-500" />
+                      Disease Identification
+                      <Badge className={cn("ml-2 text-[10px]", confidenceBg(result.diseaseIdentification.confidence))}>
+                        {Math.round(result.diseaseIdentification.confidence * 100)}% confidence
+                      </Badge>
+                      {expandDisease ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+                    </button>
+
+                    {expandDisease && (
+                      <div className="mt-2 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/30 p-3 space-y-3">
+                        {/* Primary Diagnosis */}
+                        <div>
+                          <div className="text-xs font-semibold text-purple-800 dark:text-purple-300">
+                            Primary Diagnosis
+                          </div>
+                          <div className="text-sm font-bold mt-0.5">
+                            {result.diseaseIdentification.primaryDiagnosis}
+                          </div>
+                          {result.diseaseIdentification.severity !== "N/A" && (
+                            <Badge variant="outline" className="mt-1 text-[10px]">
+                              Severity: {result.diseaseIdentification.severity}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Key Findings */}
+                        {result.diseaseIdentification.keyFindings.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-purple-700 dark:text-purple-400 mb-1">
+                              Key Pathological Findings
+                            </div>
+                            <ul className="space-y-1">
+                              {result.diseaseIdentification.keyFindings.map((f, i) => (
+                                <li key={i} className="flex items-start gap-1.5 text-[11px]">
+                                  <Activity className="h-3 w-3 text-purple-500 mt-0.5 shrink-0" />
+                                  <span>{f}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Affected Structures */}
+                        {result.diseaseIdentification.affectedStructures.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-purple-700 dark:text-purple-400 mb-1">
+                              Affected Structures
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {result.diseaseIdentification.affectedStructures.map((s, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px]">
+                                  {s}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Differential Diagnoses */}
+                        {result.diseaseIdentification.differentialDiagnoses.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">
+                              Differential Diagnoses
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {result.diseaseIdentification.differentialDiagnoses.map((d, i) => (
+                                <Badge key={i} variant="secondary" className="text-[10px]">
+                                  {d}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <Separator />
+                </>
+              )}
 
               {/* Criteria breakdown */}
               <div>
@@ -366,6 +457,12 @@ export default function AIGradingPanel({
                               <div className="text-[11px] text-muted-foreground mt-1">
                                 {ac.comment}
                               </div>
+                              {ac.diseaseRelevance && (
+                                <div className="text-[10px] text-purple-600 dark:text-purple-400 mt-1 flex items-start gap-1">
+                                  <Stethoscope className="h-3 w-3 mt-0.5 shrink-0" />
+                                  <span>{ac.diseaseRelevance}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -416,7 +513,10 @@ export default function AIGradingPanel({
               {/* Metadata */}
               <div className="text-[10px] text-muted-foreground text-center">
                 Generated {new Date(result.generatedAt).toLocaleTimeString()} •{" "}
-                {result.latencyMs}ms
+                {result.modelUsed} • {result.latencyMs}ms
+                {result.diseaseIdentification && (
+                  <span className="text-purple-500 ml-1">• Disease-aware</span>
+                )}
               </div>
             </>
           )}

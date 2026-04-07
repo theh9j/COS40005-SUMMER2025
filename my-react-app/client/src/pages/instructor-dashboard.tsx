@@ -1748,7 +1748,11 @@ export default function InstructorDashboard() {
                           selectedAnn.annotations ?? [],
                           selectedSubmissionText,
                           rubricDef,
-                          selected.caseTitle
+                          selected.caseTitle,
+                          selectedCase?.description,
+                          undefined,
+                          selectedImageUrl || undefined,
+                          selectedCase?.caseType
                         );
                       }}
                     />
@@ -1776,7 +1780,11 @@ export default function InstructorDashboard() {
                           selectedAnn.annotations ?? [],
                           selectedSubmissionText,
                           rubricDef,
-                          selected.caseTitle
+                          selected.caseTitle,
+                          selectedCase?.description,
+                          undefined,
+                          selectedImageUrl || undefined,
+                          selectedCase?.caseType
                         );
                       }}
                       onApplyScores={() => {
@@ -1877,11 +1885,15 @@ export default function InstructorDashboard() {
                   }));
                   const subs = ids.map((id) => {
                     const sub = submissions.find((s) => s.id === id);
+                    const caseObj = mergedCases.find((c) => c.id === sub?.caseId);
                     return {
                       id,
                       annotations: [],
                       studentAnswer: sub?.feedback,
                       caseTitle: sub?.caseTitle,
+                      caseDescription: caseObj?.description,
+                      imageUrl: sub?.caseImageUrl || caseObj?.imageUrl || undefined,
+                      caseType: caseObj?.caseType,
                     };
                   });
                   aiGrading.startBatchGrading(subs, rubricDef);
