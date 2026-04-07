@@ -45,6 +45,15 @@ interface UseAnnotationState {
   versionsLoading: boolean;
   imageBounds: { width: number; height: number } | null;
   currentAnnotation: Partial<Annotation> | null;
+  interaction: {
+    mode: "move" | "resize";
+    annotationId: string;
+    start: { x: number; y: number };
+    handle?: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+    originalCoordinates: any;
+    originalBounds: { x: number; y: number; width: number; height: number } | null;
+    changed: boolean;
+  } | null;
 }
 
 // Fix: Correct API Base path based on backend routes (annotations.py)
@@ -101,6 +110,188 @@ const isPointInShape = (px: number, py: number, ann: Annotation): boolean => {
     }
 };
 
+const getAnnotationBounds = (ann: Annotation): { x: number; y: number; width: number; height: number } | null => {
+  const coords = ann.coordinates as any;
+  if (!coords) return null;
+
+  if ((ann.type === "rectangle" || ann.type === "text") && typeof coords.x === "number" && typeof coords.y === "number") {
+    return {
+      x: coords.x,
+      y: coords.y,
+      width: Math.max(1, Number(coords.width) || 0),
+      height: Math.max(1, Number(coords.height) || 0),
+    };
+  }
+
+  if (ann.type === "circle" && typeof coords.x === "number" && typeof coords.y === "number") {
+    const radiusX = Math.max(1, Number(coords.radiusX) || 0);
+    const radiusY = Math.max(1, Number(coords.radiusY) || 0);
+    return {
+      x: coords.x - radiusX,
+      y: coords.y - radiusY,
+      width: radiusX * 2,
+      height: radiusY * 2,
+    };
+  }
+
+  if (Array.isArray(coords.points) && coords.points.length > 0) {
+    const validPoints = coords.points.filter((p: any) => typeof p?.x === "number" && typeof p?.y === "number");
+    if (validPoints.length === 0) return null;
+    const xs = validPoints.map((p: any) => p.x);
+    const ys = validPoints.map((p: any) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    return {
+      x: minX,
+      y: minY,
+      width: Math.max(1, maxX - minX),
+      height: Math.max(1, maxY - minY),
+    };
+  }
+
+  return null;
+};
+
+const getResizeHandleAtPoint = (
+  ann: Annotation,
+  px: number,
+  py: number,
+  radius = 14
+): "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | null => {
+  const bounds = getAnnotationBounds(ann);
+  if (!bounds) return null;
+
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  const handles: Array<{ key: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w"; x: number; y: number }> = [
+    { key: "nw", x: bounds.x, y: bounds.y },
+    { key: "n", x: centerX, y: bounds.y },
+    { key: "ne", x: bounds.x + bounds.width, y: bounds.y },
+    { key: "e", x: bounds.x + bounds.width, y: centerY },
+    { key: "se", x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+    { key: "s", x: centerX, y: bounds.y + bounds.height },
+    { key: "sw", x: bounds.x, y: bounds.y + bounds.height },
+    { key: "w", x: bounds.x, y: centerY },
+  ];
+
+  for (const handle of handles) {
+    const dx = px - handle.x;
+    const dy = py - handle.y;
+    if (Math.sqrt(dx * dx + dy * dy) <= radius) return handle.key;
+  }
+
+  return null;
+};
+
+const moveAnnotationCoordinates = (ann: Annotation, dx: number, dy: number, originalCoordinates: any) => {
+  const coords = JSON.parse(JSON.stringify(originalCoordinates || ann.coordinates || {}));
+
+  if ((ann.type === "rectangle" || ann.type === "text") && typeof coords.x === "number" && typeof coords.y === "number") {
+    coords.x += dx;
+    coords.y += dy;
+    return coords;
+  }
+
+  if (ann.type === "circle" && typeof coords.x === "number" && typeof coords.y === "number") {
+    coords.x += dx;
+    coords.y += dy;
+    return coords;
+  }
+
+  if (Array.isArray(coords.points)) {
+    coords.points = coords.points.map((p: any) => ({ x: (Number(p?.x) || 0) + dx, y: (Number(p?.y) || 0) + dy }));
+    return coords;
+  }
+
+  return coords;
+};
+
+const resizeBoundsWithHandle = (
+  bounds: { x: number; y: number; width: number; height: number },
+  handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w",
+  dx: number,
+  dy: number
+) => {
+  let x = bounds.x;
+  let y = bounds.y;
+  let width = bounds.width;
+  let height = bounds.height;
+
+  if (handle.includes("w")) {
+    x += dx;
+    width -= dx;
+  }
+  if (handle.includes("e")) {
+    width += dx;
+  }
+  if (handle.includes("n")) {
+    y += dy;
+    height -= dy;
+  }
+  if (handle.includes("s")) {
+    height += dy;
+  }
+
+  const minSize = 5;
+  if (width < minSize) {
+    if (handle.includes("w")) {
+      x -= minSize - width;
+    }
+    width = minSize;
+  }
+  if (height < minSize) {
+    if (handle.includes("n")) {
+      y -= minSize - height;
+    }
+    height = minSize;
+  }
+
+  return { x, y, width, height };
+};
+
+const resizeAnnotationCoordinates = (
+  ann: Annotation,
+  originalCoordinates: any,
+  originalBounds: { x: number; y: number; width: number; height: number },
+  nextBounds: { x: number; y: number; width: number; height: number }
+) => {
+  const coords = JSON.parse(JSON.stringify(originalCoordinates || ann.coordinates || {}));
+  const scaleX = originalBounds.width === 0 ? 1 : nextBounds.width / originalBounds.width;
+  const scaleY = originalBounds.height === 0 ? 1 : nextBounds.height / originalBounds.height;
+
+  if ((ann.type === "rectangle" || ann.type === "text") && typeof coords.x === "number" && typeof coords.y === "number") {
+    coords.x = nextBounds.x;
+    coords.y = nextBounds.y;
+    coords.width = nextBounds.width;
+    coords.height = nextBounds.height;
+    return coords;
+  }
+
+  if (ann.type === "circle" && typeof coords.x === "number" && typeof coords.y === "number") {
+    coords.x = nextBounds.x + nextBounds.width / 2;
+    coords.y = nextBounds.y + nextBounds.height / 2;
+    coords.radiusX = nextBounds.width / 2;
+    coords.radiusY = nextBounds.height / 2;
+    return coords;
+  }
+
+  if (Array.isArray(coords.points)) {
+    coords.points = coords.points.map((p: any) => {
+      const baseX = Number(p?.x) || 0;
+      const baseY = Number(p?.y) || 0;
+      return {
+        x: nextBounds.x + (baseX - originalBounds.x) * scaleX,
+        y: nextBounds.y + (baseY - originalBounds.y) * scaleY,
+      };
+    });
+    return coords;
+  }
+
+  return coords;
+};
+
 export function useAnnotation(caseId: string, userId: string) {
   const [state, setState] = useState<UseAnnotationState>({
     annotations: [],
@@ -119,6 +310,7 @@ export function useAnnotation(caseId: string, userId: string) {
     versionsLoading: false,
     imageBounds: null,
     currentAnnotation: null,
+    interaction: null,
   });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -152,12 +344,83 @@ export function useAnnotation(caseId: string, userId: string) {
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const explicitX = Number((e as any).annotationX);
+    const explicitY = Number((e as any).annotationY);
+    const x = Number.isFinite(explicitX) ? explicitX : e.clientX - rect.left;
+    const y = Number.isFinite(explicitY) ? explicitY : e.clientY - rect.top;
 
     if (state.tool === 'select') {
+      const selectedAnnotations = state.annotations.filter(ann => state.selectedAnnotationIds.includes(ann.id));
+      const unlockedSelectedAnnotations = selectedAnnotations.filter((ann) => !ann.locked);
+
+      // Prioritize resize handle hit-testing with a larger target to make handles easier to grab.
+      const selectedHandleTarget = [...unlockedSelectedAnnotations]
+        .reverse()
+        .find(ann => getResizeHandleAtPoint(ann, x, y, 14));
+
+      if (selectedHandleTarget) {
+        const resizeHandle = getResizeHandleAtPoint(selectedHandleTarget, x, y, 14);
+        setState(prev => ({
+          ...prev,
+          selectedAnnotationIds: [selectedHandleTarget.id],
+          isDrawing: true,
+          interaction: {
+            mode: "resize",
+            annotationId: selectedHandleTarget.id,
+            start: { x, y },
+            handle: resizeHandle!,
+            originalCoordinates: JSON.parse(JSON.stringify(selectedHandleTarget.coordinates || {})),
+            originalBounds: getAnnotationBounds(selectedHandleTarget),
+            changed: false,
+          },
+        }));
+        return;
+      }
+
       const clickedAnnotation = [...state.annotations].reverse().find(ann => isPointInShape(x, y, ann));
       if (clickedAnnotation) {
+        if (clickedAnnotation.locked) {
+          if (e.shiftKey) {
+            setState(prev => ({
+              ...prev,
+              selectedAnnotationIds: prev.selectedAnnotationIds.includes(clickedAnnotation.id)
+                ? prev.selectedAnnotationIds.filter(id => id !== clickedAnnotation.id)
+                : [...prev.selectedAnnotationIds, clickedAnnotation.id],
+              isDrawing: false,
+              interaction: null,
+            }));
+          } else {
+            setState(prev => ({
+              ...prev,
+              selectedAnnotationIds: [clickedAnnotation.id],
+              isDrawing: false,
+              interaction: null,
+            }));
+          }
+          return;
+        }
+
+        const isAlreadySelected = state.selectedAnnotationIds.includes(clickedAnnotation.id);
+        const resizeHandle = isAlreadySelected ? getResizeHandleAtPoint(clickedAnnotation, x, y, 14) : null;
+
+        if (resizeHandle) {
+          setState(prev => ({
+            ...prev,
+            selectedAnnotationIds: [clickedAnnotation.id],
+            isDrawing: true,
+            interaction: {
+              mode: "resize",
+              annotationId: clickedAnnotation.id,
+              start: { x, y },
+              handle: resizeHandle,
+              originalCoordinates: JSON.parse(JSON.stringify(clickedAnnotation.coordinates || {})),
+              originalBounds: getAnnotationBounds(clickedAnnotation),
+              changed: false,
+            },
+          }));
+          return;
+        }
+
         if (e.shiftKey) {
           setState(prev => ({
             ...prev,
@@ -166,12 +429,41 @@ export function useAnnotation(caseId: string, userId: string) {
               : [...prev.selectedAnnotationIds, clickedAnnotation.id]
           }));
         } else {
-          if (!state.selectedAnnotationIds.includes(clickedAnnotation.id)) {
-            setState(prev => ({ ...prev, selectedAnnotationIds: [clickedAnnotation.id] }));
-          }
+          setState(prev => ({
+            ...prev,
+            selectedAnnotationIds: [clickedAnnotation.id],
+            isDrawing: true,
+            interaction: {
+              mode: "move",
+              annotationId: clickedAnnotation.id,
+              start: { x, y },
+              originalCoordinates: JSON.parse(JSON.stringify(clickedAnnotation.coordinates || {})),
+              originalBounds: getAnnotationBounds(clickedAnnotation),
+              changed: false,
+            },
+          }));
+          return;
         }
       } else {
-        setState(prev => ({ ...prev, selectedAnnotationIds: [] }));
+        // Keep the selection active when user clicks near selected bounds,
+        // so slight misses on borders/handles do not close the properties panel.
+        const selectionPadding = 14;
+        const clickedNearSelectedBounds = selectedAnnotations.some((ann) => {
+          const bounds = getAnnotationBounds(ann);
+          if (!bounds) return false;
+          return (
+            x >= bounds.x - selectionPadding &&
+            x <= bounds.x + bounds.width + selectionPadding &&
+            y >= bounds.y - selectionPadding &&
+            y <= bounds.y + bounds.height + selectionPadding
+          );
+        });
+
+        if (!clickedNearSelectedBounds) {
+          setState(prev => ({ ...prev, selectedAnnotationIds: [], isDrawing: false, interaction: null }));
+        } else {
+          setState(prev => ({ ...prev, isDrawing: false, interaction: null }));
+        }
       }
       return;
     }
@@ -196,7 +488,7 @@ export function useAnnotation(caseId: string, userId: string) {
         ...prev,
         isDrawing: true,
         currentAnnotation: newAnnotation,
-        annotations: state.tool !== 'polygon' ? [...prev.annotations, newAnnotation as Annotation] : prev.annotations
+        annotations: newAnnotation.type !== 'polygon' ? [...prev.annotations, newAnnotation as Annotation] : prev.annotations
     }));
   };
 
@@ -205,8 +497,61 @@ export function useAnnotation(caseId: string, userId: string) {
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const explicitX = Number((e as any).annotationX);
+    const explicitY = Number((e as any).annotationY);
+    const x = Number.isFinite(explicitX) ? explicitX : e.clientX - rect.left;
+    const y = Number.isFinite(explicitY) ? explicitY : e.clientY - rect.top;
+
+    if (state.tool === "select") {
+      setState(prev => {
+        if (!prev.interaction) return prev;
+        const target = prev.annotations.find((ann) => ann.id === prev.interaction!.annotationId);
+        if (!target) return prev;
+        if (target.locked) {
+          return {
+            ...prev,
+            isDrawing: false,
+            interaction: null,
+          };
+        }
+
+        const dx = x - prev.interaction.start.x;
+        const dy = y - prev.interaction.start.y;
+
+        if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+          return prev;
+        }
+
+        let nextCoordinates = target.coordinates;
+        if (prev.interaction.mode === "move") {
+          nextCoordinates = moveAnnotationCoordinates(target, dx, dy, prev.interaction.originalCoordinates);
+        } else if (prev.interaction.mode === "resize" && prev.interaction.handle && prev.interaction.originalBounds) {
+          const resizedBounds = resizeBoundsWithHandle(prev.interaction.originalBounds, prev.interaction.handle, dx, dy);
+          nextCoordinates = resizeAnnotationCoordinates(
+            target,
+            prev.interaction.originalCoordinates,
+            prev.interaction.originalBounds,
+            resizedBounds
+          );
+        }
+
+        const newAnnotations = prev.annotations.map((ann) =>
+          ann.id === target.id
+            ? { ...ann, coordinates: nextCoordinates, updatedAt: new Date().toISOString() }
+            : ann
+        );
+
+        return {
+          ...prev,
+          annotations: newAnnotations,
+          interaction: {
+            ...prev.interaction,
+            changed: true,
+          },
+        };
+      });
+      return;
+    }
 
     setState(prev => {
         if (!prev.currentAnnotation) return prev;
@@ -215,7 +560,7 @@ export function useAnnotation(caseId: string, userId: string) {
         const start = prev.currentAnnotation.coordinates?.start || { x: 0, y: 0 };
         const newCoords = { ...prev.currentAnnotation.coordinates };
 
-        switch(state.tool) {
+        switch(prev.tool) {
             case "rectangle":
             case "text":
                 newCoords.x = Math.min(start.x, x);
@@ -264,74 +609,88 @@ export function useAnnotation(caseId: string, userId: string) {
   };
 
   const finishDrawing = () => {
-    if (!state.isDrawing || !state.currentAnnotation || state.isLocked) return;
+    if (!state.isDrawing || state.isLocked) return;
 
-    const ann = state.currentAnnotation;
-    const coords = ann.coordinates;
-
-    let isValid = true;
-    if ((ann.type === 'rectangle' || ann.type === 'text') && (!coords?.width || !coords?.height || coords.width < 5 || coords.height < 5 )) isValid = false;
-    else if (ann.type === 'circle' && (!coords?.radiusX || !coords?.radiusY || coords.radiusX < 3 || coords.radiusY < 3)) isValid = false;
-    else if ((ann.type === 'freehand' || ann.type === 'eraser') && (!coords?.points || coords.points.length < 2)) isValid = false;
-    else if (ann.type === 'triangle' && (!coords?.points || coords.points.length < 3)) isValid = false;
-
-    if (!isValid) {
-        setState(prev => ({
-            ...prev, isDrawing: false, currentAnnotation: null,
-            annotations: prev.annotations.filter(a => a.id !== ann.id)
-        }));
-        return;
-    }
-
-    if (state.tool !== 'freehand' && state.tool !== 'select' && state.tool !== 'polygon' && state.tool !== 'eraser') {
-      let textX, textY, textWidth, textHeight;
-      if (ann.type === 'rectangle' || ann.type === 'text') {
-        textX = ann.coordinates.x;
-        textY = ann.coordinates.y;
-        textWidth = ann.coordinates.width;
-        textHeight = ann.coordinates.height;
-      } else if (ann.type === 'circle') {
-        textX = ann.coordinates.x - ann.coordinates.radiusX;
-        textY = ann.coordinates.y - ann.coordinates.radiusY;
-        textWidth = ann.coordinates.radiusX * 2;
-        textHeight = ann.coordinates.radiusY * 2;
-      } else if (ann.type === 'triangle') {
-        const xs = ann.coordinates.points.map((p: any) => p.x);
-        const ys = ann.coordinates.points.map((p: any) => p.y);
-        const minX = Math.min(...xs);
-        const minY = Math.min(...ys);
-        textX = minX;
-        textY = minY;
-        textWidth = Math.max(...xs) - minX;
-        textHeight = Math.max(...ys) - minY;
-      } else {
-        textX = 0; textY = 0; textWidth = 200; textHeight = 40;
-      }
-
-      setState(prev => ({
-          ...prev,
-          textInputPosition: {
-              x: textX, y: textY,
-              width: textWidth, height: textHeight,
-              annotationId: ann.id!,
-          },
-          isDrawing: false,
-          currentAnnotation: null,
-          selectedAnnotationIds: []
-      }));
+    if (state.tool === "select") {
+      // Use prev to avoid stale closure when committing move/resize to history
+      setState(prev => {
+        if (prev.interaction?.changed) {
+          const currentHistory = prev.history || [[]];
+          const newHistory = currentHistory.slice(0, prev.historyIndex + 1);
+          newHistory.push(prev.annotations);
+          return { ...prev, history: newHistory, historyIndex: newHistory.length - 1, isDrawing: false, interaction: null };
+        }
+        return { ...prev, isDrawing: false, interaction: null };
+      });
       return;
     }
 
-    const completedAnnotation = {
-        ...state.currentAnnotation,
-        coordinates: { ...state.currentAnnotation.coordinates, start: undefined },
-        createdAt: new Date().toISOString()
-    } as Annotation;
+    // Read all annotation data from prev to avoid stale closure bugs.
+    // (updateDrawing uses setState(prev=>) so state here may lag behind real state)
+    const currentTool = state.tool;
+    setState(prev => {
+      if (!prev.currentAnnotation) return prev;
 
-    const finalAnnotations = state.annotations.map(a => a.id === ann.id ? completedAnnotation : a);
+      const ann = prev.currentAnnotation;
+      const coords = ann.coordinates;
 
-    updateAnnotationsAndHistory(finalAnnotations, 'drawing');
-    setState(prev => ({ ...prev, isDrawing: false, currentAnnotation: null }));
+      let isValid = true;
+      if ((ann.type === 'rectangle' || ann.type === 'text') && (!coords?.width || !coords?.height || coords.width < 5 || coords.height < 5)) isValid = false;
+      else if (ann.type === 'circle' && (!coords?.radiusX || !coords?.radiusY || coords.radiusX < 3 || coords.radiusY < 3)) isValid = false;
+      else if ((ann.type === 'freehand' || ann.type === 'eraser') && (!coords?.points || coords.points.length < 2)) isValid = false;
+      else if (ann.type === 'triangle' && (!coords?.points || coords.points.length < 3)) isValid = false;
+
+      if (!isValid) {
+        return {
+          ...prev,
+          isDrawing: false,
+          currentAnnotation: null,
+          annotations: prev.annotations.filter(a => a.id !== ann.id),
+        };
+      }
+
+      if (currentTool !== 'freehand' && currentTool !== 'polygon' && currentTool !== 'eraser') {
+        let textX = 0, textY = 0, textWidth = 200, textHeight = 40;
+        if (ann.type === 'rectangle' || ann.type === 'text') {
+          textX = coords.x; textY = coords.y; textWidth = coords.width; textHeight = coords.height;
+        } else if (ann.type === 'circle') {
+          textX = coords.x - coords.radiusX; textY = coords.y - coords.radiusY;
+          textWidth = coords.radiusX * 2; textHeight = coords.radiusY * 2;
+        } else if (ann.type === 'triangle') {
+          const xs = coords.points.map((p: any) => p.x);
+          const ys = coords.points.map((p: any) => p.y);
+          const minX = Math.min(...xs); const minY = Math.min(...ys);
+          textX = minX; textY = minY;
+          textWidth = Math.max(...xs) - minX; textHeight = Math.max(...ys) - minY;
+        }
+        return {
+          ...prev,
+          textInputPosition: { x: textX, y: textY, width: textWidth, height: textHeight, annotationId: ann.id! },
+          isDrawing: false,
+          currentAnnotation: null,
+          selectedAnnotationIds: [],
+        };
+      }
+
+      // freehand / polygon / eraser — commit to history inline
+      const completedAnnotation = {
+        ...ann,
+        coordinates: { ...ann.coordinates, start: undefined },
+        createdAt: new Date().toISOString(),
+      } as Annotation;
+      const finalAnnotations = prev.annotations.map(a => a.id === ann.id ? completedAnnotation : a);
+      const currentHistory = prev.history || [[]];
+      const newHistory = currentHistory.slice(0, prev.historyIndex + 1);
+      newHistory.push(finalAnnotations);
+      return {
+        ...prev,
+        annotations: finalAnnotations,
+        history: newHistory,
+        historyIndex: newHistory.length - 1,
+        isDrawing: false,
+        currentAnnotation: null,
+      };
+    });
   };
 
   const completeTextInput = (text: string) => {
@@ -497,7 +856,7 @@ export function useAnnotation(caseId: string, userId: string) {
           ...prev,
           annotations: currentHistory[newIndex],
           historyIndex: newIndex,
-          selectedAnnotationIds: [],
+          selectedAnnotationIds: prev.selectedAnnotationIds.filter(id => currentHistory[newIndex].some((ann) => ann.id === id)),
           textInputPosition: null,
           currentAnnotation: null,
           isDrawing: false,
@@ -514,7 +873,7 @@ export function useAnnotation(caseId: string, userId: string) {
           ...prev,
           annotations: currentHistory[newIndex],
           historyIndex: newIndex,
-          selectedAnnotationIds: [],
+          selectedAnnotationIds: prev.selectedAnnotationIds.filter(id => currentHistory[newIndex].some((ann) => ann.id === id)),
           textInputPosition: null,
           currentAnnotation: null,
           isDrawing: false,
@@ -582,6 +941,7 @@ export function useAnnotation(caseId: string, userId: string) {
           currentAnnotation: null,
           textInputPosition: null,
           isDrawing: false,
+          interaction: null,
         }));
 
       } else {
@@ -597,6 +957,7 @@ export function useAnnotation(caseId: string, userId: string) {
         currentAnnotation: null,
         textInputPosition: null,
         isDrawing: false,
+        interaction: null,
       }));
       }
     } catch (error) {
@@ -612,6 +973,7 @@ export function useAnnotation(caseId: string, userId: string) {
         currentAnnotation: null,
         textInputPosition: null,
         isDrawing: false,
+        interaction: null,
       }));
     }
   }, [caseId, userId]);
@@ -642,11 +1004,20 @@ export function useAnnotation(caseId: string, userId: string) {
       console.error("Invalid version data for restore.");
       return;
     }
+    const restoredAnnotations = Array.isArray(versionData.annotations)
+      ? versionData.annotations
+      : [];
+
     setState(prev => ({
       ...prev,
-      annotations: versionData.annotations,
-      history: [...prev.history, versionData.annotations],
+      annotations: restoredAnnotations,
+      history: [...prev.history, restoredAnnotations],
       historyIndex: prev.history.length,
+      selectedAnnotationIds: [],
+      textInputPosition: null,
+      currentAnnotation: null,
+      isDrawing: false,
+      interaction: null,
     }));
     console.log(`Restored version v${versionData.version}`);
   };
@@ -659,11 +1030,20 @@ export function useAnnotation(caseId: string, userId: string) {
     setState(prev => ({...prev, strokeWidth: Math.max(1, Math.min(20, width))}));
   };
 
+  const setSelectedAnnotations = (ids: string[]) => {
+    setState((prev) => ({
+      ...prev,
+      selectedAnnotationIds: ids,
+      interaction: null,
+      isDrawing: false,
+    }));
+  };
+
   useEffect(() => { loadVersions(); }, [loadVersions]);
 
   return {
     ...state,
-    canvasRef, setTool, setColor, setStrokeWidth, startDrawing, updateDrawing, finishDrawing,
+    canvasRef, setTool, setColor, setStrokeWidth, setSelectedAnnotations, startDrawing, updateDrawing, finishDrawing,
     deleteSelectedAnnotations, updateAnnotation, toggleAnnotationsVisibility,
     lockAnnotations, duplicateAnnotations, undo, redo,
     completeTextInput, cancelTextInput, saveAllAnnotationsSnapshot,
@@ -672,3 +1052,7 @@ export function useAnnotation(caseId: string, userId: string) {
     canRedo: state.historyIndex < (state.history?.length ?? 1) - 1,
   };
 }
+
+
+
+

@@ -17,7 +17,7 @@ export default function GlobalHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/40 bg-gradient-to-r from-white/90 via-slate-50/90 to-white/90 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-gradient-to-r from-background/95 via-background/90 to-background/95 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <div className="flex items-center space-x-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
