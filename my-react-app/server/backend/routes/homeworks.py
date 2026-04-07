@@ -246,8 +246,10 @@ async def homework_by_case(
                 cursor = classrooms_collection.find({"_id": {"$in": valid_ids}})
                 async for classroom in cursor:
                     member_ids = [str(x) for x in classroom.get("members", [])]
-                    print(f"DEBUG: classroom {classroom.get('_id')}, members={member_ids}")
-                    if userId in member_ids:
+                    student_ids = [str(x) for x in classroom.get("students", [])]
+                    combined_ids = set(member_ids + student_ids)
+                    print(f"DEBUG: classroom {classroom.get('_id')}, members={member_ids}, students={student_ids}")
+                    if userId in combined_ids:
                         assigned = True
                         print("DEBUG: user in classroom, assigned=True")
                         break
@@ -260,8 +262,10 @@ async def homework_by_case(
             })
             if classroom:
                 member_ids = [str(x) for x in classroom.get("members", [])]
-                print(f"DEBUG: fallback classroom members={member_ids}")
-                assigned = userId in member_ids
+                student_ids = [str(x) for x in classroom.get("students", [])]
+                combined_ids = set(member_ids + student_ids)
+                print(f"DEBUG: fallback classroom members={member_ids}, students={student_ids}")
+                assigned = userId in combined_ids
                 if assigned:
                     print("DEBUG: assigned via fallback")
 

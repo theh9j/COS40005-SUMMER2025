@@ -96,6 +96,9 @@ async def list_cases(limit: int = 50):
         homework = await homeworks_collection.find_one({"case_id": case_id})
         homework_type = homework.get("homework_type") if homework else c.get("homework_type", "Annotate")
         visibility = homework.get("visibility") if homework else c.get("visibility", "public")
+        visibility_norm = str(visibility or "public").strip().lower()
+        if visibility_norm == "private":
+            continue
         
         # Get class information if assigned to a class
         class_info = None
