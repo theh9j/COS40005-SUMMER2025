@@ -649,7 +649,7 @@ export default function StudentDashboard() {
   }: {
     label: string; value: string | number; icon: any; valueClass?: string; testId: string;
   }) => (
-    <Card>
+    <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -1140,25 +1140,25 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-                <Card>
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Live submissions</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.totalSubmissions}</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Graded</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.gradedCount}</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending review</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.pendingCount}</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <CardContent className="p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Average grade</p>
                     <p className="text-2xl font-bold mt-1">{liveProgressSnapshot.averageScore}%</p>
