@@ -32,7 +32,9 @@ export function useAIGrading() {
       rubricDef: RubricCriterionDef[],
       caseTitle?: string,
       caseDescription?: string,
-      homeworkInstructions?: string
+      homeworkInstructions?: string,
+      imageUrl?: string,
+      caseType?: string
     ) => {
       setIsAnalyzing(true);
       setError(null);
@@ -44,6 +46,8 @@ export function useAIGrading() {
           caseTitle,
           caseDescription,
           homeworkInstructions,
+          imageUrl,
+          caseType,
         };
         const result = await aiService.gradeSubmission(input, rubricDef);
         setCurrentResult(result);
@@ -92,6 +96,9 @@ export function useAIGrading() {
         annotations: Annotation[];
         studentAnswer?: string;
         caseTitle?: string;
+        caseDescription?: string;
+        imageUrl?: string;
+        caseType?: string;
       }>,
       rubricDef: RubricCriterionDef[]
     ) => {
@@ -124,6 +131,9 @@ export function useAIGrading() {
             annotations: sub.annotations,
             studentAnswer: sub.studentAnswer,
             caseTitle: sub.caseTitle,
+            caseDescription: sub.caseDescription,
+            imageUrl: sub.imageUrl,
+            caseType: sub.caseType,
           };
           const result = await aiService.gradeSubmission(input, rubricDef);
           job.results[sub.id] = result;

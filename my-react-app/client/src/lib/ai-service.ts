@@ -48,6 +48,22 @@ export interface MedicalContext {
   userId: string;
 }
 
+// Helper: extract and parse JSON from AI response (handles markdown code blocks, trailing commas, etc.)
+function extractJson(raw: string): any | null {
+  // Strip markdown code blocks
+  let cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+  // Try direct parse
+  try { return JSON.parse(cleaned); } catch {}
+  // Try regex extract
+  const m = cleaned.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let jsonStr = m[0];
+  // Fix trailing commas before } or ]
+  jsonStr = jsonStr.replace(/,\s*([\]}])/g, "$1");
+  try { return JSON.parse(jsonStr); } catch {}
+  return null;
+}
+
 class AIService {
   private config: AIConfig;
   private baseUrl = "http://127.0.0.1:8000/api/ai";
@@ -460,7 +476,7 @@ PHẠM VI HỖ TRỢ:
     return response.json();
   }
 
-  // ── AI-assisted grading ──
+  // ── AI-assisted grading (with vision-based disease identification) ──
   async gradeSubmission(
     submission: GradingSubmissionInput,
     rubricDef: RubricCriterionDef[]
@@ -475,6 +491,112 @@ PHẠM VI HỖ TRỢ:
       )
       .join("\n\n");
 
+    // If we have an image URL and using Google provider, use vision-based grading
+    const useVision = !!submission.imageUrl && this.config.provider === "google";
+
+    console.log("[AI-GRADING] gradeSubmission called:", {
+      imageUrl: submission.imageUrl,
+      caseTitle: submission.caseTitle,
+      caseDescription: submission.caseDescription?.slice(0, 50),
+      caseType: submission.caseType,
+      provider: this.config.provider,
+      useVision,
+      annotationCount: submission.annotations?.length,
+    });
+
+    if (useVision) {
+      try {
+        const result = await this.gradeWithVision(submission, rubricDef, rubricBlock, start);
+        if (result) return result;
+      } catch (err) {
+        console.warn("Vision grading failed, falling back to text-only:", err);
+      }
+    }
+
+    // Fallback: text-only grading (original behavior, enhanced with disease context)
+    return this.gradeTextOnly(submission, rubricDef, rubricBlock, start);
+  }
+
+  // Vision-based grading: sends the image to Gemini for disease identification
+  private async gradeWithVision(
+    submission: GradingSubmissionInput,
+    rubricDef: RubricCriterionDef[],
+    rubricBlock: string,
+    start: number
+  ): Promise<AIGradingResult | null> {
+    const annotations = (submission.annotations ?? []).slice(0, 20).map((a) => ({
+      id: a.id,
+      type: a.type,
+      label: a.label || "(no label)",
+      color: a.color,
+    }));
+
+    const payload = {
+      model: this.config.model,
+      imageUrl: submission.imageUrl,
+      caseTitle: submission.caseTitle || "N/A",
+      caseDescription: submission.caseDescription || "N/A",
+      caseType: submission.caseType || "",
+      homeworkInstructions: submission.homeworkInstructions || "",
+      annotations,
+      studentAnswer: submission.studentAnswer || "",
+      rubricBlock,
+    };
+
+    const res = await fetch(`${this.baseUrl}/grade-with-vision`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      console.warn("[AI-GRADING] Vision endpoint returned", res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    const content = typeof data.content === "string" ? data.content : JSON.stringify(data);
+    console.log("[AI-GRADING] Vision raw response length:", content.length);
+    console.log("[AI-GRADING] Vision raw content:", content);
+
+    const parsed = extractJson(content);
+    if (!parsed) {
+      console.warn("[AI-GRADING] Failed to parse vision JSON");
+      return null;
+    }
+
+    return {
+      submissionId: submission.id,
+      rubricSuggestions: parsed.rubricSuggestions ?? [],
+      totalScore: parsed.totalScore ?? 0,
+      maxScore: rubricDef.reduce((s, c) => s + c.max, 0),
+      overallConfidence: parsed.overallConfidence ?? 0.5,
+      strengths: parsed.strengths ?? [],
+      weaknesses: parsed.weaknesses ?? [],
+      feedbackSuggestion: parsed.feedbackSuggestion ?? "",
+      annotationComments: (parsed.annotationComments ?? []).map((ac: any) => ({
+        ...ac,
+        diseaseRelevance: ac.diseaseRelevance ?? "",
+      })),
+      improvementSuggestions: parsed.improvementSuggestions ?? [],
+      encouragement: parsed.encouragement ?? "",
+      diseaseIdentification: parsed.diseaseIdentification ?? undefined,
+      generatedAt: new Date().toISOString(),
+      modelUsed: this.config.model + " (vision)",
+      latencyMs: Date.now() - start,
+    };
+  }
+
+  // Text-only grading (enhanced with disease-aware prompts)
+  private async gradeTextOnly(
+    submission: GradingSubmissionInput,
+    rubricDef: RubricCriterionDef[],
+    rubricBlock: string,
+    start: number
+  ): Promise<AIGradingResult> {
     const annotationBlock =
       submission.annotations && submission.annotations.length > 0
         ? submission.annotations
@@ -489,23 +611,38 @@ PHẠM VI HỖ TRỢ:
             : "")
         : "No annotations provided.";
 
-    const systemPrompt = `You are a concise medical education grading assistant. Evaluate the submission against the rubric. Respond ONLY with valid JSON. Be brief and direct — no filler words.
+    const caseTypeHint = submission.caseType
+      ? `\nThis is a ${submission.caseType} case. Pay special attention to pathological findings typical of this specialty.`
+      : "";
+
+    const systemPrompt = `You are an expert medical pathology grading assistant. Evaluate the submission against the rubric. Respond ONLY with valid JSON. Be brief and direct.
+${caseTypeHint}
+
+IMPORTANT: Based on the case description and annotations, try to identify the specific disease/condition being studied. Evaluate whether the student's annotations correctly identify pathological findings.
 
 RUBRIC:
 ${rubricBlock}
 
 STRICT JSON FORMAT (no markdown, no extra text):
 {
+  "diseaseIdentification": {
+    "primaryDiagnosis": "<specific disease name based on case info>",
+    "confidence": <0-1>,
+    "keyFindings": ["<expected finding 1>", "<expected finding 2>"],
+    "affectedStructures": ["<structure>"],
+    "severity": "<mild|moderate|severe|N/A>",
+    "differentialDiagnoses": ["<alt diagnosis>"]
+  },
   "rubricSuggestions": [
-    {"criterionId": "<id>", "levelKey": "excellent|good|fair|poor", "score": <number>, "reasoning": "<1 sentence max>", "confidence": <0-1>}
+    {"criterionId": "<id>", "levelKey": "excellent|good|fair|poor", "score": <number>, "reasoning": "<1-2 sentences referencing disease findings>", "confidence": <0-1>}
   ],
   "totalScore": <sum>,
   "overallConfidence": <0-1>,
-  "strengths": ["<short phrase>"],
-  "weaknesses": ["<short phrase>"],
-  "feedbackSuggestion": "<3-5 sentences. Direct, actionable feedback.>",
-  "annotationComments": [{"annotationId": "<id>", "annotationLabel": "<label>", "comment": "<1 sentence>", "quality": "correct|partial|incorrect|missing-label"}],
-  "improvementSuggestions": ["<short actionable tip>"],
+  "strengths": ["<specific praise about disease identification>"],
+  "weaknesses": ["<specific gaps in pathology understanding>"],
+  "feedbackSuggestion": "<3-5 sentences. Reference the specific disease, correct findings, missed findings, and learning points.>",
+  "annotationComments": [{"annotationId": "<id>", "annotationLabel": "<label>", "comment": "<1-2 sentences about disease relevance>", "quality": "correct|partial|incorrect|missing-label", "diseaseRelevance": "<relation to disease>"}],
+  "improvementSuggestions": ["<disease-specific tip>"],
   "encouragement": "<1 sentence>"
 }`;
 
@@ -521,14 +658,14 @@ ${annotationBlock}
 STUDENT ANSWER:
 ${submission.studentAnswer || "No text answer provided."}
 
-Evaluate against the rubric and return JSON.`;
+Identify the specific disease/condition from the case context, then evaluate the student's work. Return JSON.`;
 
     try {
       const payload = {
         provider: this.config.provider,
         model: this.config.model,
         temperature: 0.2,
-        maxTokens: 1000,
+        maxTokens: 8192,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
@@ -547,9 +684,11 @@ Evaluate against the rubric and return JSON.`;
       if (res.ok) {
         const data = await res.json();
         const content = typeof data.content === "string" ? data.content : JSON.stringify(data);
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
+        console.log("[AI-GRADING] Text-only raw response length:", content.length);
+        console.log("[AI-GRADING] Text-only raw content:", content.slice(0, 500));
+
+        const parsed = extractJson(content);
+        if (parsed) {
           return {
             submissionId: submission.id,
             rubricSuggestions: parsed.rubricSuggestions ?? [],
@@ -559,9 +698,13 @@ Evaluate against the rubric and return JSON.`;
             strengths: parsed.strengths ?? [],
             weaknesses: parsed.weaknesses ?? [],
             feedbackSuggestion: parsed.feedbackSuggestion ?? "",
-            annotationComments: parsed.annotationComments ?? [],
+            annotationComments: (parsed.annotationComments ?? []).map((ac: any) => ({
+              ...ac,
+              diseaseRelevance: ac.diseaseRelevance ?? "",
+            })),
             improvementSuggestions: parsed.improvementSuggestions ?? [],
             encouragement: parsed.encouragement ?? "",
+            diseaseIdentification: parsed.diseaseIdentification ?? undefined,
             generatedAt: new Date().toISOString(),
             modelUsed: this.config.model,
             latencyMs: Date.now() - start,
@@ -569,7 +712,6 @@ Evaluate against the rubric and return JSON.`;
         }
       }
 
-      // Fall through to mock
       throw new Error("API did not return valid grading JSON");
     } catch (error) {
       console.warn("AI grading failed, using mock result:", error);

@@ -426,6 +426,14 @@ export default function AnnotationView() {
     };
   }, [caseId, user?.user_id]);
 
+  // Check if password is required for homework access
+  useEffect(() => {
+    if (pageLoading || !hw || !user) return;
+
+    if (user.role === "student" && hw.password && !passwordValidated) {
+      setShowPasswordPrompt(true);
+    }
+  }, [pageLoading, hw, user, passwordValidated]);
 
   // Heartbeat
   useHeartbeat(user?.user_id);
@@ -488,6 +496,12 @@ export default function AnnotationView() {
   const [availableClasses, setAvailableClasses] = useState<Classroom[]>([]);
   const [selectedClassesInModal, setSelectedClassesInModal] = useState<string[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(false);
+
+  // Password prompt state
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordValidated, setPasswordValidated] = useState(false);
 
   // Load classrooms from API
   const loadClassrooms = async () => {
@@ -1156,6 +1170,85 @@ export default function AnnotationView() {
       fetchSubmission();
     }
   };
+
+  const handleValidatePassword = async () => {
+    if (!passwordInput.trim()) {
+      setPasswordError("Password is required");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/instructor/homeworks/validate-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          case_id: caseId,
+          password: passwordInput.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.valid) {
+          setPasswordValidated(true);
+          setShowPasswordPrompt(false);
+          setPasswordError("");
+        } else {
+          setPasswordError("Incorrect password");
+        }
+      } else {
+        setPasswordError("Failed to validate password");
+      }
+    } catch (error) {
+      setPasswordError("Network error. Please try again.");
+    }
+  };
+
+  // Show password prompt if required
+  if (showPasswordPrompt && user?.role === 'student') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Dialog open={showPasswordPrompt} onOpenChange={() => {}}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Homework Password Required</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                This homework requires a password to access. Please enter the password provided by your instructor.
+              </p>
+              <div className="space-y-2">
+                <input
+                  type="password"
+                  placeholder="Enter password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleValidatePassword();
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  autoFocus
+                />
+                {passwordError && (
+                  <p className="text-sm text-red-600">{passwordError}</p>
+                )}
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={handleBack}>
+                  Cancel
+                </Button>
+                <Button onClick={handleValidatePassword}>
+                  Submit
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen overflow-hidden silver-ambient flex flex-col" data-testid="annotation-view">

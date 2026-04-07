@@ -1215,6 +1215,19 @@ export default function InstructorDashboard() {
         return;
       }
 
+      const data = await res.json();
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === subId
+            ? {
+                ...s,
+                feedback: draftFeedback ?? s.feedback,
+                updatedAt: data.updated_at ?? new Date().toISOString(),
+              }
+            : s
+        )
+      );
+
       alert("Returned to student successfully");
     } catch (err) {
       console.error("Error returning to student", err);
@@ -2037,11 +2050,15 @@ export default function InstructorDashboard() {
                   }));
                   const subs = ids.map((id) => {
                     const sub = submissions.find((s) => s.id === id);
+                    const caseObj = mergedCases.find((c) => c.id === sub?.caseId);
                     return {
                       id,
                       annotations: [],
                       studentAnswer: sub?.feedback,
                       caseTitle: sub?.caseTitle,
+                      caseDescription: caseObj?.description,
+                      imageUrl: sub?.caseImageUrl || caseObj?.imageUrl || undefined,
+                      caseType: caseObj?.caseType,
                     };
                   });
                   aiGrading.startBatchGrading(subs, rubricDef);

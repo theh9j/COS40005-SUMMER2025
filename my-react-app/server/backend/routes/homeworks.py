@@ -246,8 +246,10 @@ async def homework_by_case(
                 cursor = classrooms_collection.find({"_id": {"$in": valid_ids}})
                 async for classroom in cursor:
                     member_ids = [str(x) for x in classroom.get("members", [])]
-                    print(f"DEBUG: classroom {classroom.get('_id')}, members={member_ids}")
-                    if userId in member_ids:
+                    student_ids = [str(x) for x in classroom.get("students", [])]
+                    combined_ids = set(member_ids + student_ids)
+                    print(f"DEBUG: classroom {classroom.get('_id')}, members={member_ids}, students={student_ids}")
+                    if userId in combined_ids:
                         assigned = True
                         print("DEBUG: user in classroom, assigned=True")
                         break
@@ -260,8 +262,10 @@ async def homework_by_case(
             })
             if classroom:
                 member_ids = [str(x) for x in classroom.get("members", [])]
-                print(f"DEBUG: fallback classroom members={member_ids}")
-                assigned = userId in member_ids
+                student_ids = [str(x) for x in classroom.get("students", [])]
+                combined_ids = set(member_ids + student_ids)
+                print(f"DEBUG: fallback classroom members={member_ids}, students={student_ids}")
+                assigned = userId in combined_ids
                 if assigned:
                     print("DEBUG: assigned via fallback")
 
@@ -448,3 +452,35 @@ async def upload_homework_file(
         "size": file_path.stat().st_size,
         "filename": filename
     }
+
+
+# ====================================================
+# Student: Validate Homework Password
+# ====================================================
+
+@router.post("/validate-password", response_model=dict)
+async def validate_homework_password(payload: dict):
+    case_id = payload.get("case_id")
+    password = payload.get("password", "").strip()
+
+    if not case_id:
+        raise HTTPException(status_code=400, detail="Case ID is required")
+
+    # Get homework
+    hw = await homeworks_collection.find_one(
+        {"case_id": case_id},
+        sort=[("created_at", -1)]
+    )
+
+    if not hw:
+        raise HTTPException(status_code=404, detail="Homework not found")
+
+    stored_password = hw.get("password", "")
+    if not stored_password:
+        # No password required
+        return {"valid": True}
+
+    if password == stored_password:
+        return {"valid": True}
+    else:
+        return {"valid": False}
